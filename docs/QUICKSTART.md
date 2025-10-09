@@ -32,7 +32,7 @@ unzip terraform_1.5.7_linux_amd64.zip
 sudo mv terraform /usr/local/bin/
 ```bash
 git clone https://github.com/tfgrid-studio/tfgrid-compose
-cd tfgrid-deployer
+cd tfgrid-compose
 ```
 
 ### 3. Configure Your Credentials
