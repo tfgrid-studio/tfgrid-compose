@@ -3,7 +3,7 @@
 **Universal deployment orchestrator for ThreeFold Grid applications.**
 
 [![Status](https://img.shields.io/badge/status-production--ready-green)]() 
-[![Version](https://img.shields.io/badge/version-0.1.0--mvp-blue)]() 
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)]() 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
 
 ## Overview
@@ -12,6 +12,9 @@ TFGrid Deployer is a production-ready deployment platform that makes deploying a
 
 **Key Features:**
 - ✅ **One-command deployment** - From zero to running app in 2-3 minutes
+- ✅ **Context file support** - Set app once, use short commands everywhere
+- ✅ **Agent subcommand** - Simple AI agent management (`tfgrid-compose agent list`)
+- ✅ **Auto-install** - Automatically sets up PATH in your shell
 - ✅ **Multiple patterns** - single-vm, gateway, k3s (coming soon)
 - ✅ **Smart validation** - Checks prerequisites and prevents errors
 - ✅ **Remote execution** - Run commands on deployed VMs from your local machine
@@ -32,22 +35,25 @@ tfgrid-deployer/
 
 ## Current Status
 
-**🎉 PRODUCTION READY - v0.1.0-mvp**
+**🎉 PRODUCTION READY - v1.0.0**
 
-### Completed ✅
+### v1.0 Features ✅
 - [x] Full deployment orchestration (Terraform + WireGuard + Ansible)
+- [x] Context file support (`.tfgrid-compose.yaml`)
+- [x] Agent subcommand for AI agent management
+- [x] Automatic PATH setup during installation
 - [x] Input validation and error handling
 - [x] Idempotency protection
 - [x] Remote command execution (`exec`)
-- [x] Quick start documentation
-- [x] Installation script
-- [x] Help system with examples
+- [x] Comprehensive documentation
+- [x] Auto-install with `make install`
 - [x] Single-VM pattern (fully tested)
 
-### In Development 🚧
+### Coming Soon 🚧
 - [ ] Gateway pattern (scaffolded)
 - [ ] K3s pattern (scaffolded)
 - [ ] Automated test suite
+- [ ] Shell completion (bash/zsh/fish)
 - [ ] Video tutorials
 
 ## Patterns
@@ -115,9 +121,11 @@ Kubernetes cluster (K3s) with master and worker nodes.
 git clone https://github.com/tfgrid-compose/tfgrid-deployer
 cd tfgrid-deployer
 
-# Run installer (adds to PATH)
-./install.sh
+# Install (auto-configures PATH)
+make install
 ```
+
+This automatically adds `tfgrid-compose` to your PATH!
 
 **Prerequisites:**
 - Terraform or OpenTofu
@@ -134,89 +142,116 @@ See [Quick Start Guide](docs/QUICKSTART.md) for detailed setup.
 mkdir -p ~/.config/threefold
 echo "your twelve word mnemonic" > ~/.config/threefold/mnemonic
 chmod 600 ~/.config/threefold/mnemonic
+
+# Create context file (optional but recommended)
+echo "app: ../tfgrid-ai-agent" > .tfgrid-compose.yaml
 ```
 
-### 3. Deploy
+### 3. Deploy & Use
 
 ```bash
-# Deploy an application
-tfgrid-compose up ../tfgrid-ai-agent
+# Deploy application (uses context)
+tfgrid-compose up
+
+# Use AI agent with simple commands
+tfgrid-compose agent list
+tfgrid-compose agent create
+tfgrid-compose agent run my-project
+
+# Cleanup
+tfgrid-compose down
 ```
 
 That's it! Your app is deployed and running. 🎉
 
 ## Usage
 
+### Two Ways to Use
+
+**Option A: With Context File (Recommended)**
+```bash
+# Create context file once
+echo "app: ../tfgrid-ai-agent" > .tfgrid-compose.yaml
+
+# Use short commands
+tfgrid-compose up
+tfgrid-compose agent list
+tfgrid-compose agent create
+tfgrid-compose ssh
+tfgrid-compose down
+```
+
+**Option B: Explicit App Path**
+```bash
+# Specify app path every time
+tfgrid-compose up ../tfgrid-ai-agent
+tfgrid-compose status ../tfgrid-ai-agent
+tfgrid-compose ssh ../tfgrid-ai-agent
+tfgrid-compose down ../tfgrid-ai-agent
+```
+
 ### Basic Commands
 
 ```bash
-# Deploy an application
-tfgrid-compose up <app-path>
+# Deploy
+tfgrid-compose up [app-path]
 
-# Execute commands on deployed VM
-tfgrid-compose exec <app-path> <command>
+# Execute commands on VM
+tfgrid-compose exec [app-path] <command>
 
-# Check deployment status
-tfgrid-compose status <app-path>
+# AI Agent management (requires context)
+tfgrid-compose agent list
+tfgrid-compose agent create
+tfgrid-compose agent run <project>
+tfgrid-compose agent monitor <project>
+tfgrid-compose agent stop <project>
 
-# SSH into VM
-tfgrid-compose ssh <app-path>
+# Status & logs
+tfgrid-compose status [app-path]
+tfgrid-compose ssh [app-path]
+tfgrid-compose logs [app-path]
 
-# View logs
-tfgrid-compose logs <app-path>
-
-# Destroy deployment
-tfgrid-compose down <app-path>
+# Destroy
+tfgrid-compose down [app-path]
 ```
 
 ### Complete Workflow Example
 
 ```bash
-# 1. Deploy the AI agent
-tfgrid-compose up ../tfgrid-ai-agent
+# 1. Setup context
+echo "app: ../tfgrid-ai-agent" > .tfgrid-compose.yaml
 
-# 2. Use it (from your local machine!)
-tfgrid-compose exec ../tfgrid-ai-agent login
-tfgrid-compose exec ../tfgrid-ai-agent create my-webapp
-tfgrid-compose exec ../tfgrid-ai-agent run my-webapp
+# 2. Deploy
+tfgrid-compose up
 
-# 3. Check what's happening
-tfgrid-compose status ../tfgrid-ai-agent
-tfgrid-compose exec ../tfgrid-ai-agent logs my-webapp
+# 3. Use AI agent
+tfgrid-compose agent create
+# Follow prompts: name, duration, prompt
 
-# 4. SSH if needed
-tfgrid-compose ssh ../tfgrid-ai-agent
+# 4. Monitor
+tfgrid-compose agent list
+tfgrid-compose agent monitor my-project
 
-# 5. Destroy when done
-tfgrid-compose down ../tfgrid-ai-agent
+# 5. Cleanup
+tfgrid-compose agent stop my-project
+tfgrid-compose down
 ```
 
-### Using Make (Convenience)
+---
 
-```bash
-# Set app once
-export APP=../tfgrid-ai-agent
+## How It Works
 
-# Then use short commands
-make up
-make status
-make ssh
-make down
-```
-
-### What Happens During Deployment
-
-1. ✅ **Validates** prerequisites (Terraform, Ansible, mnemonic)
-2. ✅ **Checks** app manifest and structure
-3. ✅ **Prevents** duplicate deployments
-4. ✅ **Creates** VM infrastructure (Terraform)
-5. ✅ **Configures** WireGuard networking
-6. ✅ **Waits** for SSH readiness
-7. ✅ **Configures** platform (Ansible - 15+ tasks)
-8. ✅ **Deploys** application source code
-9. ✅ **Runs** deployment hooks (setup → configure → healthcheck)
-10. ✅ **Verifies** deployment success
-11. ✅ **Saves** state for management
+**Complete deployment flow:**
+1. ✅ **Validates** prerequisites and configuration
+2. ✅ **Plans** infrastructure with Terraform
+3. ✅ **Provisions** VM on ThreeFold Grid
+4. ✅ **Configures** WireGuard networking
+5. ✅ **Waits** for SSH to be ready
+6. ✅ **Runs** Ansible playbooks
+7. ✅ **Deploys** application source code
+8. ✅ **Runs** deployment hooks (setup → configure → healthcheck)
+9. ✅ **Verifies** deployment success
+10. ✅ **Saves** state for management
 
 **Total time:** 2-3 minutes ⚡
 
@@ -225,6 +260,7 @@ make down
 ### Getting Started
 - **[Quick Start Guide](docs/QUICKSTART.md)** - Get started in 5 minutes
 - **[AI Agent Guide](docs/AI_AGENT_GUIDE.md)** - Complete AI agent integration guide
+- **[Context File Usage](docs/CONTEXT_FILE_USAGE.md)** - Using `.tfgrid-compose.yaml` for simpler commands
 
 ### Development
 - **[TODO](TODO.md)** - Roadmap and future features
@@ -272,10 +308,10 @@ Apache 2.0 - See LICENSE file
 ---
 
 **Part of:** [TFGrid Compose](https://github.com/tfgrid-compose)  
-**Status:** ✅ Production Ready (MVP)  
-**Version:** 0.1.0-mvp
+**Status:** ✅ Production Ready  
+**Version:** 1.0.0
 
-**Ready for beta testing!** 🚀
+**Ready for production use!** 🚀
 
 ---
 
@@ -284,9 +320,9 @@ Apache 2.0 - See LICENSE file
 | Document | Purpose | Audience |
 |----------|---------|----------|
 | [README.md](README.md) | Overview and quick reference | Everyone |
-| [SUCCESS.md](SUCCESS.md) | Achievement summary | Stakeholders |
 | [docs/QUICKSTART.md](docs/QUICKSTART.md) | 5-minute setup guide | New users |
 | [docs/AI_AGENT_GUIDE.md](docs/AI_AGENT_GUIDE.md) | AI agent workflows | AI agent users |
+| [docs/CONTEXT_FILE_USAGE.md](docs/CONTEXT_FILE_USAGE.md) | Context file guide | All users |
 | [TODO.md](TODO.md) | Future roadmap | Contributors |
 | [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) | Development notes | Developers |
 | [Makefile](Makefile) | Command reference (`make help`) | CLI users |

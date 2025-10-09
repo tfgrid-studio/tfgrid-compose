@@ -91,30 +91,75 @@ down:
 
 # Install tfgrid-compose to system PATH
 install:
-	@echo "Installing tfgrid-compose..."
+	@echo "📦 Installing tfgrid-compose..."
 	@if [ ! -d "$$HOME/.local/bin" ]; then \
 		mkdir -p "$$HOME/.local/bin"; \
-		echo "Created ~/.local/bin"; \
+		echo "✅ Created ~/.local/bin"; \
 	fi
-	@cp cli/tfgrid-compose "$$HOME/.local/bin/tfgrid-compose"
+	@if [ ! -d "$$HOME/.local/share/tfgrid-compose" ]; then \
+		mkdir -p "$$HOME/.local/share/tfgrid-compose"; \
+		echo "✅ Created ~/.local/share/tfgrid-compose"; \
+	fi
+	@echo "📋 Copying files..."
+	@cp -r cli core patterns "$$HOME/.local/share/tfgrid-compose/"
+	@echo "#!/usr/bin/env bash" > "$$HOME/.local/bin/tfgrid-compose"
+	@echo "exec \"$$HOME/.local/share/tfgrid-compose/cli/tfgrid-compose\" \"\$$@\"" >> "$$HOME/.local/bin/tfgrid-compose"
 	@chmod +x "$$HOME/.local/bin/tfgrid-compose"
-	@echo "Installed to ~/.local/bin/tfgrid-compose"
+	@chmod +x "$$HOME/.local/share/tfgrid-compose/cli/tfgrid-compose"
+	@echo "✅ Installed to ~/.local/bin/tfgrid-compose"
 	@echo ""
-	@echo "Add to your PATH if not already:"
-	@echo "  Fish: set -x PATH \$$HOME/.local/bin \$$PATH"
-	@echo "  Bash: export PATH=\"\$$HOME/.local/bin:\$$PATH\""
+	@echo "🔧 Setting up PATH..."
+	@if [ -n "$$FISH_VERSION" ] || [ -f "$$HOME/.config/fish/config.fish" ]; then \
+		if ! grep -q "$$HOME/.local/bin" "$$HOME/.config/fish/config.fish" 2>/dev/null; then \
+			mkdir -p "$$HOME/.config/fish"; \
+			echo "" >> "$$HOME/.config/fish/config.fish"; \
+			echo "# Added by tfgrid-compose" >> "$$HOME/.config/fish/config.fish"; \
+			echo "set -x PATH \$$HOME/.local/bin \$$PATH" >> "$$HOME/.config/fish/config.fish"; \
+			echo "✅ Added to Fish config (~/.config/fish/config.fish)"; \
+		else \
+			echo "ℹ  PATH already configured in Fish"; \
+		fi; \
+	elif [ -f "$$HOME/.zshrc" ]; then \
+		if ! grep -q "$$HOME/.local/bin" "$$HOME/.zshrc"; then \
+			echo "" >> "$$HOME/.zshrc"; \
+			echo "# Added by tfgrid-compose" >> "$$HOME/.zshrc"; \
+			echo 'export PATH="$$HOME/.local/bin:$$PATH"' >> "$$HOME/.zshrc"; \
+			echo "✅ Added to Zsh config (~/.zshrc)"; \
+		else \
+			echo "ℹ  PATH already configured in Zsh"; \
+		fi; \
+	elif [ -f "$$HOME/.bashrc" ]; then \
+		if ! grep -q "$$HOME/.local/bin" "$$HOME/.bashrc"; then \
+			echo "" >> "$$HOME/.bashrc"; \
+			echo "# Added by tfgrid-compose" >> "$$HOME/.bashrc"; \
+			echo 'export PATH="$$HOME/.local/bin:$$PATH"' >> "$$HOME/.bashrc"; \
+			echo "✅ Added to Bash config (~/.bashrc)"; \
+		else \
+			echo "ℹ  PATH already configured in Bash"; \
+		fi; \
+	else \
+		echo "⚠️  Could not detect shell config file"; \
+		echo "💡 Manually add to your PATH:"; \
+		echo "  Fish: set -x PATH \$$HOME/.local/bin \$$PATH"; \
+		echo "  Bash/Zsh: export PATH=\"\$$HOME/.local/bin:\$$PATH\""; \
+	fi
 	@echo ""
-	@echo "Then run: tfgrid-compose --version"
+	@echo "✅ Installation complete!"
+	@echo "🔄 Reload your shell or run: source ~/.bashrc (or ~/.zshrc or ~/.config/fish/config.fish)"
+	@echo "🧪 Test with: tfgrid-compose --version"
 
 # Uninstall tfgrid-compose
 uninstall:
-	@echo "Uninstalling tfgrid-compose..."
+	@echo "🗑️  Uninstalling tfgrid-compose..."
 	@if [ -f "$$HOME/.local/bin/tfgrid-compose" ]; then \
 		rm "$$HOME/.local/bin/tfgrid-compose"; \
-		echo "Removed ~/.local/bin/tfgrid-compose"; \
-	else \
-		echo "tfgrid-compose not found in ~/.local/bin"; \
+		echo "✅ Removed ~/.local/bin/tfgrid-compose"; \
 	fi
+	@if [ -d "$$HOME/.local/share/tfgrid-compose" ]; then \
+		rm -rf "$$HOME/.local/share/tfgrid-compose"; \
+		echo "✅ Removed ~/.local/share/tfgrid-compose"; \
+	fi
+	@echo "✅ Uninstall complete"
 
 # Clean state
 clean:
@@ -122,7 +167,6 @@ clean:
 
 # Show logs
 logs:
-{{ ... }}
 	@if [ -z "$(APP)" ]; then \
 		echo "❌ Error: APP not specified"; \
 		echo "Usage: make logs APP=../tfgrid-ai-agent"; \
