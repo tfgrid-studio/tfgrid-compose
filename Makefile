@@ -46,6 +46,8 @@ help:
 	@echo "  make inventory            - Generate Ansible inventory"
 	@echo ""
 	@echo "📋 Utilities:"
+	@echo "  make install    - Install tfgrid-compose to PATH"
+	@echo "  make uninstall  - Remove tfgrid-compose from PATH"
 	@echo "  make patterns   - List deployment patterns"
 	@echo "  make clean      - Clean local state"
 	@echo "  make help       - Show this help"

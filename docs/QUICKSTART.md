@@ -30,33 +30,6 @@ Before you begin, ensure you have:
 wget https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip
 unzip terraform_1.5.7_linux_amd64.zip
 sudo mv terraform /usr/local/bin/
-
-# Ansible
-sudo apt update
-sudo apt install -y ansible
-
-# WireGuard
-sudo apt install -y wireguard
-
-# Verify installations
-terraform --version
-ansible --version
-wg --version
-```
-
-**macOS:**
-```bash
-# Using Homebrew
-brew install terraform ansible wireguard-tools
-
-# Verify installations
-terraform --version
-ansible --version
-wg --version
-```
-
-### 2. Clone TFGrid Deployer
-
 ```bash
 git clone https://github.com/tfgrid-compose/tfgrid-deployer
 cd tfgrid-deployer
