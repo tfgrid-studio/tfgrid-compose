@@ -229,46 +229,44 @@ deployment_exists() {
 
 # Show help
 show_help() {
-    cat << EOF
-${GREEN}TFGrid Compose${NC} - Universal deployment orchestrator for ThreeFold Grid
-
-${CYAN}Usage:${NC}
-  tfgrid-compose <command> [options]
-
-${CYAN}Commands:${NC}
-  ${GREEN}init${NC} <app>            Initialize app configuration (interactive)
-  ${GREEN}up${NC} <app>              Deploy an application
-  ${GREEN}down${NC} <app>            Destroy a deployment
-  ${GREEN}exec${NC} <app> <cmd>      Execute command on deployed VM
-  ${GREEN}clean${NC}                 Clean up local state directory
-  ${GREEN}logs${NC} <app>            Show application logs
-  ${GREEN}status${NC} <app>          Check application status
-  ${GREEN}ssh${NC} <app>             SSH into the deployment
-  ${GREEN}address${NC} <app>         Show deployment addresses
-  ${GREEN}patterns${NC}              List available deployment patterns
-  ${GREEN}help${NC}                  Show this help message
-
-${CYAN}Quick Start:${NC}
-  1. Initialize: tfgrid-compose init tfgrid-ai-agent
-  2. Set secrets:  set -x TF_VAR_mnemonic (cat ~/.config/threefold/mnemonic)
-  3. Deploy:       tfgrid-compose up tfgrid-ai-agent
-  4. Use it:       tfgrid-compose exec tfgrid-ai-agent <command>
-
-${CYAN}Examples:${NC}
-  tfgrid-compose init tfgrid-ai-agent
-  tfgrid-compose up tfgrid-ai-agent
-  tfgrid-compose exec tfgrid-ai-agent login
-  tfgrid-compose exec tfgrid-ai-agent create my-project
-  tfgrid-compose exec tfgrid-ai-agent run my-project
-  tfgrid-compose logs tfgrid-ai-agent
-  tfgrid-compose ssh tfgrid-ai-agent
-  tfgrid-compose down tfgrid-ai-agent
-
-${CYAN}Documentation:${NC}
-  https://github.com/tfgrid-compose/tfgrid-deployer
-
-${CYAN}Version:${NC} 0.1.0 (MVP)
-EOF
+    echo -e "${GREEN}TFGrid Compose${NC} - Universal deployment orchestrator for ThreeFold Grid"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  tfgrid-compose <command> [options]"
+    echo ""
+    echo -e "${CYAN}Commands:${NC}"
+    echo -e "  ${GREEN}init${NC} <app>            Initialize app configuration (interactive)"
+    echo -e "  ${GREEN}up${NC} <app>              Deploy an application"
+    echo -e "  ${GREEN}down${NC} <app>            Destroy a deployment"
+    echo -e "  ${GREEN}exec${NC} <app> <cmd>      Execute command on deployed VM"
+    echo -e "  ${GREEN}clean${NC}                 Clean up local state directory"
+    echo -e "  ${GREEN}logs${NC} <app>            Show application logs"
+    echo -e "  ${GREEN}status${NC} <app>          Check application status"
+    echo -e "  ${GREEN}ssh${NC} <app>             SSH into the deployment"
+    echo -e "  ${GREEN}address${NC} <app>         Show deployment addresses"
+    echo -e "  ${GREEN}patterns${NC}              List available deployment patterns"
+    echo -e "  ${GREEN}help${NC}                  Show this help message"
+    echo ""
+    echo -e "${CYAN}Quick Start:${NC}"
+    echo "  1. Initialize: tfgrid-compose init tfgrid-ai-agent"
+    echo "  2. Set secrets:  set -x TF_VAR_mnemonic (cat ~/.config/threefold/mnemonic)"
+    echo "  3. Deploy:       tfgrid-compose up tfgrid-ai-agent"
+    echo "  4. Use it:       tfgrid-compose exec tfgrid-ai-agent <command>"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  tfgrid-compose init tfgrid-ai-agent"
+    echo "  tfgrid-compose up tfgrid-ai-agent"
+    echo "  tfgrid-compose exec tfgrid-ai-agent login"
+    echo "  tfgrid-compose exec tfgrid-ai-agent create my-project"
+    echo "  tfgrid-compose exec tfgrid-ai-agent run my-project"
+    echo "  tfgrid-compose logs tfgrid-ai-agent"
+    echo "  tfgrid-compose ssh tfgrid-ai-agent"
+    echo "  tfgrid-compose down tfgrid-ai-agent"
+    echo ""
+    echo -e "${CYAN}Documentation:${NC}"
+    echo "  https://github.com/tfgrid-compose/tfgrid-deployer"
+    echo ""
+    echo -e "${CYAN}Version:${NC} 0.1.0 (MVP)"
 }
 
 # Export functions for use in other scripts
