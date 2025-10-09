@@ -312,7 +312,7 @@ create:
 		echo "🚀 Starting interactive project creation..."; \
 		echo ""; \
 		ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-			root@$$VM_IP "cd /opt/ai-agent && /opt/ai-agent/scripts/create-project.sh"; \
+			root@$$VM_IP "su - developer -c 'cd /opt/ai-agent && /opt/ai-agent/scripts/create-project.sh'"; \
 	else \
 		echo "🚀 Creating project: $(project)"; \
 		ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
@@ -334,9 +334,9 @@ run:
 		echo "🚀 Starting AI agent (interactive project selection)..."; \
 		echo ""; \
 		ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-			root@$$VM_IP "cd /opt/ai-agent && bash scripts/interactive-wrapper.sh run"; \
+			root@$$VM_IP "su - developer -c 'cd /opt/ai-agent && bash scripts/interactive-wrapper.sh run'"; \
 	else \
-		./cli/tfgrid-compose exec $(APP) "/opt/ai-agent/scripts/run-project.sh $(project)"; \
+		./cli/tfgrid-compose exec $(APP) "su - developer -c '/opt/ai-agent/scripts/run-project.sh $(project)'"; \
 	fi
 
 # Monitor AI agent project (interactive selection if no project specified)
@@ -354,9 +354,9 @@ monitor:
 		echo "👁️  Monitor AI agent (interactive project selection)..."; \
 		echo ""; \
 		ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-			root@$$VM_IP "cd /opt/ai-agent && bash scripts/interactive-wrapper.sh monitor"; \
+			root@$$VM_IP "su - developer -c 'cd /opt/ai-agent && bash scripts/interactive-wrapper.sh monitor'"; \
 	else \
-		./cli/tfgrid-compose exec $(APP) "/opt/ai-agent/scripts/monitor-project.sh $(project)"; \
+		./cli/tfgrid-compose exec $(APP) "su - developer -c '/opt/ai-agent/scripts/monitor-project.sh $(project)'"; \
 	fi
 
 # Stop AI agent project (interactive selection if no project specified)
@@ -374,9 +374,9 @@ stop:
 		echo "⛔ Stop AI agent (interactive project selection)..."; \
 		echo ""; \
 		ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-			root@$$VM_IP "cd /opt/ai-agent && bash scripts/interactive-wrapper.sh stop"; \
+			root@$$VM_IP "su - developer -c 'cd /opt/ai-agent && bash scripts/interactive-wrapper.sh stop'"; \
 	else \
-		./cli/tfgrid-compose exec $(APP) "/opt/ai-agent/scripts/stop-project.sh $(project)"; \
+		./cli/tfgrid-compose exec $(APP) "su - developer -c '/opt/ai-agent/scripts/stop-project.sh $(project)'"; \
 	fi
 
 # List all projects  
@@ -385,7 +385,7 @@ list:
 		echo "❌ Error: APP not specified"; \
 		exit 1; \
 	fi
-	./cli/tfgrid-compose exec $(APP) "/opt/ai-agent/scripts/status-projects.sh"
+	./cli/tfgrid-compose exec $(APP) "su - developer -c '/opt/ai-agent/scripts/status-projects.sh'"
 
 # Show project status (alias for list)
 projects: list
