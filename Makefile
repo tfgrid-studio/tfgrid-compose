@@ -82,18 +82,45 @@ deploy:
 down:
 	@if [ -z "$(APP)" ]; then \
 		echo "❌ Error: APP not specified"; \
-		echo "Usage: make down APP=../tfgrid-ai-agent"; \
 		echo "Or set: export APP=../tfgrid-ai-agent"; \
 		exit 1; \
 	fi
 	./cli/tfgrid-compose down $(APP)
 
-# Clean local state
+# Install tfgrid-compose to system PATH
+install:
+	@echo "Installing tfgrid-compose..."
+	@if [ ! -d "$$HOME/.local/bin" ]; then \
+		mkdir -p "$$HOME/.local/bin"; \
+		echo "Created ~/.local/bin"; \
+	fi
+	@cp cli/tfgrid-compose "$$HOME/.local/bin/tfgrid-compose"
+	@chmod +x "$$HOME/.local/bin/tfgrid-compose"
+	@echo "Installed to ~/.local/bin/tfgrid-compose"
+	@echo ""
+	@echo "Add to your PATH if not already:"
+	@echo "  Fish: set -x PATH \$$HOME/.local/bin \$$PATH"
+	@echo "  Bash: export PATH=\"\$$HOME/.local/bin:\$$PATH\""
+	@echo ""
+	@echo "Then run: tfgrid-compose --version"
+
+# Uninstall tfgrid-compose
+uninstall:
+	@echo "Uninstalling tfgrid-compose..."
+	@if [ -f "$$HOME/.local/bin/tfgrid-compose" ]; then \
+		rm "$$HOME/.local/bin/tfgrid-compose"; \
+		echo "Removed ~/.local/bin/tfgrid-compose"; \
+	else \
+		echo "tfgrid-compose not found in ~/.local/bin"; \
+	fi
+
+# Clean state
 clean:
 	./cli/tfgrid-compose clean
 
 # Show logs
 logs:
+{{ ... }}
 	@if [ -z "$(APP)" ]; then \
 		echo "❌ Error: APP not specified"; \
 		echo "Usage: make logs APP=../tfgrid-ai-agent"; \
