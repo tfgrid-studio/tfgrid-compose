@@ -50,6 +50,8 @@ help:
 	@echo "  make install    - Install tfgrid-compose to PATH"
 	@echo "  make uninstall  - Remove tfgrid-compose from PATH"
 	@echo "  make patterns   - List deployment patterns"
+	@echo "  make ping       - Test connectivity to VM"
+	@echo "  make verify     - Verify deployment health"
 	@echo "  make clean      - Clean local state"
 	@echo "  make help       - Show this help"
 	@echo ""
