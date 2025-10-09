@@ -31,7 +31,7 @@ wget https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.
 unzip terraform_1.5.7_linux_amd64.zip
 sudo mv terraform /usr/local/bin/
 ```bash
-git clone https://github.com/tfgrid-compose/tfgrid-deployer
+git clone https://github.com/tfgrid-studio/tfgrid-compose
 cd tfgrid-deployer
 ```
 
@@ -264,7 +264,7 @@ See [Creating Apps Guide](./CREATING_APPS.md) to learn how to:
 
 ## Getting Help
 
-**Found a bug?** [Open an issue](https://github.com/tfgrid-compose/tfgrid-deployer/issues)
+**Found a bug?** [Open an issue](https://github.com/tfgrid-studio/tfgrid-compose/issues)
 
 **Need help?** [Join our community](https://forum.threefold.io)
 
@@ -276,7 +276,7 @@ See [Creating Apps Guide](./CREATING_APPS.md) to learn how to:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/tfgrid-compose/tfgrid-deployer
+git clone https://github.com/tfgrid-studio/tfgrid-compose
 cd tfgrid-deployer
 
 # 2. Configure credentials

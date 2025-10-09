@@ -264,7 +264,7 @@ show_help() {
     echo "  tfgrid-compose down tfgrid-ai-agent"
     echo ""
     echo -e "${CYAN}Documentation:${NC}"
-    echo "  https://github.com/tfgrid-compose/tfgrid-deployer"
+    echo "  https://github.com/tfgrid-studio/tfgrid-compose"
     echo ""
     echo -e "${CYAN}Version:${NC} 0.1.0 (MVP)"
 }

@@ -206,7 +206,7 @@ Everything reads from state file - no parameter passing needed!
 
 ```bash
 # 1. Clone
-git clone https://github.com/tfgrid-compose/tfgrid-deployer
+git clone https://github.com/tfgrid-studio/tfgrid-compose
 cd tfgrid-deployer
 
 # 2. Install

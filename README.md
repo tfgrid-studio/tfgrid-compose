@@ -1,6 +1,8 @@
-# TFGrid Deployer
+# TFGrid Compose
 
 **Universal deployment orchestrator for ThreeFold Grid applications.**
+
+> **Note:** This repository was renamed from `tfgrid-deployer` to `tfgrid-compose` on Oct 9, 2025 as part of the TFGrid Studio rebrand.
 
 [![Status](https://img.shields.io/badge/status-production--ready-green)]() 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue)]() 
@@ -8,7 +10,7 @@
 
 ## Overview
 
-TFGrid Deployer is a production-ready deployment platform that makes deploying applications on ThreeFold Grid as simple as `tfgrid-compose up`.
+TFGrid Compose is a production-ready deployment platform that makes deploying applications on ThreeFold Grid as simple as `tfgrid-compose up`.
 
 **Key Features:**
 - ✅ **One-command deployment** - From zero to running app in 2-3 minutes
@@ -118,12 +120,12 @@ Kubernetes cluster (K3s) with master and worker nodes.
 
 ```bash
 # Setup standard workspace
-mkdir -p ~/code/github.com/tfgrid-compose
-cd ~/code/github.com/tfgrid-compose
+mkdir -p ~/code/github.com/tfgrid-studio
+cd ~/code/github.com/tfgrid-studio
 
 # Clone repositories
-git clone https://github.com/tfgrid-compose/tfgrid-deployer
-git clone https://github.com/tfgrid-compose/tfgrid-ai-agent
+git clone https://github.com/tfgrid-studio/tfgrid-compose
+git clone https://github.com/tfgrid-studio/tfgrid-ai-agent
 
 # Install (auto-configures PATH)
 cd tfgrid-deployer
@@ -289,7 +291,7 @@ Apache 2.0 - See LICENSE file
 
 ---
 
-**Part of:** [TFGrid Compose](https://github.com/tfgrid-compose)  
+**Part of:** [TFGrid Studio](https://github.com/tfgrid-studio)  
 **Status:** ✅ Production Ready  
 **Version:** 1.0.0
 
