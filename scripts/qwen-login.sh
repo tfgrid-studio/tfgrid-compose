@@ -33,15 +33,16 @@ echo "🔓 Starting Qwen authentication session..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Start qwen with expect in background on the VM
+# Create the expect script on the VM directly as developer user
 ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
-    root@$VM_IP 'bash' <<'REMOTE_SCRIPT' &
+    root@$VM_IP 'su - developer -c "cat > ~/qwen-auth.sh"' <<'REMOTE_SCRIPT'
+#!/bin/bash
 # Clean previous auth
 rm -rf ~/.qwen
 
 # Use expect to automate the OAuth device flow
-nohup expect <<'END_EXPECT' > /tmp/qwen_oauth.log 2>&1 &
+expect <<'END_EXPECT' > ~/qwen_oauth.log 2>&1 &
 set timeout 180
 log_user 1
 
@@ -58,8 +59,12 @@ expect {
     }
 }
 END_EXPECT
-
 REMOTE_SCRIPT
+
+# Make it executable and run as developer user
+ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    root@$VM_IP 'su - developer -c "chmod +x ~/qwen-auth.sh && bash ~/qwen-auth.sh" &'
 
 # Wait for OAuth URL to appear
 echo "Waiting for OAuth URL..."
@@ -73,7 +78,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
-    root@$VM_IP 'grep -E "https://.*authorize" /tmp/qwen_oauth.log 2>/dev/null || cat /tmp/qwen_oauth.log 2>/dev/null || echo "⚠️  URL not found yet, check /tmp/qwen_oauth.log on VM"'
+    root@$VM_IP 'su - developer -c "cat ~/qwen_oauth.log 2>/dev/null | grep -E \"https://.*authorize\" | head -20 || echo \"⚠️  Waiting for OAuth URL...\""'
 echo ""
 
 echo ""
@@ -81,10 +86,10 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 read -p "✅ Press ENTER after completing OAuth in your browser..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Kill the qwen/expect processes
+# Kill the qwen/expect processes (kill as developer's processes)
 ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
-    root@$VM_IP 'pkill -f "qwen" 2>/dev/null || true; pkill -f "expect" 2>/dev/null || true' || true
+    root@$VM_IP 'pkill -u developer -f qwen 2>/dev/null || true; pkill -u developer -f expect 2>/dev/null || true' || true
 
 echo ""
 echo "Authentication session ended."
@@ -92,7 +97,7 @@ echo ""
 echo "Verifying authentication status..."
 
 if ssh -o LogLevel=ERROR -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    root@$VM_IP "test -f ~/.qwen/settings.json" &>/dev/null; then
+    root@$VM_IP "su - developer -c 'test -f ~/.qwen/settings.json'" &>/dev/null; then
     echo "✅ Qwen is now authenticated!"
     echo ""
     echo "Next steps:"
@@ -105,4 +110,5 @@ else
     echo "  1. Try running 'make login' again"
     echo "  2. Ensure you completed the OAuth flow in your browser"
     echo "  3. Check VM internet connectivity"
+    echo "  4. Check: ssh root@$VM_IP 'su - developer -c \"ls -la ~/.qwen\"'"
 fi
