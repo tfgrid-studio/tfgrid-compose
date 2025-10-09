@@ -26,6 +26,7 @@ help:
 	@echo "  make exec APP=<app> CMD='<cmd>' - Execute command on deployed VM"
 	@echo "  make status APP=<app>           - Check deployment status"
 	@echo "  make ssh APP=<app>              - SSH into deployment"
+	@echo "  make connect                    - Quick SSH as developer (uses context)"
 	@echo "  make down APP=<app>             - Destroy deployment"
 	@echo ""
 	@echo "🤖 AI Agent Workflow (Clean & Simple):"
@@ -191,6 +192,85 @@ ssh:
 		exit 1; \
 	fi
 	./cli/tfgrid-compose ssh $(APP)
+
+# Quick connect to VM as developer user (uses context)
+connect:
+	@VM_IP=$$(cat .tfgrid-compose/state.yaml 2>/dev/null | grep '^vm_ip:' | awk '{print $$2}'); \
+	if [ -z "$$VM_IP" ]; then \
+		echo "❌ No deployment found. Run 'make up' first."; \
+		exit 1; \
+	fi; \
+	echo "🔌 Connecting to VM as developer user..."; \
+	ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+		root@$$VM_IP "su - developer"
+
+# Test connectivity to VM
+ping:
+	@VM_IP=$$(cat .tfgrid-compose/state.yaml 2>/dev/null | grep '^vm_ip:' | awk '{print $$2}'); \
+	if [ -z "$$VM_IP" ]; then \
+		echo "❌ No deployment found. Run 'make up' first."; \
+		exit 1; \
+	fi; \
+	echo "🏓 Testing connectivity to VM..."; \
+	echo "IP: $$VM_IP"; \
+	echo ""; \
+	if ping -c 3 -W 2 $$VM_IP >/dev/null 2>&1; then \
+		echo "✅ VM is reachable"; \
+	else \
+		echo "❌ Cannot reach VM"; \
+		echo ""; \
+		echo "Troubleshooting:"; \
+		echo "  1. Check WireGuard: ip link show wg-ai-agent"; \
+		echo "  2. Verify routes: ip route | grep wg-ai-agent"; \
+		echo "  3. Try SSH: make ssh"; \
+		exit 1; \
+	fi
+
+# Verify deployment health
+verify:
+	@VM_IP=$$(cat .tfgrid-compose/state.yaml 2>/dev/null | grep '^vm_ip:' | awk '{print $$2}'); \
+	if [ -z "$$VM_IP" ]; then \
+		echo "❌ No deployment found. Run 'make up' first."; \
+		exit 1; \
+	fi; \
+	echo "🔍 Verifying deployment..."; \
+	echo ""; \
+	echo "📡 Testing connectivity..."; \
+	if ping -c 1 -W 2 $$VM_IP >/dev/null 2>&1; then \
+		echo "  ✅ Network connectivity OK"; \
+	else \
+		echo "  ❌ Network connectivity FAILED"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "🔐 Testing SSH access..."; \
+	if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+		root@$$VM_IP "echo 'SSH OK'" >/dev/null 2>&1; then \
+		echo "  ✅ SSH access OK"; \
+	else \
+		echo "  ❌ SSH access FAILED"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "👤 Checking developer user..."; \
+	if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+		root@$$VM_IP "id developer" >/dev/null 2>&1; then \
+		echo "  ✅ Developer user exists"; \
+	else \
+		echo "  ❌ Developer user NOT found"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "📁 Checking workspace..."; \
+	if ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+		root@$$VM_IP "test -d /home/developer/code" >/dev/null 2>&1; then \
+		echo "  ✅ Workspace exists: /home/developer/code"; \
+	else \
+		echo "  ❌ Workspace NOT found"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	echo "✅ All checks passed! Deployment is healthy."
 
 # Show addresses
 address:
