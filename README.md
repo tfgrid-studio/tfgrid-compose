@@ -117,15 +117,22 @@ Kubernetes cluster (K3s) with master and worker nodes.
 ### 1. Install
 
 ```bash
-# Clone the repository
+# Setup standard workspace
+mkdir -p ~/code/github.com/tfgrid-compose
+cd ~/code/github.com/tfgrid-compose
+
+# Clone repositories
 git clone https://github.com/tfgrid-compose/tfgrid-deployer
-cd tfgrid-deployer
+git clone https://github.com/tfgrid-compose/tfgrid-ai-agent
 
 # Install (auto-configures PATH)
+cd tfgrid-deployer
 make install
 ```
 
 This automatically adds `tfgrid-compose` to your PATH!
+
+**Note:** We use `~/code/github.com/{org}/{repo}` as the standard workspace structure. See [WORKSPACE_STANDARD.md](../WORKSPACE_STANDARD.md) for details.
 
 **Prerequisites:**
 - Terraform or OpenTofu
@@ -158,31 +165,6 @@ tfgrid-compose agent list
 tfgrid-compose agent create
 tfgrid-compose agent run my-project
 
-# Cleanup
-tfgrid-compose down
-```
-
-That's it! Your app is deployed and running. 🎉
-
-## Usage
-
-### Two Ways to Use
-
-**Option A: With Context File (Recommended)**
-```bash
-# Create context file once
-echo "app: ../tfgrid-ai-agent" > .tfgrid-compose.yaml
-
-# Use short commands
-tfgrid-compose up
-tfgrid-compose agent list
-tfgrid-compose agent create
-tfgrid-compose ssh
-tfgrid-compose down
-```
-
-**Option B: Explicit App Path**
-```bash
 # Specify app path every time
 tfgrid-compose up ../tfgrid-ai-agent
 tfgrid-compose status ../tfgrid-ai-agent
