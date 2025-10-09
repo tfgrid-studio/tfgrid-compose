@@ -311,8 +311,8 @@ test:
 	@echo ""
 	@echo "To destroy: make down APP=$(APP)"
 
-# Verify CLI
-verify:
+# Verify CLI installation
+verify-cli:
 	@echo "🔍 Verifying tfgrid-compose installation..."
 	@./cli/tfgrid-compose help
 	@echo ""
