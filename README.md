@@ -5,7 +5,8 @@
 > **Note:** This repository was renamed from `tfgrid-deployer` to `tfgrid-compose` on Oct 9, 2025 as part of the TFGrid Studio rebrand.
 
 [![Status](https://img.shields.io/badge/status-production--ready-green)]() 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue)]() 
+[![Version](https://img.shields.io/badge/version-2.0.0-blue)]() 
+[![Patterns](https://img.shields.io/badge/patterns-3%2F3-success)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
 
 ## Overview
@@ -37,7 +38,9 @@ tfgrid-deployer/
 
 ## Current Status
 
-**🎉 PRODUCTION READY - v1.0.0**
+**🎉 COMPLETE FIRST LAYER - v2.0.0**
+
+All 3 core deployment patterns are production-ready!
 
 ### v1.0 Features ✅
 - [x] Full deployment orchestration (Terraform + WireGuard + Ansible)
@@ -51,16 +54,20 @@ tfgrid-deployer/
 - [x] Auto-install with `make install`
 - [x] Single-VM pattern (fully tested)
 
+### All 3 Core Patterns Complete! ✅
+- [x] **Single-VM pattern** - Development, databases, AI agents
+- [x] **Gateway pattern** - Production web apps with public IPv4, SSL, load balancing
+- [x] **K3s pattern** - Kubernetes clusters for cloud-native apps
+
 ### Coming Soon 🚧
-- [ ] Gateway pattern (scaffolded)
-- [ ] K3s pattern (scaffolded)
 - [ ] Automated test suite
 - [ ] Shell completion (bash/zsh/fish)
 - [ ] Video tutorials
+- [ ] Web dashboard
 
 ## Patterns
 
-### single-vm 
+### single-vm ✅ **Production Ready**
 
 Single VM deployment with Wireguard and Mycelium networking.
 
@@ -71,9 +78,11 @@ Single VM deployment with Wireguard and Mycelium networking.
 - AI agents
 - Background workers
 
+**Documentation:** [patterns/single-vm/](patterns/single-vm/)
+
 ---
 
-### gateway 
+### gateway ✅ **Production Ready**
 
 Gateway VM with public IPv4 + backend VMs with private networking.
 
@@ -81,20 +90,23 @@ Gateway VM with public IPv4 + backend VMs with private networking.
 - Production web applications
 - E-commerce sites
 - Multi-tier applications
-- Traditional hosting with public access
+- Public-facing services
 
 **Features:**
 - Public IPv4 on gateway
-- Nginx reverse proxy
-- SSL/TLS termination
-- Load balancing
+- Nginx/HAProxy reverse proxy
+- Free SSL/TLS (Let's Encrypt)
+- Load balancing & health checks
 - Private backend network
+- Network redundancy (WireGuard + Mycelium)
+
+**Documentation:** [patterns/gateway/README.md](patterns/gateway/README.md)
 
 ---
 
-### k3s 
+### k3s ✅ **Production Ready**
 
-Kubernetes cluster (K3s) with master and worker nodes.
+Kubernetes cluster (K3s) with control plane, workers, and management node.
 
 **Use cases:**
 - Cloud-native applications
@@ -104,15 +116,13 @@ Kubernetes cluster (K3s) with master and worker nodes.
 
 **Features:**
 - Lightweight Kubernetes (K3s)
-- Traefik ingress controller
+- MetalLB load balancer
+- Nginx Ingress Controller
+- Management node with kubectl, helm, k9s
 - Local-path storage provisioner
-- kubectl access
-- Auto-scaling workers
+- HA control plane support
 
-**Commands supported:**
-- `logs` - Show application logs
-- `status` - Check application status
-- `address` - Show IP addresses
+**Documentation:** [patterns/k3s/README.md](patterns/k3s/README.md)
 
 ## Quick Start
 
@@ -292,10 +302,11 @@ Apache 2.0 - See LICENSE file
 ---
 
 **Part of:** [TFGrid Studio](https://github.com/tfgrid-studio)  
-**Status:** ✅ Production Ready  
-**Version:** 1.0.0
+**Status:** ✅ Complete First Layer  
+**Version:** 2.0.0  
+**Patterns:** 3/3 Production Ready
 
-**Ready for production use!** 🚀
+**All deployment patterns complete and ready for production!** 🚀
 
 ---
 

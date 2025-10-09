@@ -192,3 +192,38 @@ output "tfgrid_network" {
   value       = var.tfgrid_network
   description = "ThreeFold Grid network (main, test, dev)"
 }
+
+# ===== PATTERN CONTRACT REQUIRED OUTPUTS =====
+# These outputs are required by tfgrid-compose orchestrator
+
+output "primary_ip" {
+  value       = grid_deployment.gateway.vms[0].computedip
+  description = "Primary IP address for SSH connection (gateway public IP)"
+}
+
+output "primary_ip_type" {
+  value       = "public"
+  description = "Type of primary IP (public, wireguard, mycelium)"
+}
+
+output "deployment_name" {
+  value       = "gateway_deployment"
+  description = "Name of the deployment"
+}
+
+output "node_ids" {
+  value       = concat([var.gateway_node], var.internal_nodes)
+  description = "List of all node IDs used in deployment"
+}
+
+output "secondary_ips" {
+  value = [
+    for key, dep in grid_deployment.internal_vms : {
+      name = "internal_vm_${key}"
+      ip   = dep.vms[0].ip
+      type = "wireguard"
+      role = "backend"
+    }
+  ]
+  description = "Additional IPs for backend VMs"
+}

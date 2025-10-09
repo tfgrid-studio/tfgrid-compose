@@ -219,3 +219,47 @@ output "management_node_wireguard_ip" {
   value       = grid_deployment.management_node.vms[0].ip
   description = "WireGuard IP of the management node"
 }
+
+# ===== PATTERN CONTRACT REQUIRED OUTPUTS =====
+# These outputs are required by tfgrid-compose orchestrator
+
+output "primary_ip" {
+  value       = grid_deployment.management_node.vms[0].ip
+  description = "Primary IP address for SSH connection (management node wireguard IP)"
+}
+
+output "primary_ip_type" {
+  value       = "wireguard"
+  description = "Type of primary IP (public, wireguard, mycelium)"
+}
+
+output "deployment_name" {
+  value       = "k3s_cluster"
+  description = "Name of the deployment"
+}
+
+output "node_ids" {
+  value       = local.all_nodes
+  description = "List of all node IDs used in deployment (management + cluster nodes)"
+}
+
+output "secondary_ips" {
+  value = [
+    for key, dep in grid_deployment.k3s_nodes : {
+      name = "cluster_node_${key}"
+      ip   = dep.vms[0].ip
+      type = "wireguard"
+      role = contains(var.control_nodes, dep.node) ? "control" : "worker"
+    }
+  ]
+  description = "Additional IPs for cluster nodes (control plane + workers)"
+}
+
+output "connection_info" {
+  value = {
+    method     = "kubectl"
+    endpoint   = "https://${grid_deployment.k3s_nodes[0].vms[0].ip}:6443"
+    management = grid_deployment.management_node.vms[0].ip
+  }
+  description = "K3s cluster connection information"
+}
