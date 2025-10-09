@@ -17,6 +17,23 @@ source "$DEPLOYER_ROOT/core/orchestrator.sh"
 # Version
 VERSION="0.1.0-mvp"
 
+# Context file support
+CONTEXT_FILE=".tfgrid-compose.yaml"
+
+# Load context from .tfgrid-compose.yaml
+load_context() {
+    if [ -f "$CONTEXT_FILE" ]; then
+        # Parse YAML (simple grep approach for 'app:' line)
+        local app_from_context=$(grep '^app:' "$CONTEXT_FILE" | sed 's/app: *//' | sed 's/["'\'']//g' | tr -d '\r')
+        
+        if [ -n "$app_from_context" ]; then
+            echo "$app_from_context"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # Command dispatcher
 COMMAND="${1:-help}"
 shift || true
@@ -39,8 +56,22 @@ case "$COMMAND" in
         fi
         echo ""
         
+        # Try to get app path from argument or context
+        APP_PATH="$1"
+        if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(load_context)
+            if [ -z "$APP_PATH" ]; then
+                log_error "No app specified and no context file found"
+                log_info "Usage: tfgrid-compose up <app>"
+                log_info "Or create .tfgrid-compose.yaml with:"
+                echo "  app: ../tfgrid-ai-agent"
+                exit 1
+            fi
+            log_info "Using app from context: $APP_PATH"
+        fi
+        
         # Validate app path
-        if ! validate_app_path "$1"; then
+        if ! validate_app_path "$APP_PATH"; then
             exit 1
         fi
         
@@ -49,7 +80,6 @@ case "$COMMAND" in
             exit 1
         fi
         
-        APP_PATH="$1"
         PATTERN_NAME="${2:-}"
         
         # Extract pattern from --pattern= flag
@@ -111,8 +141,20 @@ case "$COMMAND" in
         log_info "TFGrid Compose v$VERSION"
         echo ""
         
+        # Try to get app path from argument or context
+        APP_PATH="$1"
+        if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(load_context)
+            if [ -z "$APP_PATH" ]; then
+                log_error "No app specified and no context file found"
+                log_info "Usage: tfgrid-compose down <app>"
+                exit 1
+            fi
+            log_info "Using app from context: $APP_PATH"
+        fi
+        
         # Validate app path
-        if ! validate_app_path "$1"; then
+        if ! validate_app_path "$APP_PATH"; then
             exit 1
         fi
         
@@ -153,8 +195,19 @@ case "$COMMAND" in
         
     logs)
         # Logs command
+        # Try to get app path from argument or context
+        APP_PATH="$1"
+        if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(load_context)
+            if [ -z "$APP_PATH" ]; then
+                log_error "No app specified and no context file found"
+                log_info "Usage: tfgrid-compose logs <app>"
+                exit 1
+            fi
+        fi
+        
         # Validate app path
-        if ! validate_app_path "$1"; then
+        if ! validate_app_path "$APP_PATH"; then
             exit 1
         fi
         
@@ -162,8 +215,6 @@ case "$COMMAND" in
         if ! validate_deployment_exists; then
             exit 1
         fi
-        
-        APP_PATH="$1"
         
         # Load app to get pattern
         if ! load_app "$APP_PATH"; then
@@ -189,8 +240,19 @@ case "$COMMAND" in
         
     status)
         # Status command
+        # Try to get app path from argument or context
+        APP_PATH="$1"
+        if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(load_context)
+            if [ -z "$APP_PATH" ]; then
+                log_error "No app specified and no context file found"
+                log_info "Usage: tfgrid-compose status <app>"
+                exit 1
+            fi
+        fi
+        
         # Validate app path
-        if ! validate_app_path "$1"; then
+        if ! validate_app_path "$APP_PATH"; then
             exit 1
         fi
         
@@ -198,8 +260,6 @@ case "$COMMAND" in
         if ! validate_deployment_exists; then
             exit 1
         fi
-        
-        APP_PATH="$1"
         
         # Load app
         if ! load_app "$APP_PATH"; then
@@ -225,12 +285,16 @@ case "$COMMAND" in
         
     ssh|connect)
         # SSH command
-        if [ -z "$1" ]; then
-            log_error "Usage: tfgrid-compose ssh <app>"
-            exit 1
-        fi
-        
+        # Try to get app path from argument or context
         APP_PATH="$1"
+        if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(load_context)
+            if [ -z "$APP_PATH" ]; then
+                log_error "No app specified and no context file found"
+                log_info "Usage: tfgrid-compose ssh <app>"
+                exit 1
+            fi
+        fi
         
         # Load app
         if ! load_app "$APP_PATH"; then
@@ -463,6 +527,94 @@ EOF
         log_info "TFGrid Compose v$VERSION"
         echo ""
         list_patterns
+        ;;
+        
+    agent)
+        # AI Agent shorthand commands
+        ACTION="${1:-list}"
+        shift || true
+        
+        # Load context
+        APP_FROM_CONTEXT=$(load_context)
+        if [ -z "$APP_FROM_CONTEXT" ]; then
+            log_error "No context file found"
+            log_info "Create .tfgrid-compose.yaml with:"
+            echo "  app: ../tfgrid-ai-agent"
+            exit 1
+        fi
+        
+        log_info "Using app from context: $APP_FROM_CONTEXT" >&2
+        
+        # Check deployment exists
+        if ! validate_deployment_exists; then
+            log_error "No deployment found. Run 'tfgrid-compose up' first"
+            exit 1
+        fi
+        
+        # Get VM IP from state
+        vm_ip=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+        
+        if [ -z "$vm_ip" ]; then
+            log_error "No VM IP found in state"
+            exit 1
+        fi
+        
+        # Handle agent actions
+        case "$ACTION" in
+            list)
+                ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                    root@$vm_ip "/opt/ai-agent/scripts/status-projects.sh"
+                ;;
+            run)
+                PROJECT="$1"
+                if [ -z "$PROJECT" ]; then
+                    ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                        root@$vm_ip "cd /opt/ai-agent && bash scripts/interactive-wrapper.sh run"
+                else
+                    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                        root@$vm_ip "/opt/ai-agent/scripts/run-project.sh $PROJECT"
+                fi
+                ;;
+            create)
+                ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                    root@$vm_ip "cd /opt/ai-agent && /opt/ai-agent/scripts/create-project.sh"
+                ;;
+            stop)
+                PROJECT="$1"
+                if [ -z "$PROJECT" ]; then
+                    ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                        root@$vm_ip "cd /opt/ai-agent && bash scripts/interactive-wrapper.sh stop"
+                else
+                    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                        root@$vm_ip "/opt/ai-agent/scripts/stop-project.sh $PROJECT"
+                fi
+                ;;
+            monitor)
+                PROJECT="$1"
+                if [ -z "$PROJECT" ]; then
+                    ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                        root@$vm_ip "cd /opt/ai-agent && bash scripts/interactive-wrapper.sh monitor"
+                else
+                    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                        root@$vm_ip "/opt/ai-agent/scripts/monitor-project.sh $PROJECT"
+                fi
+                ;;
+            remove)
+                PROJECT="$1"
+                if [ -z "$PROJECT" ]; then
+                    ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                        root@$vm_ip "cd /opt/ai-agent && bash scripts/interactive-wrapper.sh remove"
+                else
+                    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                        root@$vm_ip "/opt/ai-agent/scripts/remove-project.sh $PROJECT"
+                fi
+                ;;
+            *)
+                log_error "Unknown agent action: $ACTION"
+                log_info "Usage: tfgrid-compose agent {list|run|create|stop|monitor|remove} [project]"
+                exit 1
+                ;;
+        esac
         ;;
         
     version|--version|-v)

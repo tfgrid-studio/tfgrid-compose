@@ -37,17 +37,19 @@
 
 ### v1.0.0 - Production Release
 
-### UX Improvements (HIGH PRIORITY)
-- [ ] **Context file support** - `.tfgrid-compose.yaml` in project root
+### UX Improvements ✅
+- [x] **Context file support** - `.tfgrid-compose.yaml` in project root
   - Auto-detect app from context file
   - Eliminate need to specify app path every time
   - Example: `tfgrid-compose agent list` (no app path needed)
-- [ ] **Built-in `agent` subcommand** - Shorthand for AI agent operations
+- [x] **Built-in `agent` subcommand** - Shorthand for AI agent operations
   - `tfgrid-compose agent list`
   - `tfgrid-compose agent run <project>`
   - `tfgrid-compose agent create`
   - `tfgrid-compose agent stop <project>`
-- [ ] Shell completion (bash/zsh/fish)
+  - `tfgrid-compose agent monitor <project>`
+  - `tfgrid-compose agent remove <project>`
+- [ ] Shell completion (bash/zsh/fish) - Future enhancement
 
 ### Testing & Quality
 - [ ] Automated integration tests

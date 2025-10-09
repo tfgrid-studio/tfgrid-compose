@@ -1,5 +1,8 @@
-# State directory (local deployment state, includes terraform/)
+# State directory
 .tfgrid-compose/
+
+# Context file (user-specific)
+.tfgrid-compose.yaml
 
 # Ansible
 *.retry
