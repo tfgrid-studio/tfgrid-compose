@@ -277,7 +277,7 @@ See [Creating Apps Guide](./CREATING_APPS.md) to learn how to:
 ```bash
 # 1. Clone the repository
 git clone https://github.com/tfgrid-studio/tfgrid-compose
-cd tfgrid-deployer
+cd tfgrid-compose
 
 # 2. Configure credentials
 mkdir -p ~/.config/threefold
