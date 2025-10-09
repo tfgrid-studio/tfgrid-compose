@@ -30,17 +30,29 @@
 - [x] App source structure path issue
 - [x] WireGuard naming (wg-ai-agent)
 - [x] Ansible error code handling
-- [x] State-driven task execution
 
 ---
 
 ## 🚀 Next Phase: Enhancement & Scale
 
-### Phase 1: Testing & Reliability (Priority: High)
+### v1.0.0 - Production Release
 
-**Automated Testing**
-- [ ] Unit tests for core modules
-- [ ] Integration tests for patterns
+### UX Improvements (HIGH PRIORITY)
+- [ ] **Context file support** - `.tfgrid-compose.yaml` in project root
+  - Auto-detect app from context file
+  - Eliminate need to specify app path every time
+  - Example: `tfgrid-compose agent list` (no app path needed)
+- [ ] **Built-in `agent` subcommand** - Shorthand for AI agent operations
+  - `tfgrid-compose agent list`
+  - `tfgrid-compose agent run <project>`
+  - `tfgrid-compose agent create`
+  - `tfgrid-compose agent stop <project>`
+- [ ] Shell completion (bash/zsh/fish)
+
+### Testing & Quality
+- [ ] Automated integration tests
+- [ ] Unit tests for core functions
+- [ ] CI/CD pipeline setup
 - [ ] End-to-end deployment tests
 - [ ] Error scenario testing
 
