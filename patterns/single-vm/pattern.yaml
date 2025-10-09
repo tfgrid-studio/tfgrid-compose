@@ -1,0 +1,51 @@
+name: single-vm
+version: 1.0.0
+description: Single VM deployment with Wireguard and Mycelium networking
+
+# What this pattern provides
+provides:
+  - vm_ip
+  - wireguard_ip
+  - mycelium_ip
+  - ssh_access
+
+# What apps must provide
+requires:
+  app_hooks:
+    - deployment/setup.sh
+    - deployment/configure.sh
+    - deployment/healthcheck.sh
+
+# Resource defaults (can be overridden by app)
+defaults:
+  cpu: 2
+  memory: 4096
+  disk: 50
+
+# Commands this pattern supports
+commands:
+  logs:
+    script: scripts/logs.sh
+    description: "Show application logs"
+    
+  status:
+    script: scripts/status.sh
+    description: "Check application status"
+    
+  connect:
+    script: scripts/connect.sh
+    description: "SSH into VM"
+    
+  address:
+    script: scripts/address.sh
+    description: "Show IP addresses"
+
+# Infrastructure
+infrastructure:
+  provider: threefold
+  template: infrastructure/main.tf
+  
+# Platform
+platform:
+  provisioner: ansible
+  playbook: platform/site.yml

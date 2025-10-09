@@ -1,0 +1,86 @@
+---
+# AI-Agent setup tasks
+- name: Add NodeSource repository
+  shell: |
+    curl -fsSL https://deb.nodesource.com/setup_{{ nodejs_version }}.x | bash -
+  args:
+    creates: /etc/apt/sources.list.d/nodesource.list
+
+- name: Install Node.js
+  apt:
+    name: nodejs
+    state: present
+    update_cache: yes
+
+- name: Install Qwen CLI
+  npm:
+    name: "@qwen-code/qwen-code"
+    global: yes
+    state: latest
+
+- name: Clone ai-agent repository
+  git:
+    repo: "{{ ai_agent_repo }}"
+    dest: "{{ ai_agent_path }}"
+    version: main
+    force: yes
+
+- name: Make ai-agent scripts executable
+  file:
+    path: "{{ ai_agent_path }}/scripts"
+    mode: '0755'
+    recurse: yes
+
+- name: Generate SSH key for git operations
+  openssh_keypair:
+    path: /root/.ssh/id_ed25519_git
+    type: ed25519
+    comment: "ai-agent@tfgrid"
+  register: git_ssh_key
+
+- name: Add SSH key to ssh-agent config
+  blockinfile:
+    path: /root/.ssh/config
+    create: yes
+    mode: '0600'
+    block: |
+      Host github.com
+        IdentityFile /root/.ssh/id_ed25519_git
+        StrictHostKeyChecking no
+      
+      Host gitlab.com
+        IdentityFile /root/.ssh/id_ed25519_git
+        StrictHostKeyChecking no
+
+- name: Configure Qwen API key if provided
+  lineinfile:
+    path: /root/.bashrc
+    line: 'export QWEN_API_KEY="{{ qwen_api_key }}"'
+    create: yes
+  when: qwen_api_key != ''
+  no_log: yes
+
+- name: Configure GitHub token for git operations (if provided)
+  block:
+    - name: Setup git credential helper with token
+      shell: |
+        git config --global credential.helper store
+        echo "https://{{ github_token }}@github.com" > /root/.git-credentials
+        chmod 600 /root/.git-credentials
+      no_log: yes
+      
+    - name: Verify git credentials configured
+      shell: git config --global credential.helper
+      register: git_cred_check
+      changed_when: false
+      
+  when: github_token is defined and github_token != ''
+
+- name: Display git SSH public key
+  debug:
+    msg: |
+      ========================================
+      Git SSH Public Key (add to GitHub/Gitea):
+      {{ git_ssh_key.public_key }}
+      ========================================
+  when: git_ssh_key.public_key is defined

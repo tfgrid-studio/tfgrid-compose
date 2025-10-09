@@ -1,0 +1,89 @@
+---
+- name: Install nginx for VM demo
+  apt:
+    name: nginx
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Create VM demo directory
+  file:
+    path: /var/www/vm-demo
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  become: true
+
+- name: Generate VM-specific status page
+  template:
+    src: vm-status.html.j2
+    dest: /var/www/vm-demo/index.html
+    owner: www-data
+    group: www-data
+    mode: '0644'
+  become: true
+
+- name: Configure nginx for VM demo
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/sites-available/vm-demo
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify: reload nginx
+
+- name: Enable VM demo site
+  file:
+    src: /etc/nginx/sites-available/vm-demo
+    dest: /etc/nginx/sites-enabled/vm-demo
+    state: link
+  become: true
+  notify: reload nginx
+
+- name: Disable default nginx site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  become: true
+  notify: reload nginx
+
+- name: Start and enable nginx
+  systemd:
+    name: nginx
+    state: started
+    enabled: yes
+  become: true
+
+- name: Display VM information
+  debug:
+    msg: |
+      VM Demo Deployed Successfully!
+      ==============================
+
+      VM ID: {{ vm_id | default(inventory_hostname) }}
+      WireGuard IP: {{ wireguard_ip | default('N/A') }}
+      Mycelium IP: {{ mycelium_ip | default('N/A') }}
+      VM Port: {{ vm_port | default('8080') }}
+      Hostname: {{ ansible_hostname }}
+      Gateway Type: {{ gateway_type | default('gateway_nat') }}
+      Network Mode: {{ network_mode | default('wireguard-only') }}
+
+      {% if network_mode == 'wireguard-only' %}
+      VM Status Page: http://{{ wireguard_ip | default('localhost') }}:{{ vm_port | default('8080') }}
+      {% elif network_mode == 'mycelium-only' %}
+      VM Status Page: http://[{{ mycelium_ip | default('localhost') }}]:{{ vm_port | default('8080') }}
+      {% else %}
+      VM Status Pages:
+        - WireGuard: http://{{ wireguard_ip | default('localhost') }}:{{ vm_port | default('8080') }}
+        - Mycelium: http://[{{ mycelium_ip | default('localhost') }}]:{{ vm_port | default('8080') }}
+      {% endif %}
+
+      Features:
+      - Individual VM identification
+      - Dynamic network information
+      - Gateway connectivity details
+      - Port-specific configuration
+      - Multi-network support
+      - Real-time system metrics

@@ -1,0 +1,12 @@
+---
+- name: restart haproxy
+  systemd:
+    name: haproxy
+    state: restarted
+  become: true
+
+- name: reload nginx
+  systemd:
+    name: nginx
+    state: reloaded
+  become: true

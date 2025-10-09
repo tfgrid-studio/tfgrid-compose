@@ -1,0 +1,16 @@
+---
+# Global configuration
+ansible_python_interpreter: /usr/bin/python3
+
+# Network configuration
+network_cidr: "10.1.0.0/16"
+wireguard_port: 51820
+network_mode: "{{ lookup('env', 'NETWORK_MODE') | default('wireguard-only', true) }}"
+disable_port_forwarding: "{{ lookup('env', 'DISABLE_PORT_FORWARDING') | default('false', true) | lower }}"
+gateway_type: "{{ lookup('env', 'GATEWAY_TYPE') | default('gateway_nat', true) }}"
+
+# ThreeFold Grid network
+tfgrid_network: "{{ lookup('file', '../infrastructure/credentials.auto.tfvars') | regex_search('tfgrid_network = \"([^\"]+)\"', '\\1') | first | default('main') }}"
+
+# Mycelium configuration
+mycelium_enabled: true

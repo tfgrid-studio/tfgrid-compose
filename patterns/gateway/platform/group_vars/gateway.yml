@@ -1,0 +1,19 @@
+---
+# Gateway configuration
+gateway_type: "{{ lookup('env', 'GATEWAY_TYPE') | default('gateway_nat', true) }}"
+
+# Network configuration
+network_mode: "both"
+
+# Port forwarding (for NAT gateway)
+port_forwards: []
+
+# Proxy configuration (for proxy gateway)
+proxy_ports: [8080, 8443]
+udp_ports: []
+enable_ssl: false
+domain_name: ""
+ssl_email: ""
+
+# Testing
+enable_testing: false

@@ -1,0 +1,93 @@
+name: gateway
+version: 1.0.0
+description: Gateway VM with public IPv4 + backend VMs with private networking
+
+# Architecture: Gateway + Backend pattern
+# - Gateway VM: Public IPv4, acts as reverse proxy
+# - Backend VMs: Private networking via Wireguard/Mycelium
+# - Use cases: Web apps, e-commerce, production hosting
+
+# Provides
+provides:
+  gateway_ip: Gateway public IPv4 address
+  gateway_wireguard_ip: Gateway Wireguard IP
+  gateway_mycelium_ip: Gateway Mycelium IP
+  backend_ips: Backend VM IP addresses
+  backend_wireguard_ips: Backend Wireguard IPs
+  backend_mycelium_ips: Backend Mycelium IPs
+
+# Requires from app
+requires:
+  deployment_hooks:
+    - setup.sh
+    - configure.sh
+    - healthcheck.sh
+  
+  # Gateway configuration
+  gateway_config:
+    domain: optional
+    ssl: optional
+    proxy_config: optional
+
+# Resource defaults
+defaults:
+  gateway:
+    cpu: 2
+    memory: 4096
+    disk: 50
+  
+  backend:
+    cpu: 4
+    memory: 8192
+    disk: 100
+    count: 1
+
+# Supported commands
+commands:
+  - logs
+  - status
+  - connect
+  - address
+  - reload  # Reload Nginx config
+  - ssl     # Manage SSL certificates
+
+# Deployment stages
+stages:
+  1_infrastructure:
+    description: Create gateway and backend VMs
+    tool: terraform
+    
+  2_platform:
+    description: Configure networking and Nginx
+    tool: ansible
+    
+  3_app_deployment:
+    description: Deploy app to backend VMs
+    hooks:
+      - setup.sh
+      - configure.sh
+      - healthcheck.sh
+
+# Network topology
+network:
+  gateway:
+    public: true
+    ipv4: required
+    wireguard: true
+    mycelium: true
+    
+  backend:
+    public: false
+    wireguard: true
+    mycelium: true
+    connect_via: gateway
+
+# Features
+features:
+  - Public IPv4 on gateway
+  - Reverse proxy (Nginx)
+  - SSL/TLS termination
+  - Load balancing
+  - Private backend network
+  - Health checking
+  - Auto-reload

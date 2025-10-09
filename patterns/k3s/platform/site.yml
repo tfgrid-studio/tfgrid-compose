@@ -1,0 +1,37 @@
+---
+- name: Configure Management Node
+  hosts: k3s_management
+  become: yes
+  roles:
+    - role: management
+      tags: [management]
+
+- name: Configure Common
+  hosts: all:!k3s_management
+  become: yes
+  roles:
+    - role: common
+      tags: [common]
+
+- name: Configure K3s Control Plane
+  hosts: k3s_control
+  become: yes
+  roles:
+    - role: control
+      tags: [control]
+
+- name: Join K3s Worker Nodes
+  hosts: k3s_worker
+  become: yes
+  roles:
+    - role: worker
+      tags: [worker]
+
+- name: Setup local kubeconfig for K3s cluster
+  hosts: k3s_management
+  become: no
+  roles:
+    - role: kubeconfig
+      tags: [kubeconfig]
+  vars:
+    primary_control_node: "{{ hostvars['node1']['inventory_hostname'] }}"

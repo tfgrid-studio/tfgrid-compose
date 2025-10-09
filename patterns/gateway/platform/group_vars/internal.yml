@@ -1,0 +1,9 @@
+---
+# Internal VM configuration
+services:
+  - name: web
+    port: 80
+    type: http
+  - name: api
+    port: 8080
+    type: tcp

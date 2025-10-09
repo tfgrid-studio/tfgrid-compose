@@ -1,0 +1,173 @@
+---
+- name: Detect external interface
+  shell: ip route get 8.8.8.8 | awk '{print $5; exit}'
+  register: external_interface_result
+  become: true
+  ignore_errors: yes
+
+- name: Set external interface fact
+  set_fact:
+    external_interface: "{{ external_interface_result.stdout | default('eth0') }}"
+  when: external_interface_result is defined
+
+- name: Configure NAT-based gateway with nftables
+  block:
+    - name: Create NAT table and chains
+      shell: |
+        nft add table inet gateway_nat
+        nft add chain inet gateway_nat prerouting { type nat hook prerouting priority -100 \; policy accept \; }
+        nft add chain inet gateway_nat postrouting { type nat hook postrouting priority 100 \; policy accept \; }
+      become: true
+      ignore_errors: yes
+
+    - name: Enable masquerading for internal network
+      shell: nft add rule inet gateway_nat postrouting ip saddr 10.1.0.0/16 oifname {{ external_interface }} masquerade
+      become: true
+      ignore_errors: yes
+
+    - name: Add dynamic port forwarding rules
+      shell: |
+        {% if disable_port_forwarding != 'true' %}
+        {% if network_mode in ['wireguard-only', 'both'] %}
+        {% for host in groups['internal'] %}
+        {% set vm_id = hostvars[host]['vm_id'] | default(host) %}
+        {% set wireguard_ip = hostvars[host]['wireguard_ip'] %}
+        {% set port = hostvars[host]['vm_port'] | default(8080 + (vm_id | int)) %}
+        nft add rule inet gateway_nat prerouting iifname {{ external_interface }} tcp dport {{ port }} dnat ip to {{ wireguard_ip }}:{{ port }}
+        {% endfor %}
+        {% endif %}
+
+        {% if network_mode in ['mycelium-only', 'both'] %}
+        {% for host in groups['internal'] %}
+        {% set vm_id = hostvars[host]['vm_id'] | default(host) %}
+        {% set mycelium_var = 'internal_' + vm_id + '_mycelium_ip' %}
+        {% set mycelium_ip = hostvars['localhost'][mycelium_var] | default('') %}
+        {% set port = hostvars[host]['vm_port'] | default(8080 + (vm_id | int)) %}
+        {% if mycelium_ip %}
+        nft add rule inet gateway_nat prerouting iifname {{ external_interface }} tcp dport {{ port }} dnat ip to {{ mycelium_ip }}:{{ port }}
+        {% endif %}
+        {% endfor %}
+        {% endif %}
+        {% endif %}
+      become: true
+      ignore_errors: yes
+
+  become: true
+
+- name: Configure firewall rules
+  block:
+    - name: Flush existing firewall rules to prevent lockout
+      shell: |
+        nft flush table inet firewall 2>/dev/null || true
+        nft delete table inet firewall 2>/dev/null || true
+      become: true
+      ignore_errors: yes
+
+    - name: Create firewall table and chains
+      shell: |
+        nft add table inet firewall
+        nft add chain inet firewall input { type filter hook input priority 0 \; policy accept \; }
+        nft add chain inet firewall forward { type filter hook forward priority 0 \; policy accept \; }
+        nft add chain inet firewall output { type filter hook output priority 0 \; policy accept \; }
+      become: true
+      ignore_errors: yes
+
+    - name: Allow established connections
+      shell: nft add rule inet firewall input ct state established,related accept
+      become: true
+      ignore_errors: yes
+
+    - name: Allow loopback
+      shell: nft add rule inet firewall input iifname lo accept
+      become: true
+      ignore_errors: yes
+
+    - name: Allow SSH (critical - must be first)
+      shell: nft add rule inet firewall input tcp dport 22 accept
+      become: true
+      ignore_errors: yes
+
+    - name: Allow HTTP/HTTPS and VM demo ports
+      shell: nft add rule inet firewall input tcp dport { 80, 443, 8081, 8082 } accept
+      become: true
+      ignore_errors: yes
+
+    - name: Allow WireGuard
+      shell: nft add rule inet firewall input udp dport 51820 accept
+      become: true
+      ignore_errors: yes
+
+    - name: Detect internal interface
+      shell: ip route | grep "10.1.0.0/16" | awk '{print $3}'
+      register: internal_interface_result
+      become: true
+      ignore_errors: yes
+
+    - name: Set internal interface fact
+      set_fact:
+        internal_interface: "{{ internal_interface_result.stdout | default('ens2') }}"
+      when: internal_interface_result is defined
+
+    - name: Allow forwarding from internal to external
+      shell: nft add rule inet firewall forward iifname {{ internal_interface }} oifname {{ external_interface }} accept
+      become: true
+      ignore_errors: yes
+
+    - name: Allow DNAT forwarding for VM demo ports
+      shell: |
+        {% if disable_port_forwarding != 'true' %}
+        {% for host in groups['internal'] %}
+        {% set port = hostvars[host]['vm_port'] | default(8080 + (host | int)) %}
+        nft add rule inet firewall forward iifname {{ external_interface }} oifname {{ internal_interface }} tcp dport {{ port }} accept
+        {% endfor %}
+        {% endif %}
+      become: true
+      ignore_errors: yes
+
+    - name: Allow return traffic
+      shell: nft add rule inet firewall forward iifname {{ external_interface }} oifname {{ internal_interface }} ct state established,related accept
+      become: true
+      ignore_errors: yes
+
+    # Note: Keeping accept policy for now to prevent SSH lockouts
+    # The explicit allow rules above provide adequate security
+    # TODO: Implement drop policy with proper testing in the future
+
+  become: true
+
+- name: Make nftables rules persistent
+  shell: nft list ruleset > /etc/nftables.conf
+  become: true
+
+- name: Enable nftables service
+  systemd:
+    name: nftables
+    enabled: yes
+    state: started
+  become: true
+
+- name: Configure NAT logging
+  copy:
+    dest: /etc/rsyslog.d/10-gateway.conf
+    content: |
+      :msg, contains, "Dropped" /var/log/gateway/dropped.log
+      & stop
+    mode: '0644'
+  become: true
+  notify: restart rsyslog
+
+- name: Create log rotation for gateway logs
+  copy:
+    dest: /etc/logrotate.d/gateway
+    content: |
+      /var/log/gateway/*.log {
+          daily
+          missingok
+          rotate 7
+          compress
+          delaycompress
+          notifempty
+          create 644 root root
+      }
+    mode: '0644'
+  become: true

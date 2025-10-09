@@ -1,0 +1,484 @@
+#!/usr/bin/env bash
+# TFGrid Compose - Main CLI entry point
+
+set -e
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEPLOYER_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Source core modules
+source "$DEPLOYER_ROOT/core/common.sh"
+source "$DEPLOYER_ROOT/core/validation.sh"
+source "$DEPLOYER_ROOT/core/pattern-loader.sh"
+source "$DEPLOYER_ROOT/core/app-loader.sh"
+source "$DEPLOYER_ROOT/core/orchestrator.sh"
+
+# Version
+VERSION="0.1.0-mvp"
+
+# Command dispatcher
+COMMAND="${1:-help}"
+shift || true
+
+# Handle commands
+case "$COMMAND" in
+    --version|version|-v)
+        echo "TFGrid Compose v$VERSION"
+        exit 0
+        ;;
+        
+    up)
+        # Deploy command
+        log_info "TFGrid Compose v$VERSION"
+        echo ""
+        
+        # Validate prerequisites
+        if ! validate_prerequisites; then
+            exit 1
+        fi
+        echo ""
+        
+        # Validate app path
+        if ! validate_app_path "$1"; then
+            exit 1
+        fi
+        
+        # Check for existing deployment
+        if ! validate_no_deployment; then
+            exit 1
+        fi
+        
+        APP_PATH="$1"
+        PATTERN_NAME="${2:-}"
+        
+        # Extract pattern from --pattern= flag
+        if [[ "$PATTERN_NAME" == --pattern=* ]]; then
+            PATTERN_NAME="${PATTERN_NAME#--pattern=}"
+        fi
+        
+        # Load app
+        if ! load_app "$APP_PATH"; then
+            exit 1
+        fi
+        
+        # Determine pattern to use
+        if [ -z "$PATTERN_NAME" ]; then
+            PATTERN_NAME=$(get_recommended_pattern)
+            if [ -z "$PATTERN_NAME" ]; then
+                log_error "No pattern specified and no recommended pattern in manifest"
+                log_info "Usage: tfgrid-compose up <app> --pattern=<pattern>"
+                exit 1
+            fi
+            log_info "Using recommended pattern: $PATTERN_NAME"
+        fi
+        
+        # Load pattern
+        if ! load_pattern "$PATTERN_NAME"; then
+            exit 1
+        fi
+        
+        # Check compatibility
+        if ! check_pattern_compatibility "$PATTERN_NAME"; then
+            exit 1
+        fi
+        
+        # Validate app structure
+        if ! validate_app_structure; then
+            exit 1
+        fi
+        
+        # Validate pattern requirements
+        if ! validate_pattern_requirements; then
+            exit 1
+        fi
+        
+        echo ""
+        log_success "All validations passed! Starting deployment..."
+        echo ""
+        
+        # Deploy the app
+        if ! deploy_app; then
+            log_error "Deployment failed"
+            exit 1
+        fi
+        
+        exit 0
+        ;;
+        
+    down)
+        # Destroy command
+        log_info "TFGrid Compose v$VERSION"
+        echo ""
+        
+        # Validate app path
+        if ! validate_app_path "$1"; then
+            exit 1
+        fi
+        
+        # Check deployment exists
+        if ! validate_deployment_exists; then
+            exit 1
+        fi
+        
+        # Destroy the deployment
+        if ! destroy_deployment; then
+            log_error "Destroy failed"
+            exit 1
+        fi
+        
+        exit 0
+        ;;
+        
+    clean)
+        # Clean up state directory
+        log_info "TFGrid Compose v$VERSION"
+        echo ""
+        
+        if [ -d "$STATE_DIR" ]; then
+            log_warning "This will remove the local state directory: $STATE_DIR"
+            read -p "Are you sure? (y/N): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                rm -rf "$STATE_DIR"
+                log_success "State directory cleaned"
+            else
+                log_info "Cancelled"
+            fi
+        else
+            log_info "No state directory found (already clean)"
+        fi
+        exit 0
+        ;;
+        
+    logs)
+        # Logs command
+        # Validate app path
+        if ! validate_app_path "$1"; then
+            exit 1
+        fi
+        
+        # Check deployment exists
+        if ! validate_deployment_exists; then
+            exit 1
+        fi
+        
+        APP_PATH="$1"
+        
+        # Load app to get pattern
+        if ! load_app "$APP_PATH"; then
+            exit 1
+        fi
+        
+        # Get pattern from state (for now, use recommended)
+        PATTERN_NAME=$(get_recommended_pattern)
+        
+        if [ -z "$PATTERN_NAME" ]; then
+            log_error "Cannot determine pattern for app"
+            exit 1
+        fi
+        
+        # Load pattern
+        if ! load_pattern "$PATTERN_NAME"; then
+            exit 1
+        fi
+        
+        # Execute pattern logs script
+        execute_pattern_script "logs"
+        ;;
+        
+    status)
+        # Status command
+        # Validate app path
+        if ! validate_app_path "$1"; then
+            exit 1
+        fi
+        
+        # Check deployment exists
+        if ! validate_deployment_exists; then
+            exit 1
+        fi
+        
+        APP_PATH="$1"
+        
+        # Load app
+        if ! load_app "$APP_PATH"; then
+            exit 1
+        fi
+        
+        # Get pattern
+        PATTERN_NAME=$(get_recommended_pattern)
+        
+        if [ -z "$PATTERN_NAME" ]; then
+            log_error "Cannot determine pattern for app"
+            exit 1
+        fi
+        
+        # Load pattern
+        if ! load_pattern "$PATTERN_NAME"; then
+            exit 1
+        fi
+        
+        # Execute pattern status script
+        execute_pattern_script "status"
+        ;;
+        
+    ssh|connect)
+        # SSH command
+        if [ -z "$1" ]; then
+            log_error "Usage: tfgrid-compose ssh <app>"
+            exit 1
+        fi
+        
+        APP_PATH="$1"
+        
+        # Load app
+        if ! load_app "$APP_PATH"; then
+            exit 1
+        fi
+        
+        # Get pattern
+        PATTERN_NAME=$(get_recommended_pattern)
+        
+        if [ -z "$PATTERN_NAME" ]; then
+            log_error "Cannot determine pattern for app"
+            exit 1
+        fi
+        
+        # Load pattern
+        if ! load_pattern "$PATTERN_NAME"; then
+            exit 1
+        fi
+        
+        # Execute pattern connect script
+        execute_pattern_script "connect"
+        ;;
+        
+    address)
+        # Address command
+        if [ -z "$1" ]; then
+            log_error "Usage: tfgrid-compose address <app>"
+            exit 1
+        fi
+        
+        APP_PATH="$1"
+        
+        # Load app
+        if ! load_app "$APP_PATH"; then
+            exit 1
+        fi
+        
+        # Get pattern
+        PATTERN_NAME=$(get_recommended_pattern)
+        
+        if [ -z "$PATTERN_NAME" ]; then
+            log_error "Cannot determine pattern for app"
+            exit 1
+        fi
+        
+        # Load pattern
+        if ! load_pattern "$PATTERN_NAME"; then
+            exit 1
+        fi
+        
+        # Execute pattern address script
+        execute_pattern_script "address"
+        ;;
+        
+    init)
+        # Initialize app configuration
+        if [ -z "$1" ]; then
+            log_error "Usage: tfgrid-compose init <app>"
+            exit 1
+        fi
+        
+        APP_PATH="$1"
+        
+        log_info "TFGrid Compose v$VERSION - Initialize Configuration"
+        echo ""
+        
+        # Load app
+        if ! load_app "$APP_PATH"; then
+            exit 1
+        fi
+        
+        # Check if .env already exists
+        if [ -f "$APP_DIR/.env" ]; then
+            read -p "⚠️  .env already exists. Overwrite? (y/N): " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                log_info "Aborted."
+                exit 0
+            fi
+        fi
+        
+        echo "📡 ThreeFold Grid Configuration"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        read -p "Node ID for VM: " NODE_ID
+        if [ -z "$NODE_ID" ]; then
+            log_error "Node ID is required"
+            exit 1
+        fi
+        
+        read -p "TFGrid Network (main/test/dev) [main]: " NETWORK
+        NETWORK=${NETWORK:-main}
+        
+        echo ""
+        echo "🔧 VM Resources"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        
+        # Get recommended resources from app
+        REC_CPU=$(get_app_resource "cpu" "recommended")
+        REC_MEM=$(get_app_resource "memory" "recommended")
+        REC_DISK=$(get_app_resource "disk" "recommended")
+        
+        read -p "CPU cores [${REC_CPU:-4}]: " CPU
+        CPU=${CPU:-${REC_CPU:-4}}
+        read -p "Memory (MB) [${REC_MEM:-8192}]: " MEM
+        MEM=${MEM:-${REC_MEM:-8192}}
+        read -p "Disk (GB) [${REC_DISK:-100}]: " DISK
+        DISK=${DISK:-${REC_DISK:-100}}
+        
+        echo ""
+        echo "🌐 Network Connectivity"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        read -p "Connectivity (wireguard/mycelium) [wireguard]: " CONN
+        CONN=${CONN:-wireguard}
+        
+        # Git config from local
+        GIT_NAME=$(git config --global user.name 2>/dev/null || echo "")
+        GIT_EMAIL=$(git config --global user.email 2>/dev/null || echo "")
+        
+        echo ""
+        echo "🔐 Git Configuration"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        if [ -n "$GIT_NAME" ]; then
+            echo "✅ Found local git config:"
+            echo "   Name:  $GIT_NAME"
+            echo "   Email: $GIT_EMAIL"
+            read -p "Use this config? (Y/n): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Nn]$ ]]; then
+                read -p "Enter git name: " GIT_NAME
+                read -p "Enter git email: " GIT_EMAIL
+            fi
+        else
+            read -p "Git name: " GIT_NAME
+            read -p "Git email: " GIT_EMAIL
+        fi
+        
+        read -p "GitHub username (optional) [$GIT_NAME]: " GITHUB_USER
+        GITHUB_USER=${GITHUB_USER:-$GIT_NAME}
+        
+        # Create .env
+        cat > "$APP_DIR/.env" <<EOF
+# TFGrid Compose Configuration for $APP_NAME
+# Generated on $(date)
+
+# ThreeFold Grid
+export TF_VAR_tfgrid_network="$NETWORK"
+export TF_VAR_ai_agent_node=$NODE_ID
+export TF_VAR_ai_agent_cpu=$CPU
+export TF_VAR_ai_agent_mem=$MEM
+export TF_VAR_ai_agent_disk=$DISK
+
+# Network
+export CONNECTIVITY_NETWORK="$CONN"
+
+# Git
+export GIT_USER_NAME="$GIT_NAME"
+export GIT_USER_EMAIL="$GIT_EMAIL"
+EOF
+        
+        if [ -n "$GITHUB_USER" ]; then
+            echo "export GITHUB_USER=\"$GITHUB_USER\"" >> "$APP_DIR/.env"
+        fi
+        
+        echo ""
+        log_success "Configuration saved to $APP_DIR/.env"
+        echo ""
+        log_info "Next steps:"
+        echo "  1. Set your secrets (NEVER commit these!):"
+        echo "     Fish: set -x TF_VAR_mnemonic (cat ~/.config/threefold/mnemonic)"
+        echo "     Bash: export TF_VAR_mnemonic=\$(cat ~/.config/threefold/mnemonic)"
+        echo ""
+        echo "  2. Deploy your app:"
+        echo "     tfgrid-compose up $APP_NAME"
+        ;;
+        
+    exec)
+        # Execute command on deployed VM
+        # Validate app path
+        if ! validate_app_path "$1"; then
+            exit 1
+        fi
+        
+        # Check deployment exists
+        if ! validate_deployment_exists; then
+            exit 1
+        fi
+        
+        APP_PATH="$1"
+        shift
+        
+        # Get remaining arguments as the command to execute
+        if [ $# -eq 0 ]; then
+            log_error "No command specified"
+            log_info "Usage: tfgrid-compose exec <app> <command> [args...]"
+            log_info "Examples:"
+            log_info "  tfgrid-compose exec ../tfgrid-ai-agent login"
+            log_info "  tfgrid-compose exec ../tfgrid-ai-agent create my-project"
+            log_info "  tfgrid-compose exec ../tfgrid-ai-agent run my-project"
+            exit 1
+        fi
+        
+        # Load app
+        if ! load_app "$APP_PATH"; then
+            exit 1
+        fi
+        
+        # Get VM IP from state
+        vm_ip=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+        
+        if [ -z "$vm_ip" ]; then
+            log_error "No VM IP found in state"
+            exit 1
+        fi
+        
+        # Get the command and arguments
+        REMOTE_CMD="$@"
+        
+        log_info "Executing on VM ($vm_ip): $REMOTE_CMD"
+        echo ""
+        
+        # Execute command on VM
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "$REMOTE_CMD"
+        
+        exit $?
+        ;;
+        
+    patterns)
+        # List available patterns
+        log_info "TFGrid Compose v$VERSION"
+        echo ""
+        list_patterns
+        ;;
+        
+    version|--version|-v)
+        # Version command
+        echo "TFGrid Compose v$VERSION"
+        ;;
+        
+    help|--help|-h|"")
+        # Help command
+        show_help
+        ;;
+        
+    *)
+        log_error "Unknown command: $COMMAND"
+        echo ""
+        show_help
+        exit 1
+        ;;
+esac

@@ -1,0 +1,119 @@
+---
+- name: Test Gateway Configuration
+  hosts: gateway
+  become: yes
+  gather_facts: yes
+  tasks:
+    - name: Test internet connectivity
+      uri:
+        url: https://httpbin.org/ip
+        return_content: yes
+      register: internet_test
+      ignore_errors: yes
+
+    - name: Report internet connectivity
+      debug:
+        msg: "Internet connectivity: {{ 'OK' if internet_test.status == 200 else 'FAILED' }}"
+
+    - name: Test NAT rules (if NAT gateway)
+      when: gateway_type == 'gateway_nat'
+      block:
+        - name: Check nftables rules
+          command: nft list table inet gateway_nat
+          register: nftables_check
+          ignore_errors: yes
+
+        - name: Report NAT configuration
+          debug:
+            msg: "NAT rules: {{ 'Present' if nftables_check.rc == 0 else 'Missing' }}"
+
+    - name: Test proxy services (if proxy gateway)
+      when: gateway_type == 'gateway_proxy'
+      block:
+        - name: Check HAProxy status
+          systemd:
+            name: haproxy
+            state: started
+          register: haproxy_status
+          ignore_errors: yes
+
+        - name: Check Nginx status
+          systemd:
+            name: nginx
+            state: started
+          register: nginx_status
+          ignore_errors: yes
+
+        - name: Report proxy status
+          debug:
+            msg: "HAProxy: {{ 'Running' if haproxy_status.changed == false else 'Started' }}, Nginx: {{ 'Running' if nginx_status.changed == false else 'Started' }}"
+
+    - name: Test WireGuard connectivity
+      command: wg show gateway
+      register: wg_check
+      ignore_errors: yes
+
+    - name: Report WireGuard status
+      debug:
+        msg: "WireGuard: {{ 'Active' if wg_check.rc == 0 else 'Inactive' }}"
+
+    - name: Test Mycelium connectivity
+      command: mycelium inspect --json
+      register: mycelium_check
+      ignore_errors: yes
+
+    - name: Report Mycelium status
+      debug:
+        msg: "Mycelium: {{ 'Active' if mycelium_check.rc == 0 else 'Inactive' }}"
+
+- name: Test Internal VM Connectivity
+  hosts: internal
+  become: yes
+  tasks:
+    - name: Test connectivity to gateway
+      command: ping -c 3 {{ hostvars[groups['gateway'][0]]['wireguard_ip'] }}
+      register: ping_test
+      ignore_errors: yes
+
+    - name: Report gateway connectivity
+      debug:
+        msg: "Gateway connectivity: {{ 'OK' if ping_test.rc == 0 else 'FAILED' }}"
+
+    - name: Test Mycelium on internal VMs
+      command: mycelium inspect --json
+      register: mycelium_internal
+      ignore_errors: yes
+
+    - name: Report internal Mycelium status
+      debug:
+        msg: "Internal Mycelium: {{ 'Active' if mycelium_internal.rc == 0 else 'Inactive' }}"
+
+- name: Cross-Connectivity Tests
+  hosts: gateway
+  become: yes
+  tasks:
+    - name: Test connectivity to all internal VMs
+      command: ping -c 2 {{ item }}
+      register: internal_ping
+      ignore_errors: yes
+      with_items: "{{ groups['internal'] | map('extract', hostvars, 'wireguard_ip') | list }}"
+
+    - name: Report internal VM connectivity
+      debug:
+        msg: "Internal VM connectivity: {{ internal_ping.results | selectattr('rc', 'equalto', 0) | list | length }}/{{ internal_ping.results | length }} reachable"
+
+    - name: Test port forwarding (if configured)
+      when: port_forwards is defined and port_forwards | length > 0
+      block:
+        - name: Test forwarded ports
+          wait_for:
+            host: localhost
+            port: "{{ item.port }}"
+            timeout: 5
+          with_items: "{{ port_forwards }}"
+          register: port_test
+          ignore_errors: yes
+
+        - name: Report port forwarding status
+          debug:
+            msg: "Port forwarding: {{ port_test.results | selectattr('elapsed', 'less_than', 5) | list | length }}/{{ port_forwards | length }} working"

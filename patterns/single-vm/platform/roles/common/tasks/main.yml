@@ -1,0 +1,47 @@
+---
+# Common setup for AI agent VM
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install base packages
+  apt:
+    name:
+      - git
+      - curl
+      - wget
+      - vim
+      - htop
+      - build-essential
+      - python3
+      - python3-pip
+      - jq
+      - tmux
+      - screen
+      - expect
+    state: present
+
+- name: Configure git user
+  git_config:
+    name: user.name
+    value: "{{ git_user_name }}"
+    scope: global
+
+- name: Configure git email
+  git_config:
+    name: user.email
+    value: "{{ git_user_email }}"
+    scope: global
+
+- name: Configure git default branch
+  git_config:
+    name: init.defaultBranch
+    value: main
+    scope: global
+
+- name: Create workspace directory
+  file:
+    path: "{{ ai_agent_workspace }}"
+    state: directory
+    mode: '0755'

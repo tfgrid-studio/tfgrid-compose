@@ -1,0 +1,82 @@
+---
+- name: Gather facts
+  setup:
+  become: true
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: true
+
+- name: Install required packages for gateway
+  apt:
+    name:
+      - curl
+      - wget
+      - jq
+      - net-tools
+      - iptables
+      - nftables
+      - wireguard
+      - conntrack
+      - python3
+      - python3-pip
+      - software-properties-common
+      - ca-certificates
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Enable IP forwarding
+  sysctl:
+    name: "{{ item }}"
+    value: "1"
+    state: present
+    reload: yes
+  with_items:
+    - net.ipv4.ip_forward
+    - net.ipv6.conf.all.forwarding
+  become: true
+
+- name: Make IP forwarding persistent
+  lineinfile:
+    path: /etc/sysctl.conf
+    line: "{{ item }}"
+    state: present
+  with_items:
+    - "net.ipv4.ip_forward=1"
+    - "net.ipv6.conf.all.forwarding=1"
+  become: true
+
+- name: Create required directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+    - /etc/gateway
+    - /var/log/gateway
+  become: true
+
+- name: Set hostname based on inventory name (skip if invalid)
+  hostname:
+    name: "{{ inventory_hostname | replace('_', '-') }}"
+  become: true
+  ignore_errors: true
+  register: hostname_result
+
+- name: Show hostname setting result
+  debug:
+    msg: "Hostname setting result: {{ hostname_result }}"
+  when: hostname_result is defined
+
+- name: Update /etc/hosts with inventory name
+  lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1\s+.*$'
+    line: "127.0.1.1 {{ inventory_hostname }}"
+    state: present
+  become: true

@@ -1,0 +1,169 @@
+---
+- name: Install HAProxy
+  apt:
+    name: haproxy
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Configure HAProxy for TCP/UDP proxying
+  template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    mode: '0644'
+  become: true
+  notify: restart haproxy
+
+- name: Enable HAProxy service
+  systemd:
+    name: haproxy
+    enabled: yes
+    state: started
+  become: true
+
+- name: Configure firewall for proxy ports
+  shell: nft add rule inet firewall input tcp dport { 80, 443, {{ proxy_ports | join(', ') }} } accept
+  become: true
+  ignore_errors: yes
+
+- name: Install Nginx for HTTP/HTTPS reverse proxy
+  apt:
+    name: nginx
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Configure Nginx reverse proxy
+  template:
+    src: nginx-gateway.conf.j2
+    dest: /etc/nginx/sites-available/gateway
+    mode: '0644'
+  become: true
+  notify: reload nginx
+
+- name: Enable Nginx site
+  file:
+    src: /etc/nginx/sites-available/gateway
+    dest: /etc/nginx/sites-enabled/gateway
+    state: link
+  become: true
+  notify: reload nginx
+
+- name: Remove default Nginx site (only when not using SSL)
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  become: true
+  notify: reload nginx
+  when: not (enable_ssl | default(false) and domain_name is defined)
+
+- name: Enable Nginx service
+  systemd:
+    name: nginx
+    enabled: yes
+    state: started
+  become: true
+
+- name: Configure SSL certificates (if enabled)
+  when: enable_ssl | default(false)
+  block:
+    - name: Install certbot and python3-certbot-nginx
+      apt:
+        name:
+          - certbot
+          - python3-certbot-nginx
+        state: present
+        update_cache: yes
+      become: true
+
+    - name: Check if SSL certificate already exists
+      stat:
+        path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
+      register: ssl_cert
+      become: true
+
+    - name: Set SSL certificate status fact
+      set_fact:
+        ssl_cert_exists: "{{ ssl_cert.stat.exists | default(false) }}"
+      when: domain_name is defined
+
+    - name: Stop nginx for certificate challenge
+      systemd:
+        name: nginx
+        state: stopped
+      become: true
+      when:
+        - domain_name is defined
+        - not ssl_cert.stat.exists
+
+    - name: Generate SSL certificate (production)
+      command: >
+        certbot certonly --standalone -d {{ domain_name }}
+        --non-interactive --agree-tos
+        --email {{ ssl_email if ssl_email else 'admin@' + domain_name }}
+      become: true
+      when:
+        - domain_name is defined
+        - ssl_email is defined or True
+        - not ssl_cert.stat.exists
+        - ssl_staging | default(false) | bool == false
+
+    - name: Generate SSL certificate (staging for testing)
+      command: >
+        certbot certonly --standalone -d {{ domain_name }}
+        --staging --non-interactive --agree-tos
+        --email {{ ssl_email if ssl_email else 'admin@' + domain_name }}
+      become: true
+      when:
+        - domain_name is defined
+        - ssl_email is defined or True
+        - not ssl_cert.stat.exists
+        - ssl_staging | default(false) | bool == true
+
+    - name: Re-check SSL certificate status after generation
+      stat:
+        path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
+      register: ssl_cert
+      become: true
+      when: domain_name is defined
+
+    - name: Update SSL certificate status fact
+      set_fact:
+        ssl_cert_exists: "{{ ssl_cert.stat.exists | default(false) }}"
+      when: domain_name is defined
+
+    - name: Regenerate nginx configuration with SSL enabled
+      template:
+        src: nginx-gateway.conf.j2
+        dest: /etc/nginx/sites-available/gateway
+        mode: '0644'
+      become: true
+      notify: reload nginx
+      when:
+        - domain_name is defined
+        - ssl_cert.stat.exists
+
+    - name: Reload nginx to enable SSL configuration
+      systemd:
+        name: nginx
+        state: reloaded
+      become: true
+      when:
+        - domain_name is defined
+        - ssl_cert.stat.exists
+
+
+    - name: Set up automatic certificate renewal
+      cron:
+        name: "Let's Encrypt certificate renewal"
+        minute: "0"
+        hour: "12"
+        job: "certbot renew --quiet"
+        state: present
+      become: true
+
+    - name: Test nginx configuration after SSL setup
+      command: nginx -t
+      become: true
+
+  become: true

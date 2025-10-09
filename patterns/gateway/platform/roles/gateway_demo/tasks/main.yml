@@ -1,0 +1,96 @@
+---
+- name: Install nginx for demo
+  apt:
+    name: nginx
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Create gateway status page directory
+  file:
+    path: /var/www/gateway-demo
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  become: true
+
+- name: Gather internal VM data for template
+  set_fact:
+    internal_vms: "{{ groups['internal'] | default([]) }}"
+  become: true
+
+- name: Generate gateway status page
+  template:
+    src: status.html.j2
+    dest: /var/www/gateway-demo/index.html
+    owner: www-data
+    group: www-data
+    mode: '0644'
+  become: true
+
+- name: Debug variables before template
+  debug:
+    msg: |
+      Debug variables:
+      gateway_type: {{ gateway_type | default('gateway_nat') }}
+      network: {{ tfgrid_network | default('test') }}
+      GATEWAY_TYPE env: {{ lookup('env', 'GATEWAY_TYPE') | default('NOT_SET') }}
+      NETWORK env: {{ lookup('env', 'NETWORK') | default('NOT_SET') }}
+      internal_vms: {{ internal_vms | default('NOT_SET') }}
+      mycelium_ip: {{ mycelium_ip | default('NOT_SET') }}
+      wireguard_ip: {{ wireguard_ip | default('NOT_SET') }}
+  become: true
+
+- name: Configure nginx for gateway demo
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/sites-available/gateway-demo
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+  notify: reload nginx
+
+- name: Enable gateway demo site
+  file:
+    src: /etc/nginx/sites-available/gateway-demo
+    dest: /etc/nginx/sites-enabled/gateway-demo
+    state: link
+  become: true
+  notify: reload nginx
+
+- name: Disable default nginx site (only when not using SSL)
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  become: true
+  notify: reload nginx
+  when: not (enable_ssl | default(false) and domain_name is defined)
+
+- name: Start and enable nginx
+  systemd:
+    name: nginx
+    state: started
+    enabled: yes
+  become: true
+
+- name: Display gateway information
+  debug:
+    msg: |
+      Gateway Demo Deployed Successfully!
+      ===================================
+
+      Gateway Type: {{ gateway_type | default('gateway_nat') }}
+      Network: {{ tfgrid_network | default('test') }}
+      Public IPv4: {{ ansible_default_ipv4.address }}
+      Hostname: {{ ansible_hostname }}
+
+      Demo Status Page: http://{{ ansible_default_ipv4.address }}
+
+      Gateway Features:
+      - NAT/Masquerading: Enabled
+      - Firewall: Configured
+      - IP Forwarding: Enabled
+      - WireGuard: {{ 'Available' if wg_config is defined else 'Not configured' }}
+      - Mycelium: {{ 'Available' if mycelium_ip is defined else 'Not configured' }}

@@ -1,0 +1,24 @@
+# State directory (local deployment state, includes terraform/)
+.tfgrid-compose/
+
+# Ansible
+*.retry
+inventory.ini
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log

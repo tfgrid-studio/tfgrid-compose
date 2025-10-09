@@ -1,0 +1,96 @@
+name: k3s
+version: 1.0.0
+description: Kubernetes cluster (K3s) with master and worker nodes
+
+# Architecture: K3s cluster
+# - Master node: Public IPv4, K3s control plane
+# - Worker nodes: Private networking, K3s agents
+# - Use cases: Cloud-native apps, microservices, production SaaS
+
+# Provides
+provides:
+  master_ip: Master node public IPv4
+  master_wireguard_ip: Master Wireguard IP
+  master_mycelium_ip: Master Mycelium IP
+  worker_ips: Worker node IP addresses
+  worker_wireguard_ips: Worker Wireguard IPs
+  worker_mycelium_ips: Worker Mycelium IPs
+  kubeconfig: Kubernetes configuration file
+  cluster_endpoint: Kubernetes API endpoint
+
+# Requires from app
+requires:
+  deployment_manifest:
+    - kubernetes/deployment.yaml
+    - kubernetes/service.yaml
+    - kubernetes/ingress.yaml (optional)
+  
+  # Cluster configuration
+  cluster_config:
+    workers: optional (default: 3)
+    ingress: optional (default: traefik)
+    storage: optional (default: local-path)
+
+# Resource defaults
+defaults:
+  master:
+    cpu: 2
+    memory: 4096
+    disk: 50
+  
+  worker:
+    cpu: 4
+    memory: 8192
+    disk: 100
+    count: 3
+
+# Supported commands
+commands:
+  - logs
+  - status
+  - connect
+  - address
+  - kubectl   # Run kubectl commands
+  - scale     # Scale workers
+  - upgrade   # Upgrade cluster
+
+# Deployment stages
+stages:
+  1_infrastructure:
+    description: Create master and worker VMs
+    tool: terraform
+    
+  2_platform:
+    description: Install K3s cluster
+    tool: ansible
+    
+  3_app_deployment:
+    description: Deploy app to Kubernetes
+    tool: kubectl
+    manifests:
+      - kubernetes/*.yaml
+
+# Network topology
+network:
+  master:
+    public: true
+    ipv4: required
+    wireguard: true
+    mycelium: true
+    
+  workers:
+    public: false
+    wireguard: true
+    mycelium: true
+    connect_via: master
+
+# Features
+features:
+  - Lightweight Kubernetes (K3s)
+  - HA master (optional)
+  - Auto-scaling workers
+  - Traefik ingress controller
+  - Local-path storage provisioner
+  - Metrics server
+  - Dashboard
+  - kubectl access

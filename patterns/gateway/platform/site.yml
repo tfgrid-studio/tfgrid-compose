@@ -1,0 +1,42 @@
+---
+- name: Configure Gateway VM
+  hosts: gateway
+  become: yes
+  roles:
+    - role: gateway_common
+      tags: [common]
+    - role: gateway_nat
+      tags: [gateway]
+      when: gateway_type | default('gateway_nat') == 'gateway_nat'
+    - role: gateway_proxy
+      tags: [gateway]
+      when: gateway_type | default('gateway_nat') == 'gateway_proxy'
+    - role: gateway_demo
+      tags: [demo]
+      when: enable_demo | default(false)
+
+- name: Configure Internal VMs
+  hosts: internal
+  become: yes
+  tasks:
+    - name: Include gateway_common role
+      include_role:
+        name: gateway_common
+      tags: [common]
+      when: configure_internal_vms | default(false)
+
+    - name: Include vm_demo role
+      include_role:
+        name: vm_demo
+      tags: [vm-demo]
+      when: (configure_internal_vms | default(false)) and (enable_vm_demo | default(false))
+
+- name: Setup Testing Infrastructure
+  hosts: all
+  become: yes
+  tasks:
+    - name: Include testing role when enabled
+      include_role:
+        name: testing
+      tags: [test]
+      when: enable_testing | default(false)

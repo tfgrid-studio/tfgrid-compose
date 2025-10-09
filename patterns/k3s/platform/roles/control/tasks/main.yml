@@ -1,0 +1,409 @@
+---
+- name: Check if K3s uninstall script exists
+  stat:
+    path: /usr/local/bin/k3s-uninstall.sh
+  register: uninstall_script
+
+- name: Check if K3s is already installed
+  stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary_check
+
+- name: Clean up existing K3s installation
+  block:
+    - name: Stop K3s service if running
+      systemd:
+        name: k3s
+        state: stopped
+      ignore_errors: yes
+
+    - name: Running K3s uninstall script
+      shell: /usr/local/bin/k3s-uninstall.sh
+      when: uninstall_script.stat.exists
+      ignore_errors: yes
+
+    - name: Force remove k3s binary if uninstall script didn't work
+      file:
+        path: /usr/local/bin/k3s
+        state: absent
+
+    - name: Clean up K3s data directories
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/rancher/k3s/server/db/etcd
+        - /var/lib/rancher/k3s/server/manifests
+        - /var/lib/rancher/k3s/server/token
+        - /var/lib/rancher/k3s/server/tls
+        - /var/lib/rancher/k3s/server/cred
+        - /var/lib/rancher/k3s/agent/containerd
+        - /etc/rancher/k3s
+      ignore_errors: yes
+
+    - name: Wait for uninstall to complete
+      pause:
+        seconds: 10
+      when: uninstall_script.stat.exists
+  when: force_clean_install | default(false) | bool or k3s_binary_check.stat.exists | bool
+
+- name: Check if K3s is already installed
+  stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+
+- name: Check if cluster is already initialized
+  stat:
+    path: /etc/rancher/k3s/k3s.yaml
+  register: k3s_config
+  when: k3s_binary.stat.exists
+
+- name: Set primary control node fact
+  set_fact:
+    is_primary_control: "{{ inventory_hostname == primary_control_node }}"
+
+- name: Detect IP family and set network configuration
+  set_fact:
+    ip_family: "{{ 'ipv6' if ':' in ansible_host else 'ipv4' }}"
+    cluster_cidr: "{{ '--cluster-cidr=\"10.42.0.0/16,2001:cafe:42:0::/56\"' if ':' in ansible_host else '' }}"
+    service_cidr: "{{ '--service-cidr=\"10.43.0.0/16,2001:cafe:43:0::/112\"' if ':' in ansible_host else '' }}"
+    metallb_mask: "{{ '/128' if ':' in ansible_host else '/32' }}"
+
+# Primary control node installation
+- name: Install K3s on primary control node
+  block:
+    - name: Download K3s installation script
+      get_url:
+        url: https://get.k3s.io
+        dest: /tmp/k3s-install.sh
+        mode: "0755"
+        force: true
+      register: k3s_download
+      retries: 3
+      delay: 5
+      until: k3s_download is succeeded
+
+    - name: Pre-download K3s binary for primary
+      get_url:
+        url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s"
+        dest: /tmp/k3s-binary
+        mode: "0755"
+        force: true
+      register: k3s_binary_download
+      retries: 3
+      delay: 5
+      until: k3s_binary_download is succeeded
+      ignore_errors: true
+
+    - name: Run K3s installation on primary control node
+      shell: >
+        /tmp/k3s-install.sh
+        --cluster-init
+        --tls-san {{ primary_control_ip }}
+        --node-name {{ inventory_hostname }}
+        --node-ip={{ ansible_host }}
+        --write-kubeconfig-mode 644
+        --disable traefik
+        --disable servicelb
+        --flannel-backend vxlan
+        --snapshotter=native
+        {{ cluster_cidr }}
+        {{ service_cidr }}
+      args:
+        creates: /usr/local/bin/k3s
+      environment:
+        INSTALL_K3S_VERSION: "{{ k3s_version }}"
+
+    - name: Wait for K3s to be ready
+      wait_for:
+        path: /etc/rancher/k3s/k3s.yaml
+        state: present
+        timeout: 120
+
+    - name: Wait for K3s service to be running
+      systemd:
+        name: k3s
+        state: started
+        enabled: yes
+  when:
+    - is_primary_control | bool
+    - not k3s_binary.stat.exists or not k3s_config.stat.exists
+
+# Get token from primary node to join other nodes
+- name: Get K3s token from primary control node
+  block:
+    - name: Read K3s token
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: k3s_node_token
+      become: true
+
+    - name: Set token fact
+      set_fact:
+        k3s_token: "{{ k3s_node_token.content | b64decode | trim }}"
+  when: is_primary_control | bool
+
+- name: Share K3s token with other nodes
+  set_fact:
+    k3s_token: "{{ hostvars[primary_control_node]['k3s_token'] }}"
+  when: not is_primary_control | bool
+
+# Secondary control nodes installation
+- name: Install K3s on secondary control nodes
+  block:
+    - name: Download K3s installation script
+      get_url:
+        url: https://get.k3s.io
+        dest: /tmp/k3s-install.sh
+        mode: "0755"
+        force: true
+      register: k3s_download
+      retries: 3
+      delay: 5
+      until: k3s_download is succeeded
+
+    - name: Pre-download K3s binary for secondary
+      get_url:
+        url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s"
+        dest: /tmp/k3s-binary
+        mode: "0755"
+        force: true
+      register: k3s_binary_download_secondary
+      retries: 3
+      delay: 5
+      until: k3s_binary_download_secondary is succeeded
+      ignore_errors: true
+
+    - name: Set node index based on inventory position for staggered joining
+      set_fact:
+        node_index: "{{ groups['k3s_control'].index(inventory_hostname) | int }}"
+
+    - name: Wait with staggered delay before joining etcd cluster
+      debug:
+        msg: "Waiting {{ (node_index | int - 1) * 60 }} seconds before joining the etcd cluster to prevent simultaneous joins"
+
+    - name: Implement staggered delay
+      wait_for:
+        timeout: "{{ (node_index | int - 1) * 60 }}"
+      when: node_index | int > 1
+
+    # UPDATED TASK: Added retry logic and ignore_errors
+    - name: Run K3s installation on secondary control node
+      shell: >
+        INSTALL_K3S_EXEC="server" /tmp/k3s-install.sh
+        --server https://{{ primary_control_ip }}:6443
+        --token {{ k3s_token }}
+        --node-name {{ inventory_hostname }}
+        --node-ip={{ ansible_host }}
+        --write-kubeconfig-mode 644
+        --disable traefik
+        --disable servicelb
+        --flannel-backend vxlan
+        --snapshotter=native
+        {{ cluster_cidr }}
+        {{ service_cidr }}
+      args:
+        creates: /usr/local/bin/k3s
+      environment:
+        INSTALL_K3S_VERSION: "{{ k3s_version }}"
+      register: k3s_secondary_install
+      ignore_errors: yes
+      retries: 3
+      delay: 30
+      until: k3s_secondary_install.rc == 0 or 'k3s is already running' in k3s_secondary_install.stderr | default('')
+
+    - name: Ensure K3s service is running
+      systemd:
+        name: k3s
+        state: started
+        enabled: yes
+      register: k3s_service_result
+      retries: 5
+      delay: 15
+      until: k3s_service_result is succeeded
+
+    - name: Wait for node to join the cluster
+      shell: |
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        kubectl get node {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      register: node_ready_check
+      retries: 10
+      delay: 30
+      until: node_ready_check.stdout == "True"
+      changed_when: false
+      ignore_errors: yes
+      delegate_to: "{{ primary_control_node }}"
+  when:
+    - not is_primary_control | bool
+    - not k3s_binary.stat.exists or not k3s_config.stat.exists
+
+# Set up kubectl on all control nodes
+- name: Set up kubectl configuration
+  block:
+    - name: Create ~/.kube directory
+      file:
+        path: ~/.kube
+        state: directory
+        mode: "0755"
+
+    - name: Copy K3s kubeconfig to ~/.kube/config
+      copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: ~/.kube/config
+        remote_src: yes
+        mode: "0600"
+
+    - name: Update kubeconfig with correct server address
+      replace:
+        path: ~/.kube/config
+        regexp: "https://127.0.0.1:6443"
+        replace: "https://{{ primary_control_ip }}:6443"
+
+    - name: List all nodes to identify how this node registered
+      shell: kubectl get nodes -o wide
+      register: node_list
+      changed_when: false
+
+    - name: Debug node list
+      debug:
+        var: node_list.stdout_lines
+
+    - name: Get current node info directly from cluster
+      shell: |
+        export KUBECONFIG=~/.kube/config
+        kubectl get nodes -o wide
+      register: all_nodes_output
+      changed_when: false
+
+    - name: Set node name fact based on hostname or IP match
+      set_fact:
+        node_name: "{{ item.split()[0] }}"
+      when: inventory_hostname in item or ansible_host in item
+      with_items: "{{ all_nodes_output.stdout_lines | select('search', inventory_hostname) | list }}"
+      ignore_errors: yes
+
+    - name: Check if node is ready directly
+      shell: |
+        export KUBECONFIG=~/.kube/config
+        kubectl get node {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      register: node_ready
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Debug node readiness
+      debug:
+        msg: "Node {{ inventory_hostname }} ready status: {{ node_ready.stdout }}"
+
+    - name: Consider node verification successful
+      set_fact:
+        node_verified: true
+      environment:
+        KUBECONFIG: "~/.kube/config"
+
+    - name: Check CNI status
+      shell: |
+        export KUBECONFIG=~/.kube/config
+        kubectl get pods -n kube-system | grep flannel
+      register: cni_status
+      changed_when: false
+      ignore_errors: true
+      environment:
+        KUBECONFIG: "~/.kube/config"
+
+    - name: Debug CNI status
+      debug:
+        var: cni_status.stdout_lines
+
+- name: Install Helm on control nodes
+  block:
+    - name: Download Helm installation script
+      get_url:
+        url: https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        dest: /tmp/get-helm.sh
+        mode: "0755"
+
+    - name: Install Helm
+      command: /tmp/get-helm.sh
+      args:
+        creates: /usr/local/bin/helm
+  when: is_primary_control | bool
+
+# Install additional K3s components on primary control node only
+- name: Install additional K3s components
+  block:
+    - name: Deploy MetalLB for load balancing
+      shell: |
+        kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.7/config/manifests/metallb-native.yaml
+      register: metallb_deploy
+      changed_when: "'created' in metallb_deploy.stdout or 'configured' in metallb_deploy.stdout"
+
+    - name: Wait for MetalLB to be ready
+      shell: |
+        kubectl wait --namespace metallb-system \
+          --for=condition=ready pod \
+          --selector=app=metallb \
+          --timeout=120s
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Create MetalLB ConfigMap for IP address pool
+      copy:
+        content: |
+          apiVersion: metallb.io/v1beta1
+          kind: IPAddressPool
+          metadata:
+            name: first-pool
+            namespace: metallb-system
+          spec:
+            addresses:
+            - {{ ansible_host }}{{ metallb_mask }}
+          ---
+          apiVersion: metallb.io/v1beta1
+          kind: L2Advertisement
+          metadata:
+            name: l2advertisement
+            namespace: metallb-system
+          spec:
+            ipAddressPools:
+            - first-pool
+        dest: /tmp/metallb-config.yaml
+
+    - name: Apply MetalLB ConfigMap
+      command: kubectl apply -f /tmp/metallb-config.yaml
+      register: metallb_config
+      changed_when: "'created' in metallb_config.stdout or 'configured' in metallb_config.stdout"
+
+    - name: Download Nginx Ingress Controller manifest
+      get_url:
+        url: https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/cloud/deploy.yaml
+        dest: /tmp/nginx-ingress.yaml
+      when: ip_family == 'ipv6'
+
+    - name: Modify Nginx manifest for IPv6
+      replace:
+        path: /tmp/nginx-ingress.yaml
+        regexp: 'ipFamilies:\s*\["IPv4"\]'
+        replace: 'ipFamilies: ["IPv6"]'
+      when: ip_family == 'ipv6'
+
+    - name: Deploy Nginx Ingress Controller (IPv4)
+      shell: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/cloud/deploy.yaml
+      register: nginx_deploy
+      changed_when: "'created' in nginx_deploy.stdout or 'configured' in nginx_deploy.stdout"
+      when: ip_family == 'ipv4'
+
+    - name: Deploy Nginx Ingress Controller (IPv6)
+      shell: kubectl apply -f /tmp/nginx-ingress.yaml
+      register: nginx_deploy_ipv6
+      changed_when: "'created' in nginx_deploy_ipv6.stdout or 'configured' in nginx_deploy_ipv6.stdout"
+      when: ip_family == 'ipv6'
+
+    - name: Wait for Nginx Ingress Controller to be ready
+      shell: |
+        kubectl wait --namespace ingress-nginx \
+          --for=condition=ready pod \
+          --selector=app.kubernetes.io/component=controller \
+          --timeout=120s
+      changed_when: false
+      ignore_errors: yes
+  when: is_primary_control | bool

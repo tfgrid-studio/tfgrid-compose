@@ -1,0 +1,188 @@
+# platform/roles/management/tasks/main.yml
+---
+- name: Fix TFGrid resolv.conf issue
+  shell: |
+    rm -f /etc/resolv.conf
+    ln -s /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+  become: true
+
+- name: Install required packages for management node
+  ansible.builtin.apt:
+    name:
+      - ansible # Needed to run app deployment playbooks locally on this node
+      - python3
+      - python3-pip
+      - git # Needed for cloning app repos/charts (e.g., tutor-k3s)
+      - curl
+      - wget
+      - jq
+      - vim
+      - nano
+      - wireguard # Ensures tools are present, low cost if already installed
+      # Kubectl and Helm are installed via script below for better version control
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Set hostname based on inventory name
+  block:
+    - name: Generate valid hostname from inventory_hostname
+      ansible.builtin.set_fact:
+        valid_hostname: "{{ inventory_hostname | replace('_', '-') }}"
+
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: "{{ valid_hostname }}"
+      become: true
+
+    - name: Update /etc/hosts with proper hostname
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1\s+.*$'
+        line: "127.0.1.1 {{ valid_hostname }}"
+        state: present
+      become: true
+
+- name: Install kubectl
+  ansible.builtin.shell: |
+    curl -sLO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    chmod +x kubectl
+    sudo mv kubectl /usr/local/bin/
+  args:
+    creates: /usr/local/bin/kubectl # Makes task idempotent
+  become: true
+  changed_when: false # Rely on 'creates' for change status
+
+- name: Install Helm
+  ansible.builtin.shell: |
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  args:
+    creates: /usr/local/bin/helm # Makes task idempotent
+  become: true
+  changed_when: false # Rely on 'creates' for change status
+
+# --- Start k9s Installation Block ---
+- name: Install k9s (best effort)
+  block:
+    - name: Get latest k9s release version tag
+      ansible.builtin.uri:
+        url: https://api.github.com/repos/derailed/k9s/releases/latest
+        return_content: yes
+        body_format: json
+      register: k9s_latest_release
+      failed_when: false # Do not fail playbook if GitHub API is unavailable
+
+    - name: Set k9s version fact using latest or fallback
+      ansible.builtin.set_fact:
+        k9s_version_tag: "{{ (k9s_latest_release.json.tag_name | default('v0.32.5')) if k9s_latest_release.status == 200 else 'v0.32.5' }}" # Provide a recent default
+
+    - name: Download k9s archive
+      ansible.builtin.get_url:
+        url: "https://github.com/derailed/k9s/releases/download/{{ k9s_version_tag }}/k9s_Linux_amd64.tar.gz"
+        dest: "/tmp/k9s.tar.gz"
+        mode: "0644"
+        timeout: 60
+      register: k9s_download
+      retries: 2 # Retry download briefly
+      delay: 5
+      until: k9s_download is succeeded
+
+    - name: Create temporary directory for k9s extraction
+      ansible.builtin.file:
+        path: /tmp/k9s_extract
+        state: directory
+        mode: "0755"
+      when: k9s_download is succeeded
+
+    - name: Extract k9s archive
+      ansible.builtin.unarchive:
+        src: /tmp/k9s.tar.gz
+        dest: /tmp/k9s_extract
+        remote_src: yes
+      when: k9s_download is succeeded # Only extract if download worked
+
+    - name: Move k9s binary to /usr/local/bin
+      ansible.builtin.copy: # <<< USING ansible.builtin.copy
+        src: /tmp/k9s_extract/k9s
+        dest: /usr/local/bin/k9s
+        mode: "0755"
+        remote_src: yes
+      # REMOVED invalid 'args:' section with 'creates:' here
+      register: k9s_copy_result
+      when: k9s_download is succeeded # Only copy if download and extraction worked
+
+    - name: Clean up k9s temporary files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /tmp/k9s.tar.gz
+        - /tmp/k9s_extract
+
+  become: true # Most steps need root
+  ignore_errors: true # Installing k9s is non-critical, allow playbook to continue
+# --- End k9s Installation Block ---
+
+# --- Start k9s Verification Task ---
+- name: Verify k9s installation path
+  ansible.builtin.stat:
+    path: /usr/local/bin/k9s
+  register: k9s_stat_result
+
+- name: Display k9s installation status
+  ansible.builtin.debug:
+    msg: "k9s binary found at /usr/local/bin/k9s: {{ 'Yes' if k9s_stat_result.stat.exists else 'No - Installation may have failed silently (check logs)' }}"
+# --- End k9s Verification Task ---
+
+- name: Configure shell environment for Kubernetes and Ansible usage
+  ansible.builtin.blockinfile:
+    path: "/root/.bashrc"
+    marker: "# {mark} KUBERNETES & ANSIBLE TOOLS CONFIGURATION"
+    block: |
+      # Point kubectl, helm, k9s etc. to the config managed by Ansible
+      export KUBECONFIG=/root/.kube/config
+
+      # Useful aliases
+      alias k=kubectl
+      alias k9s='k9s --logoless'
+      alias h=helm
+      alias ll='ls -alhF'
+
+      # Function to display cluster status on login
+      display_kube_info() {
+        if [ -f "$KUBECONFIG" ] && command -v kubectl >/dev/null 2>&1; then
+          local cluster_name node_info server_info
+          server_info=$(kubectl cluster-info | grep 'control plane' || echo "Kubernetes control plane: unable to connect or kubectl misconfigured")
+          node_info=$(kubectl get nodes -o wide --no-headers=true 2>/dev/null | awk '{print "  Node:", $1, $2, $6}' || echo "  Node info: unavailable")
+          cluster_name=$(kubectl config current-context 2>/dev/null || echo "unknown")
+
+          echo "--------------------------------------------------"
+          echo "Management Node Environment"
+          echo "--------------------------------------------------"
+          echo "Cluster Context: ${cluster_name} (using $KUBECONFIG)"
+          echo "${server_info}"
+          echo "${node_info}"
+          echo "--------------------------------------------------"
+          echo "Available Tools: kubectl (k), helm (h), k9s, ansible, git"
+          if ! command -v k9s >/dev/null 2>&1; then
+              echo "NOTE: 'k9s' alias set, but command not found in PATH. Installation might have failed."
+          fi
+          echo "Ready for cluster interaction and application deployment."
+          echo "(Clone app repos like 'tutor-k3s' and run their playbooks here)."
+          echo "--------------------------------------------------"
+        else
+          echo "--------------------------------------------------"
+          echo "Kubernetes environment not fully configured."
+          echo "  - KUBECONFIG ($KUBECONFIG) may be missing or invalid."
+          echo "  - Check if 'make platform' completed successfully."
+          echo "--------------------------------------------------"
+        fi
+      }
+      # Display info on interactive shells
+      if [[ $- == *i* ]] ; then
+          display_kube_info
+      fi
+      # Clean up function definition from shell environment after definition
+      unset -f display_kube_info
+    create: yes # Create .bashrc if it doesn't exist (unlikely)
+  become: true # Need privileges to write to /root/.bashrc

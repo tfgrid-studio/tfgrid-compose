@@ -1,0 +1,166 @@
+---
+- name: Fix TFGrid resolv.conf issue
+  shell: |
+    rm -f /etc/resolv.conf
+    ln -s /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+  become: true
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: true
+
+- name: Install required packages
+  apt:
+    name:
+      - curl
+      - apt-transport-https
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - python3
+      - python3-pip
+      - software-properties-common
+      - wget
+      - nfs-common
+      - jq
+      - net-tools
+      - iptables
+      - ipvsadm
+      - openssl
+      - conntrack
+      - fuse-overlayfs
+    state: present
+    update_cache: yes
+  become: true
+
+- name: Configure iptables to see bridged traffic
+  block:
+    - name: Create modprobe directory
+      file:
+        path: /etc/modules-load.d
+        state: directory
+        mode: '0755'
+      
+    - name: Configure kernel modules to load at boot
+      copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          overlay
+          br_netfilter
+        mode: '0644'
+      
+    - name: Load kernel modules immediately
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - overlay
+        - br_netfilter
+      
+    - name: Create sysctl directory
+      file:
+        path: /etc/sysctl.d
+        state: directory
+        mode: '0755'
+      
+    - name: Configure sysctl parameters for Kubernetes
+      copy:
+        dest: /etc/sysctl.d/99-kubernetes-cri.conf
+        content: |
+          net.bridge.bridge-nf-call-iptables  = 1
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.ipv4.ip_forward                 = 1
+        mode: '0644'
+      
+    - name: Apply sysctl parameters
+      command: sysctl --system
+
+- name: Disable swap
+  block:
+    - name: Disable swap
+      command: swapoff -a
+      ignore_errors: yes
+      
+    - name: Remove swap from fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\s+swap\s+.*)$'
+        replace: '# \1'
+      ignore_errors: yes
+
+- name: Set hostname based on inventory name
+  hostname:
+    name: "{{ inventory_hostname }}"
+  become: true
+
+- name: Update /etc/hosts with inventory name
+  lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1\s+.*$'
+    line: "127.0.1.1 {{ inventory_hostname }}"
+    state: present
+  become: true
+
+- name: Create required directories for K3s
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  with_items:
+    - /etc/rancher/k3s
+    - /var/lib/rancher/k3s/server
+  become: true
+
+# Configure firewall rules for K3s using iptables
+- name: Open K3s TCP ports
+  iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: "{{ item }}"
+    jump: ACCEPT
+    comment: "K3s: allow port {{ item }}"
+  with_items:
+    - "6443"  # Kubernetes API
+    - "10250" # Kubelet
+    - "2379"  # etcd client port
+    - "2380"  # etcd peer port
+    - "8472"  # Canal/Flannel VXLAN
+    - "51820" # Wireguard
+    - "51821" # Wireguard
+    - "80"    # HTTP
+    - "443"   # HTTPS
+  become: true
+  register: iptables_rules
+  
+- name: Open K3s UDP ports
+  iptables:
+    chain: INPUT
+    protocol: udp
+    destination_port: "{{ item }}"
+    jump: ACCEPT
+    comment: "K3s: allow UDP port {{ item }}"
+  with_items:
+    - "8472"  # Canal/Flannel VXLAN
+    - "51820" # Wireguard
+    - "51821" # Wireguard
+  become: true
+  
+- name: Ensure iptables-persistent is installed to load rules on boot
+  apt:
+    name: iptables-persistent
+    state: present
+  become: true
+
+- name: Create iptables rules directory
+  file:
+    path: /etc/iptables
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Save iptables rules
+  shell: "iptables-save > /etc/iptables/rules.v4"
+  become: true
+  when: iptables_rules.changed
