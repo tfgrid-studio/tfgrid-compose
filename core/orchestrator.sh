@@ -120,32 +120,81 @@ EOF
 generate_terraform_config() {
     log_step "Generating Terraform configuration..."
     
-    # Get resource requirements from app
-    local cpu=$(get_app_resource "cpu" "recommended")
-    local memory=$(get_app_resource "memory" "recommended")
-    local disk=$(get_app_resource "disk" "recommended")
+    # Parse manifest configuration and export as Terraform variables
+    log_info "Parsing manifest configuration..."
     
-    # Use pattern defaults if not specified
-    if [ -z "$cpu" ]; then
-        cpu=$(get_pattern_defaults "cpu")
-    fi
-    if [ -z "$memory" ]; then
-        memory=$(get_pattern_defaults "memory")
-    fi
-    if [ -z "$disk" ]; then
-        disk=$(get_pattern_defaults "disk")
+    # Parse nodes configuration
+    local gateway_nodes=$(yaml_get "$APP_MANIFEST" "nodes.gateway")
+    local backend_nodes=$(yaml_get "$APP_MANIFEST" "nodes.backend")
+    
+    if [ -n "$gateway_nodes" ]; then
+        # Handle single node or array format
+        if [[ "$gateway_nodes" == "["* ]]; then
+            export TF_VAR_gateway_node=$(echo "$gateway_nodes" | tr -d '[]' | awk '{print $1}' | tr -d ',')
+        else
+            export TF_VAR_gateway_node="$gateway_nodes"
+        fi
+        log_info "Gateway node: $TF_VAR_gateway_node"
     fi
     
-    log_info "Resources: CPU=$cpu, Memory=$memory MB, Disk=$disk GB"
+    if [ -n "$backend_nodes" ]; then
+        export TF_VAR_internal_nodes="$backend_nodes"
+        log_info "Backend nodes: $TF_VAR_internal_nodes"
+    fi
+    
+    # Parse resources configuration
+    local gateway_cpu=$(yaml_get "$APP_MANIFEST" "resources.gateway.cpu")
+    local gateway_mem=$(yaml_get "$APP_MANIFEST" "resources.gateway.memory")
+    local gateway_disk=$(yaml_get "$APP_MANIFEST" "resources.gateway.disk")
+    local backend_cpu=$(yaml_get "$APP_MANIFEST" "resources.backend.cpu")
+    local backend_mem=$(yaml_get "$APP_MANIFEST" "resources.backend.memory")
+    local backend_disk=$(yaml_get "$APP_MANIFEST" "resources.backend.disk")
+    
+    # Export gateway resources
+    [ -n "$gateway_cpu" ] && export TF_VAR_gateway_cpu="$gateway_cpu"
+    [ -n "$gateway_mem" ] && export TF_VAR_gateway_mem="$gateway_mem"
+    [ -n "$gateway_disk" ] && export TF_VAR_gateway_disk="$gateway_disk"
+    
+    # Export backend resources  
+    [ -n "$backend_cpu" ] && export TF_VAR_internal_cpu="$backend_cpu"
+    [ -n "$backend_mem" ] && export TF_VAR_internal_mem="$backend_mem"
+    [ -n "$backend_disk" ] && export TF_VAR_internal_disk="$backend_disk"
+    
+    log_info "Resources: Gateway(CPU=$gateway_cpu, Mem=$gateway_mem MB, Disk=$gateway_disk GB)"
+    log_info "Resources: Backend(CPU=$backend_cpu, Mem=$backend_mem MB, Disk=$backend_disk GB)"
+    
+    # Parse gateway configuration
+    local gateway_mode=$(yaml_get "$APP_MANIFEST" "gateway.mode")
+    local gateway_domains=$(yaml_get "$APP_MANIFEST" "gateway.domains")
+    local ssl_enabled=$(yaml_get "$APP_MANIFEST" "gateway.ssl.enabled")
+    local ssl_email=$(yaml_get "$APP_MANIFEST" "gateway.ssl.email")
+    
+    # Export gateway configuration as environment variables (for Ansible)
+    [ -n "$gateway_mode" ] && export GATEWAY_TYPE="gateway_${gateway_mode}"
+    [ -n "$ssl_enabled" ] && [ "$ssl_enabled" = "true" ] && export ENABLE_SSL="true"
+    [ -n "$ssl_email" ] && export SSL_EMAIL="$ssl_email"
+    
+    # Parse first domain from domains array
+    if [ -n "$gateway_domains" ]; then
+        local first_domain=$(echo "$gateway_domains" | grep -o '[a-zA-Z0-9.-]*\.[a-zA-Z]\{2,\}' | head -1)
+        [ -n "$first_domain" ] && export DOMAIN_NAME="$first_domain"
+        log_info "Domain: $DOMAIN_NAME (SSL: ${ENABLE_SSL:-false})"
+    fi
+    
+    # Parse backend configuration
+    local backend_count=$(yaml_get "$APP_MANIFEST" "backend.count")
+    [ -n "$backend_count" ] && log_info "Backend VMs: $backend_count"
+    
+    # Set network defaults
+    export TF_VAR_tfgrid_network="${TF_VAR_tfgrid_network:-main}"
+    export MAIN_NETWORK="${MAIN_NETWORK:-wireguard}"
+    export INTER_NODE_NETWORK="${INTER_NODE_NETWORK:-wireguard}"
+    export NETWORK_MODE="${NETWORK_MODE:-wireguard-only}"
     
     # Copy pattern infrastructure to state directory
     cp -r "$PATTERN_INFRASTRUCTURE_DIR" "$STATE_DIR/terraform"
     
-    # Note: We don't generate terraform.tfvars anymore
-    # The pattern uses environment variables from .env directly (TF_VAR_*)
-    # This avoids undeclared variable warnings
-    
-    log_success "Terraform configuration generated"
+    log_success "Configuration parsed from manifest"
     return 0
 }
 
