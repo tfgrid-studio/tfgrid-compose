@@ -126,7 +126,9 @@ generate_terraform_config() {
     # Parse nodes configuration
     local gateway_nodes=$(yaml_get "$APP_MANIFEST" "nodes.gateway")
     local backend_nodes=$(yaml_get "$APP_MANIFEST" "nodes.backend")
+    local vm_node=$(yaml_get "$APP_MANIFEST" "nodes.vm")
     
+    # Gateway pattern nodes
     if [ -n "$gateway_nodes" ]; then
         # Handle single node or array format
         if [[ "$gateway_nodes" == "["* ]]; then
@@ -142,6 +144,12 @@ generate_terraform_config() {
         log_info "Backend nodes: $TF_VAR_internal_nodes"
     fi
     
+    # Single-VM pattern nodes
+    if [ -n "$vm_node" ]; then
+        export TF_VAR_ai_agent_node="$vm_node"
+        log_info "VM node: $TF_VAR_ai_agent_node"
+    fi
+    
     # Parse resources configuration
     local gateway_cpu=$(yaml_get "$APP_MANIFEST" "resources.gateway.cpu")
     local gateway_mem=$(yaml_get "$APP_MANIFEST" "resources.gateway.memory")
@@ -149,6 +157,9 @@ generate_terraform_config() {
     local backend_cpu=$(yaml_get "$APP_MANIFEST" "resources.backend.cpu")
     local backend_mem=$(yaml_get "$APP_MANIFEST" "resources.backend.memory")
     local backend_disk=$(yaml_get "$APP_MANIFEST" "resources.backend.disk")
+    local vm_cpu=$(yaml_get "$APP_MANIFEST" "resources.vm.cpu")
+    local vm_mem=$(yaml_get "$APP_MANIFEST" "resources.vm.memory")
+    local vm_disk=$(yaml_get "$APP_MANIFEST" "resources.vm.disk")
     
     # Export gateway resources
     [ -n "$gateway_cpu" ] && export TF_VAR_gateway_cpu="$gateway_cpu"
@@ -160,8 +171,21 @@ generate_terraform_config() {
     [ -n "$backend_mem" ] && export TF_VAR_internal_mem="$backend_mem"
     [ -n "$backend_disk" ] && export TF_VAR_internal_disk="$backend_disk"
     
-    log_info "Resources: Gateway(CPU=$gateway_cpu, Mem=$gateway_mem MB, Disk=$gateway_disk GB)"
-    log_info "Resources: Backend(CPU=$backend_cpu, Mem=$backend_mem MB, Disk=$backend_disk GB)"
+    # Export single-VM resources
+    [ -n "$vm_cpu" ] && export TF_VAR_ai_agent_cpu="$vm_cpu"
+    [ -n "$vm_mem" ] && export TF_VAR_ai_agent_mem="$vm_mem"
+    [ -n "$vm_disk" ] && export TF_VAR_ai_agent_disk="$vm_disk"
+    
+    # Log resources based on pattern
+    if [ -n "$gateway_cpu" ]; then
+        log_info "Resources: Gateway(CPU=$gateway_cpu, Mem=$gateway_mem MB, Disk=$gateway_disk GB)"
+    fi
+    if [ -n "$backend_cpu" ]; then
+        log_info "Resources: Backend(CPU=$backend_cpu, Mem=$backend_mem MB, Disk=$backend_disk GB)"
+    fi
+    if [ -n "$vm_cpu" ]; then
+        log_info "Resources: VM(CPU=$vm_cpu, Mem=$vm_mem MB, Disk=$vm_disk GB)"
+    fi
     
     # Parse gateway configuration
     local gateway_mode=$(yaml_get "$APP_MANIFEST" "gateway.mode")
