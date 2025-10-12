@@ -53,6 +53,9 @@ primary_ip=$(terraform output -raw primary_ip 2>/dev/null || echo "")
 primary_ip_type=$(terraform output -raw primary_ip_type 2>/dev/null || echo "unknown")
 
 if [ -n "$primary_ip" ]; then
+    # Strip CIDR notation if present (e.g., 185.69.167.152/24 → 185.69.167.152)
+    primary_ip=$(echo "$primary_ip" | cut -d'/' -f1)
+    
     echo "vm_ip: $primary_ip" >> "$orig_dir/$STATE_DIR/state.yaml"
     echo "primary_ip: $primary_ip" >> "$orig_dir/$STATE_DIR/state.yaml"
     echo "primary_ip_type: $primary_ip_type" >> "$orig_dir/$STATE_DIR/state.yaml"

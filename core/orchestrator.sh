@@ -185,11 +185,18 @@ generate_terraform_config() {
     local backend_count=$(yaml_get "$APP_MANIFEST" "backend.count")
     [ -n "$backend_count" ] && log_info "Backend VMs: $backend_count"
     
-    # Set network defaults
+    # Parse network configuration from manifest
+    local main_network=$(yaml_get "$APP_MANIFEST" "network.main")
+    local inter_node_network=$(yaml_get "$APP_MANIFEST" "network.inter_node")
+    local network_mode=$(yaml_get "$APP_MANIFEST" "network.mode")
+    
+    # Export network configuration (use manifest values or defaults)
     export TF_VAR_tfgrid_network="${TF_VAR_tfgrid_network:-main}"
-    export MAIN_NETWORK="${MAIN_NETWORK:-wireguard}"
-    export INTER_NODE_NETWORK="${INTER_NODE_NETWORK:-wireguard}"
-    export NETWORK_MODE="${NETWORK_MODE:-wireguard-only}"
+    export MAIN_NETWORK="${main_network:-${MAIN_NETWORK:-wireguard}}"
+    export INTER_NODE_NETWORK="${inter_node_network:-${INTER_NODE_NETWORK:-wireguard}}"
+    export NETWORK_MODE="${network_mode:-${NETWORK_MODE:-wireguard-only}}"
+    
+    log_info "Network: Main=$MAIN_NETWORK, InterNode=$INTER_NODE_NETWORK, Mode=$NETWORK_MODE"
     
     # Copy pattern infrastructure to state directory
     cp -r "$PATTERN_INFRASTRUCTURE_DIR" "$STATE_DIR/terraform"
