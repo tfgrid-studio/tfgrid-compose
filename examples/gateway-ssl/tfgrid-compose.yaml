@@ -1,0 +1,55 @@
+name: gateway-test-oct2025
+version: 1.0.0
+
+description: Gateway pattern production test - Phase 3 validation (Oct 11, 2025)
+
+# Pattern compatibility
+patterns:
+  recommended: gateway
+  supported:
+    - gateway
+
+# Network configuration
+network:
+  # How Ansible connects to configure VMs
+  main: wireguard  # Options: public, wireguard, mycelium
+  
+  # How nodes communicate internally (gateway to backends)
+  inter_node: wireguard  # Options: wireguard, mycelium
+  
+  # How users access your application (redundancy option)
+  mode: both  # Options: wireguard-only, mycelium-only, both (dual network failover)
+
+# Gateway configuration
+gateway:
+  mode: proxy
+  domains:
+    - test.tfgrid.studio
+  ssl:
+    enabled: true
+    email: contact@tfgrid.studio
+
+# Backend configuration
+backend:
+  count: 2  # Deploy 2 backend VMs for load balancing test
+  services:
+    - name: web
+      type: static
+      port: 80
+      health_check: "/"
+
+# Resource allocation
+resources:
+  gateway:
+    cpu: 2
+    memory: 4096
+    disk: 50
+  backend:
+    cpu: 2
+    memory: 4096
+    disk: 50
+
+# Node selection - Multi-node deployment for thorough testing
+nodes:
+  gateway: [1]   # Mainnet node 1 with public IPv4
+  backend: [8, 13]  # Nodes 8 and 13 for backend VMs (tests cross-node networking)
