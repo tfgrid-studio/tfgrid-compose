@@ -174,7 +174,7 @@ output "mycelium_ip" {
   description = "Mycelium IPv6 address"
 }
 
-output "wireguard_config" {
+output "wg_config" {
   value       = grid_network.vm_network.access_wg_config
   sensitive   = true
   description = "WireGuard configuration file content"

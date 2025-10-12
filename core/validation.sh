@@ -218,9 +218,9 @@ validate_no_deployment() {
         
         log_error "Cannot deploy while another deployment exists"
         log_info "Options:"
-        log_info "  1. Destroy existing: make down APP=<app>"
-        log_info "  2. Check status: make status APP=<app>"
-        log_info "  3. Force clean (dangerous): make clean"
+        log_info "  1. Destroy existing: tfgrid-compose down <app-dir>"
+        log_info "  2. Check status: tfgrid-compose status <app-dir>"
+        log_info "  3. Force clean (dangerous): tfgrid-compose clean <app-dir>"
         return 1
     fi
     
