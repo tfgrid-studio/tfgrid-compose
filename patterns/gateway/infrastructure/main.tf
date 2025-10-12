@@ -54,6 +54,16 @@ variable "tfgrid_network" {
   description = "ThreeFold Grid network (main, test, dev)"
 }
 
+variable "main_network" {
+  type        = string
+  default     = "public"
+  description = "Main network for connectivity (public, wireguard, mycelium)"
+  validation {
+    condition     = contains(["public", "wireguard", "mycelium"], var.main_network)
+    error_message = "main_network must be public, wireguard, or mycelium"
+  }
+}
+
 provider "grid" {
   mnemonic  = var.mnemonic
   network   = var.tfgrid_network
@@ -202,7 +212,7 @@ output "primary_ip" {
 }
 
 output "primary_ip_type" {
-  value       = "public"
+  value       = var.main_network
   description = "Type of primary IP (public, wireguard, mycelium)"
 }
 

@@ -22,6 +22,9 @@ if [ -z "$VM_IP" ]; then
     exit 1
 fi
 
+# Strip CIDR notation if present (e.g., 185.69.167.152/24 → 185.69.167.152)
+VM_IP=$(echo "$VM_IP" | cut -d'/' -f1)
+
 log_step "Waiting for SSH to be ready on $VM_IP..."
 log_info "This may take a few minutes (timeout: 300 seconds)..."
 echo ""

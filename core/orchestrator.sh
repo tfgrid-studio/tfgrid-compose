@@ -196,6 +196,9 @@ generate_terraform_config() {
     export INTER_NODE_NETWORK="${inter_node_network:-${INTER_NODE_NETWORK:-wireguard}}"
     export NETWORK_MODE="${network_mode:-${NETWORK_MODE:-wireguard-only}}"
     
+    # Pass main_network to Terraform
+    export TF_VAR_main_network="$MAIN_NETWORK"
+    
     log_info "Network: Main=$MAIN_NETWORK, InterNode=$INTER_NODE_NETWORK, Mode=$NETWORK_MODE"
     
     # Copy pattern infrastructure to state directory
