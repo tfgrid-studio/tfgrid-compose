@@ -124,6 +124,18 @@ case "$COMMAND" in
         fi
         
         echo ""
+        
+        # Validate network prerequisites based on manifest config
+        main_network=$(yaml_get "$APP_MANIFEST" "network.main")
+        inter_node=$(yaml_get "$APP_MANIFEST" "network.inter_node")
+        mode=$(yaml_get "$APP_MANIFEST" "network.mode")
+        
+        if ! validate_network_prerequisites "$main_network" "$inter_node" "$mode"; then
+            log_error "Network validation failed"
+            exit 1
+        fi
+        
+        echo ""
         log_success "All validations passed! Starting deployment..."
         echo ""
         
@@ -184,9 +196,9 @@ case "$COMMAND" in
         # Just parse config to export TF_VAR_* environment variables
         log_info "Loading configuration from manifest..."
         
-        # Parse nodes, resources, gateway, network config
-        local gateway_nodes=$(yaml_get "$APP_MANIFEST" "nodes.gateway")
-        local backend_nodes=$(yaml_get "$APP_MANIFEST" "nodes.backend")
+        # Parse nodes, resources, gateway, network config (no 'local' - not in function)
+        gateway_nodes=$(yaml_get "$APP_MANIFEST" "nodes.gateway")
+        backend_nodes=$(yaml_get "$APP_MANIFEST" "nodes.backend")
         
         if [ -n "$gateway_nodes" ]; then
             if [[ "$gateway_nodes" == "["* ]]; then
@@ -199,12 +211,12 @@ case "$COMMAND" in
         [ -n "$backend_nodes" ] && export TF_VAR_internal_nodes="$backend_nodes"
         
         # Parse resources
-        local gateway_cpu=$(yaml_get "$APP_MANIFEST" "resources.gateway.cpu")
-        local gateway_mem=$(yaml_get "$APP_MANIFEST" "resources.gateway.memory")
-        local gateway_disk=$(yaml_get "$APP_MANIFEST" "resources.gateway.disk")
-        local backend_cpu=$(yaml_get "$APP_MANIFEST" "resources.backend.cpu")
-        local backend_mem=$(yaml_get "$APP_MANIFEST" "resources.backend.memory")
-        local backend_disk=$(yaml_get "$APP_MANIFEST" "resources.backend.disk")
+        gateway_cpu=$(yaml_get "$APP_MANIFEST" "resources.gateway.cpu")
+        gateway_mem=$(yaml_get "$APP_MANIFEST" "resources.gateway.memory")
+        gateway_disk=$(yaml_get "$APP_MANIFEST" "resources.gateway.disk")
+        backend_cpu=$(yaml_get "$APP_MANIFEST" "resources.backend.cpu")
+        backend_mem=$(yaml_get "$APP_MANIFEST" "resources.backend.memory")
+        backend_disk=$(yaml_get "$APP_MANIFEST" "resources.backend.disk")
         
         [ -n "$gateway_cpu" ] && export TF_VAR_gateway_cpu="$gateway_cpu"
         [ -n "$gateway_mem" ] && export TF_VAR_gateway_mem="$gateway_mem"
@@ -214,7 +226,7 @@ case "$COMMAND" in
         [ -n "$backend_disk" ] && export TF_VAR_internal_disk="$backend_disk"
         
         # Parse network
-        local main_network=$(yaml_get "$APP_MANIFEST" "network.main")
+        main_network=$(yaml_get "$APP_MANIFEST" "network.main")
         export MAIN_NETWORK="${main_network:-wireguard}"
         export TF_VAR_main_network="$MAIN_NETWORK"
         export TF_VAR_tfgrid_network="${TF_VAR_tfgrid_network:-main}"

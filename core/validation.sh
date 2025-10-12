@@ -236,6 +236,108 @@ validate_sudo_access() {
     return 0
 }
 
+# Check if WireGuard is needed based on network config
+needs_wireguard() {
+    local main_network="$1"
+    local inter_node="$2"
+    
+    [[ "$main_network" == "wireguard" ]] || [[ "$inter_node" == "wireguard" ]]
+}
+
+# Check if Mycelium is needed based on network config
+needs_mycelium() {
+    local main_network="$1"
+    local inter_node="$2"
+    local mode="$3"
+    
+    [[ "$main_network" == "mycelium" ]] || 
+    [[ "$inter_node" == "mycelium" ]] || 
+    [[ "$mode" == "mycelium-only" ]] ||
+    [[ "$mode" == "both" ]]
+}
+
+# Test Mycelium connectivity by pinging public nodes
+check_mycelium_connectivity() {
+    log_info "Testing Mycelium connectivity..."
+    
+    # Public nodes from https://github.com/threefoldtech/mycelium README
+    local test_nodes=(
+        "54b:83ab:6cb5:7b38:44ae:cd14:53f3:a907"  # DE Node 01
+        "40a:152c:b85b:9646:5b71:d03a:eb27:2462"  # DE Node 02
+        "597:a4ef:806:b09:6650:cbbf:1b68:cc94"   # BE Node 03
+        "549:8bce:fa45:e001:cbf8:f2e2:2da6:a67c"  # BE Node 04
+        "410:2778:53bf:6f41:af28:1b60:d7c0:707a"  # FI Node 05
+    )
+    
+    # Test sequentially, stop at first success
+    for node in "${test_nodes[@]}"; do
+        if ping6 -c 1 -W 2 "$node" >/dev/null 2>&1; then
+            log_success "Mycelium connectivity verified (reached $node)"
+            return 0
+        fi
+    done
+    
+    # All nodes failed
+    log_warning "Could not reach any Mycelium public nodes"
+    log_info "This may indicate:"
+    echo "  - Mycelium daemon not running (try: sudo systemctl start mycelium)"
+    echo "  - Firewall blocking IPv6 connections"
+    echo "  - Network configuration issues"
+    return 1
+}
+
+# Validate network prerequisites based on manifest configuration
+validate_network_prerequisites() {
+    local main_network="$1"
+    local inter_node="$2"
+    local mode="$3"
+    
+    log_step "Checking network requirements..."
+    log_info "Network config: main=$main_network, inter_node=$inter_node, mode=$mode"
+    echo ""
+    
+    local has_errors=0
+    
+    # Check WireGuard if needed
+    if needs_wireguard "$main_network" "$inter_node"; then
+        if ! command -v wg >/dev/null 2>&1; then
+            log_error "WireGuard required but not installed"
+            log_info "Install on Ubuntu/Debian: sudo apt install wireguard"
+            log_info "Install on macOS: brew install wireguard-tools"
+            has_errors=1
+        else
+            wg_version=$(wg --version 2>&1 | head -1)
+            log_success "WireGuard found: $wg_version"
+        fi
+    fi
+    
+    # Check Mycelium if needed
+    if needs_mycelium "$main_network" "$inter_node" "$mode"; then
+        if ! command -v mycelium >/dev/null 2>&1; then
+            log_error "Mycelium required but not installed"
+            log_info "Install from: https://github.com/threefoldtech/mycelium"
+            has_errors=1
+        else
+            mycelium_version=$(mycelium --version 2>&1 | head -1)
+            log_success "Mycelium found: $mycelium_version"
+            
+            # Test connectivity (warn only, don't fail)
+            if ! check_mycelium_connectivity; then
+                log_warning "Mycelium connectivity test failed - deployment may have issues"
+            fi
+        fi
+    fi
+    
+    echo ""
+    if [ $has_errors -gt 0 ]; then
+        log_error "Network requirements not met"
+        return 1
+    fi
+    
+    log_success "All network requirements satisfied"
+    return 0
+}
+
 # Export functions
 export -f command_exists
 export -f load_mnemonic
@@ -246,3 +348,7 @@ export -f validate_app_path
 export -f validate_deployment_exists
 export -f validate_no_deployment
 export -f validate_sudo_access
+export -f needs_wireguard
+export -f needs_mycelium
+export -f check_mycelium_connectivity
+export -f validate_network_prerequisites
