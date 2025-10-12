@@ -1,5 +1,61 @@
 #!/usr/bin/env bash
-# Validation module - Check prerequisites and inputs
+# Validation functions for tfgrid-compose
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/common.sh"
+
+# Auto-detect and load ThreeFold mnemonic
+# Priority: env var > standard location > project-specific > error
+load_mnemonic() {
+    # Priority 1: Already set via environment variable
+    if [ -n "$TF_VAR_mnemonic" ]; then
+        return 0
+    fi
+    
+    # Priority 2: Standard ThreeFold location
+    local standard_path="$HOME/.config/threefold/mnemonic"
+    if [ -f "$standard_path" ]; then
+        # Check file permissions for security
+        local perms=$(stat -c %a "$standard_path" 2>/dev/null || stat -f %A "$standard_path" 2>/dev/null || echo "644")
+        if [ "$perms" != "600" ] && [ "$perms" != "400" ]; then
+            log_warning "Mnemonic file has insecure permissions: $perms"
+            log_info "Recommended: chmod 600 $standard_path"
+        fi
+        
+        export TF_VAR_mnemonic=$(cat "$standard_path")
+        return 0
+    fi
+    
+    # Priority 3: Project-specific mnemonic (git ignored)
+    local project_path="./.tfgrid-mnemonic"
+    if [ -f "$project_path" ]; then
+        log_info "Using project-specific mnemonic: $project_path"
+        export TF_VAR_mnemonic=$(cat "$project_path")
+        return 0
+    fi
+    
+    # Not found - provide helpful error
+    log_error "ThreeFold mnemonic not found"
+    echo ""
+    log_info "Please set your mnemonic using one of these methods:"
+    echo ""
+    echo "  Option 1 (Recommended): Use standard ThreeFold location"
+    echo "    mkdir -p ~/.config/threefold"
+    echo "    echo 'your-mnemonic-here' > ~/.config/threefold/mnemonic"
+    echo "    chmod 600 ~/.config/threefold/mnemonic"
+    echo ""
+    echo "  Option 2: Set environment variable (one session)"
+    echo "    export TF_VAR_mnemonic=\$(cat ~/.config/threefold/mnemonic)  # Bash/Zsh"
+    echo "    set -x TF_VAR_mnemonic (cat ~/.config/threefold/mnemonic)    # Fish"
+    echo ""
+    echo "  Option 3: Project-specific (git ignored)"
+    echo "    echo 'your-mnemonic-here' > .tfgrid-mnemonic"
+    echo "    chmod 600 .tfgrid-mnemonic"
+    echo ""
+    return 1
+}
 
 # Check if a command exists
 command_exists() {
@@ -54,16 +110,11 @@ validate_prerequisites() {
         warnings=1
     fi
     
-    # Check for mnemonic
-    if [ -f ~/.config/threefold/mnemonic ]; then
-        log_success "ThreeFold mnemonic configured"
-    else
-        log_error "ThreeFold mnemonic not found"
-        log_info "Create: mkdir -p ~/.config/threefold"
-        log_info "Add: echo 'your mnemonic' > ~/.config/threefold/mnemonic"
-        log_info "Secure: chmod 600 ~/.config/threefold/mnemonic"
-        missing=1
+    # Auto-detect and load mnemonic (priority order)
+    if ! load_mnemonic; then
+        return 1
     fi
+    log_success "ThreeFold mnemonic configured"
     
     # Summary
     echo ""
@@ -187,9 +238,11 @@ validate_sudo_access() {
 
 # Export functions
 export -f command_exists
+export -f load_mnemonic
 export -f validate_prerequisites
+export -f validate_directory
+export -f validate_file
 export -f validate_app_path
-export -f validate_pattern_name
 export -f validate_deployment_exists
 export -f validate_no_deployment
 export -f validate_sudo_access
