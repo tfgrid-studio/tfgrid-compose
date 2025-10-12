@@ -219,28 +219,15 @@ deploy_app_source() {
         return 1
     fi
     
-    # Create temp directory on VM
     log_info "Preparing VM for app deployment..."
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        root@$vm_ip "mkdir -p /tmp/app-source"
-    
-    # Copy app source if it exists
-    if [ -d "$APP_SRC_DIR" ]; then
-        log_info "Copying application source..."
-        scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            -r "$APP_SRC_DIR"/* root@$vm_ip:/tmp/app-source/ > /dev/null 2>&1
-        log_success "Source code deployed"
-    fi
-    
-    # Copy deployment hooks
-    log_info "Copying deployment hooks..."
+    # Create deployment directory on VM
     ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
         root@$vm_ip "mkdir -p /tmp/app-deployment"
     
+    # Copy app deployment files to VM
+    log_info "Copying deployment hooks..."
     scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
         "$APP_DEPLOYMENT_DIR"/*.sh root@$vm_ip:/tmp/app-deployment/ > /dev/null 2>&1
-    
-    log_success "Deployment hooks copied"
     return 0
 }
 
@@ -254,6 +241,24 @@ run_app_hooks() {
         log_error "No VM IP found"
         return 1
     fi
+    
+    # Check if Ansible playbook exists (Option B: Ansible deployment)
+    if [ -f "$APP_DIR/deployment/playbook.yml" ]; then
+        log_info "Detected Ansible playbook deployment"
+        
+        # Run Ansible playbook
+        if ! ansible-playbook -i "$STATE_DIR/inventory.ini" "$APP_DIR/deployment/playbook.yml" \
+            > "$STATE_DIR/ansible-app.log" 2>&1; then
+            log_error "Ansible playbook failed. Check: $STATE_DIR/ansible-app.log"
+            cat "$STATE_DIR/ansible-app.log"
+            return 1
+        fi
+        log_success "Ansible deployment complete"
+        return 0
+    fi
+    
+    # Default: Bash hook scripts (Option A: Bash deployment)
+    log_info "Using bash hook scripts deployment"
     
     # Hook 1: setup.sh
     log_info "Running setup hook..."

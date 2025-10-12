@@ -1,0 +1,46 @@
+name: my-k3s-cluster
+version: 1.0.0
+
+description: Lightweight Kubernetes cluster using K3s
+
+# Pattern compatibility
+patterns:
+  recommended: k3s
+  supported:
+    - k3s
+
+# Network configuration
+network:
+  # How Ansible connects to configure VMs
+  main: wireguard  # Options: public, wireguard, mycelium
+  
+  # How nodes communicate (K3s cluster communication)
+  inter_node: wireguard  # Options: wireguard, mycelium
+  
+  # How users access services
+  mode: both  # Options: wireguard-only, mycelium-only, both
+
+# Node selection
+nodes:
+  master: 1           # Master node ID
+  workers: [8, 13]   # Worker node IDs
+
+# Resource allocation
+resources:
+  master:
+    cpu: 2
+    memory: 4096  # 4GB
+    disk: 50      # 50GB
+  worker:
+    cpu: 2
+    memory: 4096  # 4GB per worker
+    disk: 50      # 50GB per worker
+
+# K3s configuration
+k3s:
+  version: "v1.28.5+k3s1"
+  token_secret: "my-cluster-secret-token"  # Change this!
+  features:
+    - traefik       # Ingress controller
+    - servicelb     # Load balancer
+    - metrics-server

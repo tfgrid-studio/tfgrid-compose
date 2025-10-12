@@ -1,0 +1,32 @@
+name: my-website
+version: 1.0.0
+
+description: Simple static website on a single VM
+
+# Pattern compatibility
+patterns:
+  recommended: single-vm
+  supported:
+    - single-vm
+
+# Network configuration
+network:
+  # How Ansible connects to configure VMs
+  main: public  # Options: public, wireguard, mycelium
+  
+  # Single VM doesn't need inter-node communication
+  inter_node: wireguard  # N/A for single VM
+  
+  # How users access your application
+  mode: wireguard-only  # Options: wireguard-only, mycelium-only, both
+
+# Node selection
+nodes:
+  vm: 1  # Single node ID
+
+# Resource allocation
+resources:
+  vm:
+    cpu: 2
+    memory: 2048  # 2GB
+    disk: 25      # 25GB

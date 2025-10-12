@@ -33,14 +33,14 @@ load_app() {
         APP_DIR="$(pwd)/$app_path"
     fi
     
-    # Validate app directory exists
     if ! validate_directory "$APP_DIR" "Application"; then
         log_error "Application not found: $app_path"
         return 1
     fi
     
-    # Find manifest file
-    APP_MANIFEST="$APP_DIR/tfgrid-compose.yaml"
+    # Resolve manifest path (use custom file if specified)
+    local manifest_file="${APP_MANIFEST_FILE:-tfgrid-compose.yaml}"
+    APP_MANIFEST="$APP_DIR/$manifest_file"
     if [ ! -f "$APP_MANIFEST" ]; then
         APP_MANIFEST="$APP_DIR/tfgrid-compose.yml"
     fi

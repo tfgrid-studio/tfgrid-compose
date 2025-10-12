@@ -20,6 +20,9 @@ VERSION="1.0.0"
 # Context file support
 CONTEXT_FILE=".tfgrid-compose.yaml"
 
+# Default manifest file
+MANIFEST_FILE="tfgrid-compose.yaml"
+
 # Load context from .tfgrid-compose.yaml
 load_context() {
     if [ -f "$CONTEXT_FILE" ]; then
@@ -33,6 +36,22 @@ load_context() {
     fi
     return 1
 }
+
+# Parse global flags
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -f|--file)
+            MANIFEST_FILE="$2"
+            shift 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+# Export manifest file for other modules
+export APP_MANIFEST_FILE="$MANIFEST_FILE"
 
 # Command dispatcher
 COMMAND="${1:-help}"
