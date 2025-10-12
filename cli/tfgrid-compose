@@ -137,7 +137,7 @@ case "$COMMAND" in
         ;;
         
     down)
-        # Destroy command
+        # Down command
         log_info "TFGrid Compose v$VERSION"
         echo ""
         
@@ -162,6 +162,64 @@ case "$COMMAND" in
         if ! validate_deployment_exists; then
             exit 1
         fi
+        
+        # Load app to get configuration (needed for Terraform variables)
+        if ! load_app "$APP_PATH"; then
+            exit 1
+        fi
+        
+        # Get pattern from manifest
+        PATTERN_NAME=$(get_recommended_pattern)
+        if [ -z "$PATTERN_NAME" ]; then
+            log_error "No pattern specified and no recommended pattern in manifest"
+            exit 1
+        fi
+        
+        # Load pattern (needed for generate_terraform_config)
+        if ! load_pattern "$PATTERN_NAME"; then
+            exit 1
+        fi
+        
+        # Parse manifest and export Terraform variables (but don't copy infrastructure)
+        # Just parse config to export TF_VAR_* environment variables
+        log_info "Loading configuration from manifest..."
+        
+        # Parse nodes, resources, gateway, network config
+        local gateway_nodes=$(yaml_get "$APP_MANIFEST" "nodes.gateway")
+        local backend_nodes=$(yaml_get "$APP_MANIFEST" "nodes.backend")
+        
+        if [ -n "$gateway_nodes" ]; then
+            if [[ "$gateway_nodes" == "["* ]]; then
+                export TF_VAR_gateway_node=$(echo "$gateway_nodes" | tr -d '[]' | awk '{print $1}' | tr -d ',')
+            else
+                export TF_VAR_gateway_node="$gateway_nodes"
+            fi
+        fi
+        
+        [ -n "$backend_nodes" ] && export TF_VAR_internal_nodes="$backend_nodes"
+        
+        # Parse resources
+        local gateway_cpu=$(yaml_get "$APP_MANIFEST" "resources.gateway.cpu")
+        local gateway_mem=$(yaml_get "$APP_MANIFEST" "resources.gateway.memory")
+        local gateway_disk=$(yaml_get "$APP_MANIFEST" "resources.gateway.disk")
+        local backend_cpu=$(yaml_get "$APP_MANIFEST" "resources.backend.cpu")
+        local backend_mem=$(yaml_get "$APP_MANIFEST" "resources.backend.memory")
+        local backend_disk=$(yaml_get "$APP_MANIFEST" "resources.backend.disk")
+        
+        [ -n "$gateway_cpu" ] && export TF_VAR_gateway_cpu="$gateway_cpu"
+        [ -n "$gateway_mem" ] && export TF_VAR_gateway_mem="$gateway_mem"
+        [ -n "$gateway_disk" ] && export TF_VAR_gateway_disk="$gateway_disk"
+        [ -n "$backend_cpu" ] && export TF_VAR_internal_cpu="$backend_cpu"
+        [ -n "$backend_mem" ] && export TF_VAR_internal_mem="$backend_mem"
+        [ -n "$backend_disk" ] && export TF_VAR_internal_disk="$backend_disk"
+        
+        # Parse network
+        local main_network=$(yaml_get "$APP_MANIFEST" "network.main")
+        export MAIN_NETWORK="${main_network:-wireguard}"
+        export TF_VAR_main_network="$MAIN_NETWORK"
+        export TF_VAR_tfgrid_network="${TF_VAR_tfgrid_network:-main}"
+        
+        log_success "Configuration loaded from manifest"
         
         # Destroy the deployment
         if ! destroy_deployment; then
