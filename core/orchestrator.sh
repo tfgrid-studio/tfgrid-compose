@@ -146,8 +146,8 @@ generate_terraform_config() {
     
     # Single-VM pattern nodes
     if [ -n "$vm_node" ]; then
-        export TF_VAR_ai_agent_node="$vm_node"
-        log_info "VM node: $TF_VAR_ai_agent_node"
+        export TF_VAR_vm_node="$vm_node"
+        log_info "VM node: $TF_VAR_vm_node"
     fi
     
     # Parse resources configuration
@@ -172,9 +172,9 @@ generate_terraform_config() {
     [ -n "$backend_disk" ] && export TF_VAR_internal_disk="$backend_disk"
     
     # Export single-VM resources
-    [ -n "$vm_cpu" ] && export TF_VAR_ai_agent_cpu="$vm_cpu"
-    [ -n "$vm_mem" ] && export TF_VAR_ai_agent_mem="$vm_mem"
-    [ -n "$vm_disk" ] && export TF_VAR_ai_agent_disk="$vm_disk"
+    [ -n "$vm_cpu" ] && export TF_VAR_vm_cpu="$vm_cpu"
+    [ -n "$vm_mem" ] && export TF_VAR_vm_mem="$vm_mem"
+    [ -n "$vm_disk" ] && export TF_VAR_vm_disk="$vm_disk"
     
     # Log resources based on pattern
     if [ -n "$gateway_cpu" ]; then

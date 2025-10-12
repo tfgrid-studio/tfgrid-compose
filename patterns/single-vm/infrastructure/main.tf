@@ -31,24 +31,24 @@ variable "tfgrid_network" {
   description = "ThreeFold Grid network (main, test, dev)"
 }
 
-variable "ai_agent_node" {
+variable "vm_node" {
   type        = number
-  description = "Node ID for AI Agent VM"
+  description = "Node ID for VM deployment"
 }
 
-variable "ai_agent_cpu" {
+variable "vm_cpu" {
   type    = number
-  default = 4
+  default = 2
 }
 
-variable "ai_agent_mem" {
+variable "vm_mem" {
   type    = number
-  default = 8192 # 8GB RAM
+  default = 4096 # 4GB RAM
 }
 
-variable "ai_agent_disk" {
+variable "vm_disk" {
   type    = number
-  default = 100 # 100GB storage
+  default = 50 # 50GB storage
 }
 
 # ==============================================================================
@@ -91,7 +91,7 @@ resource "random_bytes" "mycelium_key" {
   length = 32
 }
 
-resource "random_bytes" "ai_agent_ip_seed" {
+resource "random_bytes" "vm_ip_seed" {
   length = 6
 }
 
@@ -99,32 +99,32 @@ resource "random_bytes" "ai_agent_ip_seed" {
 # NETWORK
 # ==============================================================================
 
-resource "grid_network" "ai_agent_network" {
+resource "grid_network" "vm_network" {
   name          = "net_${random_string.deployment_id.result}"
-  nodes         = [var.ai_agent_node]
+  nodes         = [var.vm_node]
   ip_range      = "10.1.0.0/16"
   add_wg_access = true
   mycelium_keys = {
-    tostring(var.ai_agent_node) = random_bytes.mycelium_key.hex
+    tostring(var.vm_node) = random_bytes.mycelium_key.hex
   }
 }
 
 # ==============================================================================
-# AI AGENT VM
+# VIRTUAL MACHINE
 # ==============================================================================
 
-resource "grid_deployment" "ai_agent" {
-  node         = var.ai_agent_node
-  network_name = grid_network.ai_agent_network.name
+resource "grid_deployment" "vm" {
+  node         = var.vm_node
+  network_name = grid_network.vm_network.name
 
   vms {
     name             = "vm_${random_string.deployment_id.result}"
     flist            = "https://hub.grid.tf/tf-official-vms/ubuntu-24.04-full.flist"
-    cpu              = var.ai_agent_cpu
-    memory           = var.ai_agent_mem
-    rootfs_size      = var.ai_agent_disk * 1024  # Convert GB to MB
+    cpu              = var.vm_cpu
+    memory           = var.vm_mem
+    rootfs_size      = var.vm_disk * 1024  # Convert GB to MB
     entrypoint       = "/sbin/zinit init"
-    mycelium_ip_seed = random_bytes.ai_agent_ip_seed.hex
+    mycelium_ip_seed = random_bytes.vm_ip_seed.hex
     env_vars = {
       SSH_KEY = local.ssh_key
     }
@@ -141,7 +141,7 @@ resource "grid_deployment" "ai_agent" {
 # ==============================================================================
 
 output "primary_ip" {
-  value       = try(grid_deployment.ai_agent.vms[0].ip, "")
+  value       = try(grid_deployment.vm.vms[0].ip, "")
   description = "Primary IP address for SSH connection (WireGuard IP)"
 }
 
@@ -151,12 +151,12 @@ output "primary_ip_type" {
 }
 
 output "deployment_name" {
-  value       = grid_deployment.ai_agent.name
+  value       = grid_deployment.vm.name
   description = "Name of the deployment"
 }
 
 output "node_ids" {
-  value       = [var.ai_agent_node]
+  value       = [var.vm_node]
   description = "List of node IDs used in deployment"
 }
 
@@ -170,39 +170,17 @@ output "deployment_id" {
 }
 
 output "mycelium_ip" {
-  value       = try(grid_deployment.ai_agent.vms[0].mycelium_ip, "")
+  value       = try(grid_deployment.vm.vms[0].mycelium_ip, "")
   description = "Mycelium IPv6 address"
 }
 
 output "wireguard_config" {
-  value       = grid_network.ai_agent_network.access_wg_config
+  value       = grid_network.vm_network.access_wg_config
   sensitive   = true
   description = "WireGuard configuration file content"
 }
 
 output "network_name" {
-  value       = grid_network.ai_agent_network.name
+  value       = grid_network.vm_network.name
   description = "Network name"
-}
-
-# Legacy outputs (for backward compatibility)
-output "ai_agent_node_id" {
-  value       = var.ai_agent_node
-  description = "Node ID (legacy)"
-}
-
-output "ai_agent_wg_ip" {
-  value       = try(grid_deployment.ai_agent.vms[0].ip, "")
-  description = "WireGuard IP (legacy)"
-}
-
-output "ai_agent_mycelium_ip" {
-  value       = try(grid_deployment.ai_agent.vms[0].mycelium_ip, "")
-  description = "Mycelium IP (legacy)"
-}
-
-output "wg_config" {
-  value       = grid_network.ai_agent_network.access_wg_config
-  sensitive   = true
-  description = "WireGuard config (legacy)"
 }
