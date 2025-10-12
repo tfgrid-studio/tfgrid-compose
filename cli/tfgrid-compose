@@ -175,6 +175,13 @@ case "$COMMAND" in
             exit 1
         fi
         
+        # Load mnemonic (needed for Terraform destroy)
+        if ! load_mnemonic; then
+            exit 1
+        fi
+        log_success "ThreeFold mnemonic configured"
+        echo ""
+        
         # Load app to get configuration (needed for Terraform variables)
         if ! load_app "$APP_PATH"; then
             exit 1
