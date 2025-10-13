@@ -44,8 +44,8 @@ else
     exit 1
 fi
 
-# Simple interface naming (matches external pattern)
-wg_interface="wg-${APP_NAME}"
+# Simple interface naming (use simple name to avoid issues with dashes)
+wg_interface="wg${APP_NAME//-/_}"
 
 # Use absolute path for config file
 abs_state_dir="$(cd "$STATE_DIR" && pwd)"
@@ -54,12 +54,9 @@ wg_conf_file="$abs_state_dir/${wg_interface}.conf"
 # Extract WireGuard config from Terraform directory
 cd "$STATE_DIR/terraform" || exit 1
 
-# Extract config using output -raw (like working tfgrid-ai-agent)
-if ! $TF_CMD output -raw wg_config > "$wg_conf_file" 2>/dev/null; then
-    cd - >/dev/null
-    log_error "Failed to extract WireGuard config from Terraform"
-    exit 1
-fi
+# Extract config using show -json (like working tfgrid-ai-agent)
+TF_OUTPUT=$($TF_CMD show -json)
+echo "$TF_OUTPUT" | jq -r '.values.outputs.wg_config.value' > "$wg_conf_file"
 
 cd - >/dev/null
 
