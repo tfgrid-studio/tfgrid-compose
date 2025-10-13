@@ -44,8 +44,9 @@ else
     exit 1
 fi
 
-# Simple interface naming (use simple name to avoid issues with dashes)
-wg_interface="wg${APP_NAME//-/_}"
+# Simple interface naming (find next available wg interface number)
+next_num=$(ls /sys/class/net/ | grep "^wg[0-9]" | wc -l)
+wg_interface="wg$next_num"
 
 # Use absolute path for config file
 abs_state_dir="$(cd "$STATE_DIR" && pwd)"
