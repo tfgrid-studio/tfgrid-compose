@@ -9,8 +9,8 @@ source "$SCRIPT_DIR/../common.sh"
 # Get state directory from environment
 STATE_DIR="${STATE_DIR:-.tfgrid-compose}"
 
-# Get app name from state file
-APP_NAME=$(grep "^app_name:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+# Get app name from state file and sanitize it (remove any whitespace/newlines)
+APP_NAME=$(grep "^app_name:" "$STATE_DIR/state.yaml" 2>/dev/null | sed 's/^app_name: //' | tr -d '[:space:]')
 if [ -z "$APP_NAME" ]; then
     log_error "No app_name found in state file"
     exit 1
@@ -29,12 +29,6 @@ log_step "Setting up WireGuard connection..."
 # Check if WireGuard is installed
 if ! command -v wg-quick &> /dev/null; then
     log_error "WireGuard not installed. Install with: sudo apt install wireguard"
-    exit 1
-fi
-
-# Check if jq is available (for parsing terraform output)
-if ! command -v jq &> /dev/null; then
-    log_error "jq not installed. Install with: sudo apt install jq"
     exit 1
 fi
 
@@ -60,20 +54,14 @@ wg_conf_file="$abs_state_dir/${wg_interface}.conf"
 # Extract WireGuard config from Terraform directory
 cd "$STATE_DIR/terraform" || exit 1
 
-# Extract and save directly to file
-if ! $TF_CMD show -json 2>/dev/null | jq -r '.values.outputs.wg_config.value' > "$wg_conf_file.tmp" 2>/dev/null; then
+# Extract config using output -raw (like working tfgrid-ai-agent)
+if ! $TF_CMD output -raw wg_config > "$wg_conf_file" 2>/dev/null; then
     cd - >/dev/null
     log_error "Failed to extract WireGuard config from Terraform"
     exit 1
 fi
 
 cd - >/dev/null
-
-# Clean up the config: remove line breaks in PrivateKey field
-# The Terraform output sometimes has embedded newlines that break wg-quick
-# Fix: PrivateKey = XXX\n= -> PrivateKey = XXX=
-sed ':a;N;$!ba;s/PrivateKey = \([^\n]*\)\n=/PrivateKey = \1=/g' "$wg_conf_file.tmp" > "$wg_conf_file"
-rm -f "$wg_conf_file.tmp"
 
 # Verify config was extracted
 if [ ! -s "$wg_conf_file" ]; then
