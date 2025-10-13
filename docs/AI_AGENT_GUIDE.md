@@ -401,7 +401,7 @@ export TF_VAR_mnemonic=$(cat ~/.config/threefold/mnemonic)
 export QWEN_API_KEY='your-api-key'        # Qwen API key
 export GITHUB_TOKEN='your-token'           # GitHub personal token
 export GITEA_URL='https://gitea.example'   # Gitea URL
-export GITEA_TOKEN='your-token'            # Gitea token
+export GITEA_TOKEN='your-token'            # Gitea personal token
 ```
 
 ### Custom Resources
