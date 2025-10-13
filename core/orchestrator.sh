@@ -379,10 +379,16 @@ destroy_deployment() {
     if [ -d "$STATE_DIR/terraform" ]; then
         log_info "Destroying infrastructure..."
         echo ""
-        
+
         local orig_dir="$(pwd)"
         cd "$STATE_DIR/terraform" || return 1
-        
+
+        # Update lock file to match current configuration
+        log_info "Updating Terraform lock file..."
+        if ! terraform init -upgrade -input=false 2>&1 | tee "$orig_dir/$STATE_DIR/terraform-init-upgrade.log"; then
+            log_warning "Terraform init -upgrade failed, but continuing with destroy..."
+        fi
+
         if terraform destroy -auto-approve 2>&1 | tee "$orig_dir/$STATE_DIR/terraform-destroy.log"; then
             log_success "Infrastructure destroyed"
         else
@@ -390,7 +396,7 @@ destroy_deployment() {
             cd "$orig_dir"
             return 1
         fi
-        
+
         cd "$orig_dir"
     fi
     
