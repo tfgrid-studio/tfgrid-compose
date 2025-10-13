@@ -225,6 +225,7 @@ case "$COMMAND" in
         # Parse nodes, resources, gateway, network config (no 'local' - not in function)
         gateway_nodes=$(yaml_get "$APP_MANIFEST" "nodes.gateway")
         backend_nodes=$(yaml_get "$APP_MANIFEST" "nodes.backend")
+        vm_node=$(yaml_get "$APP_MANIFEST" "nodes.vm")
         
         if [ -n "$gateway_nodes" ]; then
             if [[ "$gateway_nodes" == "["* ]]; then
@@ -235,6 +236,7 @@ case "$COMMAND" in
         fi
         
         [ -n "$backend_nodes" ] && export TF_VAR_internal_nodes="$backend_nodes"
+        [ -n "$vm_node" ] && export TF_VAR_vm_node="$vm_node"
         
         # Parse resources
         gateway_cpu=$(yaml_get "$APP_MANIFEST" "resources.gateway.cpu")
@@ -243,6 +245,9 @@ case "$COMMAND" in
         backend_cpu=$(yaml_get "$APP_MANIFEST" "resources.backend.cpu")
         backend_mem=$(yaml_get "$APP_MANIFEST" "resources.backend.memory")
         backend_disk=$(yaml_get "$APP_MANIFEST" "resources.backend.disk")
+        vm_cpu=$(yaml_get "$APP_MANIFEST" "resources.vm.cpu")
+        vm_mem=$(yaml_get "$APP_MANIFEST" "resources.vm.memory")
+        vm_disk=$(yaml_get "$APP_MANIFEST" "resources.vm.disk")
         
         [ -n "$gateway_cpu" ] && export TF_VAR_gateway_cpu="$gateway_cpu"
         [ -n "$gateway_mem" ] && export TF_VAR_gateway_mem="$gateway_mem"
@@ -250,6 +255,9 @@ case "$COMMAND" in
         [ -n "$backend_cpu" ] && export TF_VAR_internal_cpu="$backend_cpu"
         [ -n "$backend_mem" ] && export TF_VAR_internal_mem="$backend_mem"
         [ -n "$backend_disk" ] && export TF_VAR_internal_disk="$backend_disk"
+        [ -n "$vm_cpu" ] && export TF_VAR_vm_cpu="$vm_cpu"
+        [ -n "$vm_mem" ] && export TF_VAR_vm_mem="$vm_mem"
+        [ -n "$vm_disk" ] && export TF_VAR_vm_disk="$vm_disk"
         
         # Parse network
         main_network=$(yaml_get "$APP_MANIFEST" "network.main")

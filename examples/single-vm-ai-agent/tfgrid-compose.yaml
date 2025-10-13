@@ -1,0 +1,32 @@
+name: ai-agent
+version: 1.0.0
+
+description: AI Agent deployment on single VM using Qwen Code
+
+# Pattern compatibility
+patterns:
+  recommended: single-vm
+  supported:
+    - single-vm
+
+# Network configuration
+network:
+  # How Ansible connects to configure VMs
+  main: wireguard  # Options: public, wireguard, mycelium
+  
+  # Single VM doesn't need inter-node communication
+  inter_node: wireguard  # N/A for single VM
+  
+  # How users access your application
+  mode: wireguard-only  # Options: wireguard-only, mycelium-only, both
+
+# Node selection
+nodes:
+  vm: 1  # Replace with your node ID
+
+# Resource allocation
+resources:
+  vm:
+    cpu: 4
+    memory: 8192  # 8GB
+    disk: 100     # 100GB

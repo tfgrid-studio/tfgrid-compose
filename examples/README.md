@@ -24,7 +24,34 @@ Deploy a single VM with a static website using nginx.
 
 ---
 
-### 2. Gateway with SSL - Production Multi-Node
+### 2. Single VM - AI Agent Development Environment
+**Path:** [`single-vm-ai-agent/`](./single-vm-ai-agent/)  
+**Difficulty:** ⭐⭐ Intermediate  
+**Deploy Time:** ~4 minutes
+
+Deploy a complete AI-powered development agent with code generation capabilities.
+
+**Features:**
+- ✅ Node.js 20 + Qwen CLI
+- ✅ AI agent with project management
+- ✅ Git configuration & SSH keys
+- ✅ Development workspace
+- ✅ Ansible playbook deployment
+
+**Use Cases:**
+- AI-assisted development
+- Autonomous code generation
+- Learning AI development tools
+- Building AND deploying apps with AI
+
+**What Makes This Different:**
+- Shows Ansible playbook deployment (vs bash hooks)
+- Complex multi-step setup automated
+- Can deploy other patterns from within the AI agent VM!
+
+---
+
+### 3. Gateway with SSL - Production Multi-Node
 **Path:** [`gateway-ssl/`](./gateway-ssl/)  
 **Difficulty:** ⭐⭐ Intermediate  
 **Deploy Time:** ~5 minutes
@@ -46,7 +73,7 @@ Production-ready gateway with SSL/TLS, load balancing, and backend VMs.
 
 ---
 
-### 3. K3s Cluster - Kubernetes on ThreeFold
+### 4. K3s Cluster - Kubernetes on ThreeFold
 **Path:** [`k3s-cluster/`](./k3s-cluster/)  
 **Difficulty:** ⭐⭐⭐ Advanced  
 **Deploy Time:** ~8 minutes
