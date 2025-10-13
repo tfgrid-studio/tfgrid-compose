@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Task: Setup WireGuard connection
+# Task: Setup WireGuard connection (simplified to match working external)
 
 set -e
 
@@ -9,7 +9,7 @@ source "$SCRIPT_DIR/../common.sh"
 # Get state directory from environment
 STATE_DIR="${STATE_DIR:-.tfgrid-compose}"
 
-# Get app name from state file (source of truth)
+# Get app name from state file
 APP_NAME=$(grep "^app_name:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
 if [ -z "$APP_NAME" ]; then
     log_error "No app_name found in state file"
@@ -28,50 +28,101 @@ log_step "Setting up WireGuard connection..."
 
 # Check if WireGuard is installed
 if ! command -v wg-quick &> /dev/null; then
-    log_warning "WireGuard not installed. Install it to enable connectivity:"
-    log_info "  Ubuntu/Debian: sudo apt install wireguard"
-    log_info "  macOS: brew install wireguard-tools"
-    log_error "WireGuard setup failed"
+    log_error "WireGuard not installed. Install with: sudo apt install wireguard"
     exit 1
 fi
 
-# Extract WireGuard config from Terraform
+# Check if jq is available (for parsing terraform output)
+if ! command -v jq &> /dev/null; then
+    log_error "jq not installed. Install with: sudo apt install jq"
+    exit 1
+fi
+
+log_info "Extracting WireGuard configuration..."
+
+# Detect OpenTofu or Terraform (prefer OpenTofu as it's open source)
+if command -v tofu &> /dev/null; then
+    TF_CMD="tofu"
+elif command -v terraform &> /dev/null; then
+    TF_CMD="terraform"
+else
+    log_error "Neither OpenTofu nor Terraform found"
+    exit 1
+fi
+
+# Simple interface naming (matches external pattern)
+wg_interface="wg-${APP_NAME}"
+
+# Use absolute path for config file
+abs_state_dir="$(cd "$STATE_DIR" && pwd)"
+wg_conf_file="$abs_state_dir/${wg_interface}.conf"
+
+# Extract WireGuard config from Terraform directory
 cd "$STATE_DIR/terraform" || exit 1
 
-wg_config=$(terraform output -raw wg_config 2>/dev/null)
-
-if [ -z "$wg_config" ] || [ "$wg_config" == "null" ]; then
-    log_error "No WireGuard config found in Terraform outputs"
+# Extract and save directly to file
+if ! $TF_CMD show -json 2>/dev/null | jq -r '.values.outputs.wg_config.value' > "$wg_conf_file.tmp" 2>/dev/null; then
+    cd - >/dev/null
+    log_error "Failed to extract WireGuard config from Terraform"
     exit 1
 fi
 
 cd - >/dev/null
 
-# Strip 'tfgrid-' prefix if present to match original naming (e.g., wg-ai-agent not wg-tfgrid-ai-agent)
-INTERFACE_NAME="${APP_NAME#tfgrid-}"
+# Clean up the config: remove line breaks in PrivateKey field
+# The Terraform output sometimes has embedded newlines that break wg-quick
+# Fix: PrivateKey = XXX\n= -> PrivateKey = XXX=
+sed ':a;N;$!ba;s/PrivateKey = \([^\n]*\)\n=/PrivateKey = \1=/g' "$wg_conf_file.tmp" > "$wg_conf_file"
+rm -f "$wg_conf_file.tmp"
 
-# Use app-specific interface name
-wg_interface="wg-${INTERFACE_NAME}"
-wg_conf_file="$STATE_DIR/${wg_interface}.conf"
+# Verify config was extracted
+if [ ! -s "$wg_conf_file" ]; then
+    log_error "WireGuard config is empty or missing"
+    exit 1
+fi
 
-# Save config to file
-echo "$wg_config" > "$wg_conf_file"
 chmod 600 "$wg_conf_file"
 
 # Deploy config to system
 log_info "Configuring WireGuard interface: $wg_interface"
-
-# Stop existing interface if it exists (clean shutdown)
-sudo wg-quick down "$wg_interface" 2>/dev/null || true
-
-# Copy config to system location
 sudo cp "$wg_conf_file" "/etc/wireguard/${wg_interface}.conf"
 sudo chmod 600 "/etc/wireguard/${wg_interface}.conf"
 
-# Start WireGuard
+# Clean up any conflicting WireGuard interfaces
+log_info "Checking for conflicting WireGuard interfaces..."
+
+# Get the IP range from our config
+our_ip_range=$(grep "AllowedIPs" "$wg_conf_file" | head -1 | awk '{print $3}' | cut -d',' -f1)
+
+if [ -n "$our_ip_range" ]; then
+    # Check for active WireGuard interfaces
+    active_interfaces=$(sudo wg show interfaces 2>/dev/null || echo "")
+    
+    if [ -n "$active_interfaces" ]; then
+        for iface in $active_interfaces; do
+            # Check if this interface uses our IP range
+            if sudo wg show "$iface" allowed-ips 2>/dev/null | grep -q "$our_ip_range"; then
+                if [ "$iface" != "$wg_interface" ]; then
+                    log_warning "Found conflicting WireGuard interface: $iface (uses same IP range)"
+                    log_info "Stopping conflicting interface: $iface"
+                    sudo wg-quick down "$iface" 2>/dev/null || true
+                fi
+            fi
+        done
+    fi
+fi
+
+# Stop our interface if it exists from previous deployment
+if sudo wg show "$wg_interface" 2>/dev/null | grep -q "interface:"; then
+    log_info "Stopping existing interface: $wg_interface"
+    sudo wg-quick down "$wg_interface" 2>/dev/null || true
+fi
+
+# Start WireGuard (simple, like external)
 log_info "Starting WireGuard interface..."
-if ! sudo wg-quick up "$wg_interface" 2>&1 | tee -a "$STATE_DIR/wireguard.log"; then
-    log_error "Failed to start WireGuard"
+if ! sudo wg-quick up "$wg_interface"; then
+    log_error "Failed to start WireGuard interface"
+    log_info "Check config: /etc/wireguard/${wg_interface}.conf"
     exit 1
 fi
 

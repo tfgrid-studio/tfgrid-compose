@@ -1,32 +1,39 @@
-name: my-website
+name: single-vm-baseline
 version: 1.0.0
 
-description: Simple static website on a single VM
+description: Basic single VM deployment - proven baseline configuration
 
-# Pattern compatibility
+# Pattern Configuration
+# Specifies which deployment pattern to use
 patterns:
   recommended: single-vm
   supported:
     - single-vm
 
-# Network configuration
+# Network Configuration
+# Defines connectivity and access methods for the deployment
 network:
-  # How Ansible connects to configure VMs
-  main: public  # Options: public, wireguard, mycelium
+  # Primary network for Ansible management connections
+  # Options: wireguard, mycelium, public
+  main: wireguard
   
-  # Single VM doesn't need inter-node communication
-  inter_node: wireguard  # N/A for single VM
+  # Inter-node communication network (not applicable for single VM)
+  # Options: wireguard, mycelium
+  inter_node: wireguard
   
-  # How users access your application
-  mode: wireguard-only  # Options: wireguard-only, mycelium-only, both
+  # Application network mode - defines how services are exposed
+  # Options: wireguard-only, mycelium-only, both
+  mode: both
 
-# Node selection
+# ThreeFold Grid Node Selection
+# Specify the node ID from https://dashboard.grid.tf/
 nodes:
-  vm: 1  # Single node ID
+  vm: 8
 
-# Resource allocation
+# Resource Allocation
+# CPU cores, memory (MB), and disk space (GB) for the virtual machine
 resources:
   vm:
-    cpu: 2
-    memory: 2048  # 2GB
-    disk: 25      # 25GB
+    cpu: 4
+    memory: 8192
+    disk: 100
