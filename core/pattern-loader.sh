@@ -139,13 +139,17 @@ validate_pattern_requirements() {
     
     log_step "Validating pattern requirements..."
     
-    # Check if Terraform is required
+    # Check if Terraform/OpenTofu is required
     if [ -d "$PATTERN_INFRASTRUCTURE_DIR" ] && [ -n "$(ls -A "$PATTERN_INFRASTRUCTURE_DIR"/*.tf 2>/dev/null)" ]; then
-        if ! command_exists terraform; then
-            log_error "Terraform is required for this pattern"
+        if ! command_exists tofu && ! command_exists terraform; then
+            log_error "Terraform or OpenTofu is required for this pattern"
             return 1
         fi
-        log_success "Terraform available"
+        if command_exists tofu; then
+            log_success "OpenTofu available"
+        else
+            log_success "Terraform available"
+        fi
     fi
     
     # Check if Ansible is required

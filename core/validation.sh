@@ -69,15 +69,17 @@ validate_prerequisites() {
     
     log_step "Validating system prerequisites..."
     
-    # Check Terraform
-    if command_exists terraform; then
-        log_success "Terraform found: $(terraform --version | head -1)"
-    elif command_exists tofu; then
+    # Check Terraform/OpenTofu (prefer OpenTofu as it's open source)
+    if command_exists tofu; then
+        export TF_CMD="tofu"
         log_success "OpenTofu found: $(tofu --version | head -1)"
+    elif command_exists terraform; then
+        export TF_CMD="terraform"
+        log_success "Terraform found: $(terraform --version | head -1)"
     else
         log_error "Terraform/OpenTofu not found"
-        log_info "Install: https://www.terraform.io/downloads"
-        log_info "Or OpenTofu: https://opentofu.org/docs/intro/install/"
+        log_info "Install OpenTofu (recommended): https://opentofu.org/docs/intro/install/"
+        log_info "Or Terraform: https://www.terraform.io/downloads"
         missing=1
     fi
     

@@ -380,19 +380,29 @@ destroy_deployment() {
         log_info "Destroying infrastructure..."
         echo ""
 
+        # Detect OpenTofu or Terraform (prefer OpenTofu as it's open source)
+        if command -v tofu &> /dev/null; then
+            TF_CMD="tofu"
+        elif command -v terraform &> /dev/null; then
+            TF_CMD="terraform"
+        else
+            log_error "Neither OpenTofu nor Terraform found"
+            return 1
+        fi
+
         local orig_dir="$(pwd)"
         cd "$STATE_DIR/terraform" || return 1
 
         # Update lock file to match current configuration
-        log_info "Updating Terraform lock file..."
-        if ! terraform init -upgrade -input=false 2>&1 | tee "$orig_dir/$STATE_DIR/terraform-init-upgrade.log"; then
-            log_warning "Terraform init -upgrade failed, but continuing with destroy..."
+        log_info "Updating lock file..."
+        if ! $TF_CMD init -upgrade -input=false 2>&1 | tee "$orig_dir/$STATE_DIR/terraform-init-upgrade.log"; then
+            log_warning "Init -upgrade failed, but continuing with destroy..."
         fi
 
-        if terraform destroy -auto-approve 2>&1 | tee "$orig_dir/$STATE_DIR/terraform-destroy.log"; then
+        if $TF_CMD destroy -auto-approve 2>&1 | tee "$orig_dir/$STATE_DIR/terraform-destroy.log"; then
             log_success "Infrastructure destroyed"
         else
-            log_error "Terraform destroy failed. Check: $STATE_DIR/terraform-destroy.log"
+            log_error "Destroy failed. Check: $STATE_DIR/terraform-destroy.log"
             cd "$orig_dir"
             return 1
         fi

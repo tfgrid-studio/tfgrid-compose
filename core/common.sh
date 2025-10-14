@@ -42,8 +42,9 @@ command_exists() {
 check_requirements() {
     local missing=()
     
-    if ! command_exists terraform; then
-        missing+=("terraform")
+    # Check for Terraform or OpenTofu (prefer OpenTofu)
+    if ! command_exists tofu && ! command_exists terraform; then
+        missing+=("terraform/tofu")
     fi
     
     if ! command_exists ansible-playbook; then
