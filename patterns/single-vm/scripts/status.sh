@@ -29,4 +29,4 @@ ssh -o LogLevel=ERROR \
     -o StrictHostKeyChecking=no \
     -o UserKnownHostsFile=/dev/null \
     root@$VM_IP \
-    "systemctl status $APP_NAME"
+    "systemctl status tfgrid-ai-agent || echo 'Service not found, checking if AI agent is running manually...'; ps aux | grep -v grep | grep -E '(ai-agent|qwen|agent-loop)' || echo 'No AI agent processes found'"
