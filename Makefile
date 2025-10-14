@@ -8,7 +8,7 @@ APP ?=
 help:
 	@echo "╔═══════════════════════════════════════════════════════════════╗"
 	@echo "║  TFGrid Compose - Universal Deployment Orchestrator           ║"
-	@echo "║  Status: ✅ Production Ready (v0.1.0-mvp)                     ║"
+	@echo "║  Status: ✅ Production Ready (v0.9.0)                         ║"
 	@echo "╚═══════════════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "📚 Full Documentation: docs/QUICKSTART.md"

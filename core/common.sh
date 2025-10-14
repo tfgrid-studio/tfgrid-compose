@@ -267,7 +267,7 @@ show_help() {
     echo -e "${CYAN}Documentation:${NC}"
     echo "  https://github.com/tfgrid-studio/tfgrid-compose"
     echo ""
-    echo -e "${CYAN}Version:${NC} 0.1.0 (MVP)"
+    echo -e "${CYAN}Version:${NC} 0.9.0"
 }
 
 # Export functions for use in other scripts

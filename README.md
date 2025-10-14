@@ -5,7 +5,7 @@
 > **Note:** This repository was renamed from `tfgrid-deployer` to `tfgrid-compose` on Oct 9, 2025 as part of the TFGrid Studio rebrand.
 
 [![Status](https://img.shields.io/badge/status-production--ready-green)]() 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue)]() 
+[![Version](https://img.shields.io/badge/version-0.9.0-blue)]() 
 [![Patterns](https://img.shields.io/badge/patterns-3%2F3-success)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
 
@@ -38,7 +38,7 @@ tfgrid-deployer/
 
 ## Current Status
 
-**🎉 COMPLETE FIRST LAYER - v2.0.0**
+**🎉 COMPLETE FIRST LAYER - v0.9.0**
 
 All 3 core deployment patterns are production-ready!
 
@@ -303,7 +303,7 @@ Apache 2.0 - See LICENSE file
 
 **Part of:** [TFGrid Studio](https://github.com/tfgrid-studio)  
 **Status:** ✅ Complete First Layer  
-**Version:** 2.0.0  
+**Version:** 0.9.0  
 **Patterns:** 3/3 Production Ready
 
 **All deployment patterns complete and ready for production!** 🚀
