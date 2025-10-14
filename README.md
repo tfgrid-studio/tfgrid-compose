@@ -27,7 +27,7 @@ TFGrid Compose is a production-ready deployment platform that makes deploying ap
 ## Structure
 
 ```
-tfgrid-deployer/
+tfgrid-compose/
 ├── cli/                     # tfgrid-compose CLI tool
 ├── core/                    # Core orchestration logic
 ├── patterns/                # Deployment patterns
@@ -138,7 +138,7 @@ git clone https://github.com/tfgrid-studio/tfgrid-compose
 git clone https://github.com/tfgrid-studio/tfgrid-ai-agent
 
 # Install (auto-configures PATH)
-cd tfgrid-deployer
+cd tfgrid-compose
 make install
 ```
 
