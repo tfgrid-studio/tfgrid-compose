@@ -2,3 +2,9 @@
 # Global variables for all hosts
 ansible_user: root
 ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+# AI Agent setup variables
+nodejs_version: "20"
+ai_agent_workspace: /opt/ai-agent-projects
+ai_agent_repo: https://github.com/tfgrid-studio/tfgrid-ai-agent.git
+ai_agent_path: /opt/ai-agent

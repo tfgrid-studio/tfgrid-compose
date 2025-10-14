@@ -22,7 +22,7 @@ network:
 
 # Node selection
 nodes:
-  vm: 1  # Replace with your node ID
+  vm: 8  # Replace with your node ID
 
 # Resource allocation
 resources:

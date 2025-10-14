@@ -47,10 +47,16 @@
       Host github.com
         IdentityFile /root/.ssh/id_ed25519_git
         StrictHostKeyChecking no
-      
+
       Host gitlab.com
         IdentityFile /root/.ssh/id_ed25519_git
         StrictHostKeyChecking no
+
+      {% if gitea_url != '' %}
+      Host {{ gitea_url }}
+        IdentityFile /root/.ssh/id_ed25519_git
+        StrictHostKeyChecking no
+      {% endif %}
 
 - name: Configure Qwen API key if provided
   lineinfile:
@@ -75,6 +81,22 @@
       changed_when: false
       
   when: github_token is defined and github_token != ''
+
+- name: Configure Gitea token for git operations (if provided)
+  block:
+    - name: Setup git credential helper with Gitea token
+      shell: |
+        git config --global credential.helper store
+        echo "https://{{ gitea_token }}@{{ gitea_url }}" >> /root/.git-credentials
+        chmod 600 /root/.git-credentials
+      no_log: yes
+
+    - name: Verify git credentials configured for Gitea
+      shell: git config --global credential.helper
+      register: gitea_cred_check
+      changed_when: false
+
+  when: gitea_token is defined and gitea_token != '' and gitea_url is defined and gitea_url != ''
 
 - name: Display git SSH public key
   debug:

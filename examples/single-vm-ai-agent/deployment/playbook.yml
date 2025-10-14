@@ -8,7 +8,7 @@
   vars:
     nodejs_version: "20"
     ai_agent_workspace: /opt/ai-agent-projects
-    ai_agent_repo: https://github.com/tfgrid-studio/ai-agent.git
+    ai_agent_repo: https://github.com/tfgrid-studio/tfgrid-ai-agent.git
     ai_agent_path: /opt/ai-agent
     git_user_name: "{{ lookup('env', 'GIT_USER_NAME') | default('AI Agent', true) }}"
     git_user_email: "{{ lookup('env', 'GIT_USER_EMAIL') | default('ai-agent@tfgrid.local', true) }}"
