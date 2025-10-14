@@ -721,16 +721,61 @@ EOF
         esac
         ;;
         
+    update)
+        # Update command - install latest version from GitHub
+        log_info "TFGrid Compose v$VERSION - Update"
+        echo ""
+
+        # Check if curl is available
+        if ! command -v curl >/dev/null 2>&1; then
+            log_error "curl is required for update. Please install curl first."
+            exit 1
+        fi
+
+        # Check if git is available
+        if ! command -v git >/dev/null 2>&1; then
+            log_error "git is required for update. Please install git first."
+            exit 1
+        fi
+
+        echo "🔄 Checking for updates..."
+        echo ""
+
+        # Create temp directory
+        TEMP_DIR=$(mktemp -d)
+        trap "rm -rf '$TEMP_DIR'" EXIT
+
+        # Clone latest version
+        if ! git clone --depth 1 https://github.com/tfgrid-studio/tfgrid-compose.git "$TEMP_DIR/tfgrid-compose" >/dev/null 2>&1; then
+            log_error "Failed to download latest version from GitHub"
+            exit 1
+        fi
+
+        echo "📦 Installing latest version..."
+
+        # Install the latest version
+        cd "$TEMP_DIR/tfgrid-compose"
+        if ! make install >/dev/null 2>&1; then
+            log_error "Failed to install latest version"
+            exit 1
+        fi
+
+        echo ""
+        log_success "✅ Successfully updated to latest version!"
+        echo ""
+        echo "🧪 Test with: tfgrid-compose --version"
+        ;;
+
     version|--version|-v)
         # Version command
         echo "TFGrid Compose v$VERSION"
         ;;
-        
+
     help|--help|-h|"")
         # Help command
         show_help
         ;;
-        
+
     *)
         log_error "Unknown command: $COMMAND"
         echo ""
