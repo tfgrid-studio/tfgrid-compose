@@ -42,6 +42,8 @@ single-vm pattern (generic)
    export GIT_USER_EMAIL="you@example.com"
    export QWEN_API_KEY="your-key"  # Optional
    export GITHUB_TOKEN="ghp_..."    # Optional
+   export GITEA_URL="git.example.com"    # Optional
+   export GITEA_TOKEN="your_token"       # Optional
    ```
 
 ## Quick Start
@@ -142,8 +144,8 @@ This single-VM AI agent can:
 - API key only for enterprise/paid features
 
 **Git push fails:**
-- Add SSH key to GitHub (shown in deployment output)
-- Or use GITHUB_TOKEN environment variable
+- Add SSH key to GitHub/Gitea (shown in deployment output)
+- Or use GITHUB_TOKEN/GITEA_TOKEN environment variables
 
 ## Related Examples
 
