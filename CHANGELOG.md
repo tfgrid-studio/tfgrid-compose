@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **CRITICAL: Makefile install bug**: Fixed wrapper script generation - the installed binary was only a shebang line and didn't execute the actual script, causing all commands to silently fail
 - **`update` command**: Added missing `exit 0` to prevent script from continuing after update completes
 
 ## [0.10.0] - 2025-10-15
