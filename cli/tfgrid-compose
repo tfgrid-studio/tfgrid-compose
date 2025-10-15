@@ -16,6 +16,8 @@ source "$DEPLOYER_ROOT/core/orchestrator.sh"
 source "$DEPLOYER_ROOT/core/registry.sh"
 source "$DEPLOYER_ROOT/core/app-cache.sh"
 source "$DEPLOYER_ROOT/core/deployment-state.sh"
+source "$DEPLOYER_ROOT/core/login.sh"
+source "$DEPLOYER_ROOT/core/config.sh"
 
 # Version
 VERSION="0.10.0"
@@ -864,6 +866,23 @@ EOF
         echo ""
         echo "🧪 Test with: tfgrid-compose --version"
         exit 0
+        ;;
+
+    login)
+        # Login command
+        shift
+        cmd_login "$@"
+        ;;
+
+    logout)
+        # Logout command
+        cmd_logout
+        ;;
+
+    config)
+        # Config command
+        shift
+        cmd_config "$@"
         ;;
 
     version|--version|-v)
