@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`update` command**: Added missing `exit 0` to prevent script from continuing after update completes
+
 ## [0.10.0] - 2025-10-15
 
 ### Added - Registry CLI Integration 🚀

@@ -863,6 +863,7 @@ EOF
         log_success "✅ Successfully updated to latest version!"
         echo ""
         echo "🧪 Test with: tfgrid-compose --version"
+        exit 0
         ;;
 
     version|--version|-v)
