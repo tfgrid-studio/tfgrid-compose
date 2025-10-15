@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2025-10-15
+
+### Added - Registry CLI Integration 🚀
+- **Registry Integration**: Deploy apps by name from the registry
+  - `search` command - Browse and search available apps
+  - `list` command - List locally deployed apps  
+  - `switch` command - Switch between deployed apps
+- **App Caching**: Automatic download and caching of registry apps
+  - Apps cached in `~/.config/tfgrid-compose/apps/`
+  - Smart caching with Git-based updates
+- **Multi-App Deployment**: Deploy and manage multiple apps simultaneously
+  - Per-app state management in `~/.config/tfgrid-compose/state/`
+  - Active app context switching
+  - No conflicts between deployments
+
+### Changed
+- **`up` command**: Now accepts app name or path
+  - `tfgrid-compose up wordpress` - Deploy from registry
+  - `tfgrid-compose up ./my-app` - Deploy from local path
+- **Help system**: Reorganized into logical sections
+  - Registry Commands (search, list, switch)
+  - Deployment Commands (init, up, down, clean)
+  - Management Commands (exec, logs, status, ssh, address)
+- **Version**: Updated to 0.10.0
+
+### Technical Details
+- New module: `core/registry.sh` - Registry fetching and search
+- New module: `core/app-cache.sh` - App download and caching
+- New module: `core/deployment-state.sh` - Multi-app state management
+- Registry cached with 1-hour TTL
+- Backward compatible with existing deployments
+
+---
+
 ## [0.9.0] - 2025-10-14
 
 ### Added
@@ -67,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Date | Description |
 |---------|------|-------------|
+| 0.10.0 | 2025-10-15 | Registry CLI integration, multi-app deployment, search/list/switch |
 | 0.9.0 | 2025-10-14 | OpenTofu support, version standardization, focused roadmap |
 | Pre-0.9.0 | 2025-10-09 | Core features complete, all patterns production-ready |
 
@@ -96,16 +131,14 @@ No breaking changes. This release is fully backward compatible.
 
 ## Future Releases
 
-### Planned for 0.10.0
-- Multi-deployment management
-- Deployment list/switch commands
+### Planned for 0.11.0
 - Enhanced monitoring capabilities
 - Architecture documentation
 - Troubleshooting guide
-
-### Planned for 0.11.0
-- CI/CD pipeline
 - Shell completion (bash/zsh/fish)
+
+### Planned for 0.12.0
+- CI/CD pipeline
 - Expanded test coverage
 - Pre-commit hooks
 - Debug mode
