@@ -24,6 +24,22 @@ TFGrid Compose is a production-ready deployment platform that makes deploying ap
 - ✅ **State management** - Tracks all deployments automatically
 - ✅ **Idempotency** - Safe to retry, prevents duplicate deployments
 
+## 📚 Documentation
+
+**Complete documentation:** **[docs.tfgrid.studio](https://docs.tfgrid.studio)**
+
+### Quick Links
+- **[Getting Started](https://docs.tfgrid.studio/getting-started/quickstart/)** - Installation and first deployment
+- **[Architecture](https://docs.tfgrid.studio/architecture/overview/)** - System design and components
+- **[Troubleshooting](https://docs.tfgrid.studio/troubleshooting/guide/)** - Common errors and solutions
+- **[AI Agent Guide](https://docs.tfgrid.studio/guides/ai-agent/)** - Deploy AI coding assistant
+- **[Pattern Contract](https://docs.tfgrid.studio/development/pattern-contract/)** - Create custom patterns
+
+### Community
+- **[Contributing](https://docs.tfgrid.studio/community/contributing/)** - How to contribute
+- **[Code of Conduct](https://docs.tfgrid.studio/community/code-of-conduct/)** - Community guidelines
+- **[Security Policy](https://docs.tfgrid.studio/community/security/)** - Report vulnerabilities
+
 ## Structure
 
 ```
@@ -282,18 +298,26 @@ make status APP=../tfgrid-ai-agent
 make down APP=../tfgrid-ai-agent
 ```
 
-### Contributing
-
-Contributions welcome! See [Contributing Guide](.github/CONTRIBUTING.md)
-
 ## Troubleshooting
 
-See [Quick Start Guide](docs/QUICKSTART.md#troubleshooting) for common issues.
+**Full guide:** [docs.tfgrid.studio/troubleshooting/guide](https://docs.tfgrid.studio/troubleshooting/guide/)
 
 **Quick fixes:**
 - Missing prerequisites: `tfgrid-compose up` will tell you what's missing
-- Existing deployment: `make down APP=<app>` then redeploy
-- State corruption: `make clean` (⚠️ removes state)
+- Existing deployment: `tfgrid-compose down <app>` then redeploy
+- State corruption: `rm -rf .tfgrid-compose/` (⚠️ removes state)
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guide](https://docs.tfgrid.studio/community/contributing/) and [Code of Conduct](https://docs.tfgrid.studio/community/code-of-conduct/).
+
+**Quick start:**
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+**Security issues:** See our [Security Policy](https://docs.tfgrid.studio/community/security/)
 
 ## License
 
@@ -310,14 +334,10 @@ Apache 2.0 - See LICENSE file
 
 ---
 
-## 📖 Complete Documentation Index
+## Links
 
-| Document | Purpose | Audience |
-|----------|---------|----------|
-| [README.md](README.md) | Overview and quick reference | Everyone |
-| [docs/QUICKSTART.md](docs/QUICKSTART.md) | 5-minute setup guide | New users |
-| [docs/AI_AGENT_GUIDE.md](docs/AI_AGENT_GUIDE.md) | AI agent workflows | AI agent users |
-| [docs/CONTEXT_FILE_USAGE.md](docs/CONTEXT_FILE_USAGE.md) | Context file guide | All users |
-| [TODO.md](TODO.md) | Future roadmap | Contributors |
-| [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md) | Development notes | Developers |
-| [Makefile](Makefile) | Command reference (`make help`) | CLI users |
+- **📚 Documentation:** [docs.tfgrid.studio](https://docs.tfgrid.studio)
+- **🌐 Main Site:** [tfgrid.studio](https://tfgrid.studio)
+- **💬 Discussions:** [GitHub Discussions](https://github.com/orgs/tfgrid-studio/discussions)
+- **🐛 Issues:** [GitHub Issues](https://github.com/tfgrid-studio/tfgrid-compose/issues)
+- **📝 Changelog:** [CHANGELOG.md](CHANGELOG.md)
