@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **CRITICAL: Makefile install bug**: Fixed wrapper script generation - the installed binary was only a shebang line and didn't execute the actual script, causing all commands to silently fail
+- **Registry URL**: Fixed registry URL to point to correct repo (`app-registry` not `registry`)
+- **Registry parser**: Updated YAML parser to handle nested `apps.official`/`apps.verified` format
 - **`update` command**: Added missing `exit 0` to prevent script from continuing after update completes
 
 ## [0.10.0] - 2025-10-15

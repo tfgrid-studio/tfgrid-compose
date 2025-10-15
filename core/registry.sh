@@ -3,7 +3,7 @@
 # Handles fetching and caching the app registry from GitHub
 
 # Registry configuration
-REGISTRY_URL="https://raw.githubusercontent.com/tfgrid-studio/registry/main/apps.yaml"
+REGISTRY_URL="https://raw.githubusercontent.com/tfgrid-studio/app-registry/main/registry/apps.yaml"
 REGISTRY_DIR="$HOME/.config/tfgrid-compose/registry"
 REGISTRY_FILE="$REGISTRY_DIR/apps.yaml"
 REGISTRY_CACHE_TTL=3600  # 1 hour in seconds
@@ -82,18 +82,16 @@ search_registry() {
         return 1
     fi
     
-    # Parse YAML and filter apps
-    # This is a simple grep-based parser for the registry format
+    # Parse YAML and filter apps (supports nested apps.official/apps.verified format)
     echo "$registry" | awk -v query="$query" -v tag="$tag" '
     BEGIN { 
         in_app = 0
         app_name = ""
         app_desc = ""
         app_tags = ""
-        app_repo = ""
     }
     
-    /^[a-zA-Z0-9_-]+:/ {
+    /^    - name:/ {
         # Print previous app if matches
         if (in_app && app_name != "") {
             match_found = 0
@@ -110,26 +108,21 @@ search_registry() {
         
         # Start new app
         in_app = 1
-        app_name = $1
-        gsub(/:/, "", app_name)
+        app_name = $3
+        gsub(/^[ \t]+|[ \t]+$/, "", app_name)
         app_desc = ""
         app_tags = ""
-        app_repo = ""
     }
     
-    /^  description:/ {
-        app_desc = substr($0, index($0, ":") + 2)
+    /^      description:/ {
+        app_desc = substr($0, index($0, "description:") + 12)
         gsub(/^[ \t]+|[ \t]+$/, "", app_desc)
     }
     
-    /^  tags:/ {
-        getline
-        while ($0 ~ /^    -/) {
-            tag_value = $2
-            gsub(/^[ \t]+|[ \t]+$/, "", tag_value)
-            app_tags = app_tags " " tag_value
-            getline
-        }
+    /^        - / && in_app {
+        tag_value = $2
+        gsub(/^[ \t]+|[ \t]+$/, "", tag_value)
+        app_tags = app_tags " " tag_value
     }
     
     END {
@@ -149,7 +142,7 @@ search_registry() {
     }'
 }
 
-# Get app details from registry
+# Get app details from registry  
 get_app_info() {
     local app_name="$1"
     
@@ -158,26 +151,31 @@ get_app_info() {
         return 1
     fi
     
-    # Extract app info
+    # Extract app info from nested apps.official/apps.verified format
     echo "$registry" | awk -v app="$app_name" '
     BEGIN { 
         in_app = 0
         found = 0
     }
     
-    /^[a-zA-Z0-9_-]+:/ {
-        current_app = $1
-        gsub(/:/, "", current_app)
+    /^    - name:/ {
+        current_app = $3
+        gsub(/^[ \t]+|[ \t]+$/, "", current_app)
         if (current_app == app) {
             in_app = 1
             found = 1
+            print
         } else {
             in_app = 0
         }
     }
     
-    in_app {
+    in_app && /^      / {
         print
+    }
+    
+    /^    - name:/ && in_app && current_app != app {
+        in_app = 0
     }
     
     END {
@@ -191,10 +189,30 @@ get_app_info() {
 get_app_repo() {
     local app_name="$1"
     
-    get_app_info "$app_name" | awk '
-    /^  repo:/ {
-        repo = substr($0, index($0, ":") + 2)
+    local registry=$(get_registry)
+    if [ -z "$registry" ]; then
+        return 1
+    fi
+    
+    # Extract repo URL directly
+    echo "$registry" | awk -v app="$app_name" '
+    /^    - name:/ {
+        current_app = $3
+        gsub(/^[ \t]+|[ \t]+$/, "", current_app)
+        if (current_app == app) {
+            in_app = 1
+        } else {
+            in_app = 0
+        }
+    }
+    
+    in_app && /^      repo:/ {
+        repo = substr($0, index($0, "repo:") + 5)
         gsub(/^[ \t]+|[ \t]+$/, "", repo)
+        # Convert github.com/org/repo to https://
+        if (index(repo, "http") == 0) {
+            repo = "https://" repo
+        }
         print repo
         exit
     }'
