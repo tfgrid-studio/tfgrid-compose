@@ -12,6 +12,14 @@ inventory.ini
 .env
 .env.local
 
+# Credentials (belt & suspenders - actual files are in ~/.config/)
+credentials.yaml
+mnemonic
+*_token
+*.secret
+*.key
+*.pem
+
 # OS
 .DS_Store
 Thumbs.db
