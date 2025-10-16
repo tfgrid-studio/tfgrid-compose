@@ -7,7 +7,12 @@
 # List all configuration
 config_list() {
     if [ ! -f "$CREDENTIALS_FILE" ]; then
-        log_error "No credentials found. Run: tfgrid-compose login"
+        echo ""
+        log_error "No credentials found"
+        echo ""
+        echo "You need to login first:"
+        echo "  tfgrid-compose login"
+        echo ""
         return 1
     fi
     
@@ -57,7 +62,16 @@ config_get() {
     local key="$1"
     
     if [ -z "$key" ]; then
-        log_error "Usage: tfgrid-compose config get <key>"
+        echo ""
+        log_error "Key is required"
+        echo ""
+        echo "Usage:"
+        echo "  tfgrid-compose config get <key>"
+        echo ""
+        echo "Examples:"
+        echo "  tfgrid-compose config get mnemonic"
+        echo "  tfgrid-compose config get github-token"
+        echo ""
         return 1
     fi
     
@@ -120,7 +134,16 @@ config_set() {
     local value="$2"
     
     if [ -z "$key" ] || [ -z "$value" ]; then
-        log_error "Usage: tfgrid-compose config set <key> <value>"
+        echo ""
+        log_error "Both key and value are required"
+        echo ""
+        echo "Usage:"
+        echo "  tfgrid-compose config set <key> <value>"
+        echo ""
+        echo "Examples:"
+        echo "  tfgrid-compose config set github-token ghp_xyz123"
+        echo "  tfgrid-compose config set gitea-url https://git.example.com"
+        echo ""
         return 1
     fi
     
@@ -196,7 +219,16 @@ config_delete() {
     local key="$1"
     
     if [ -z "$key" ]; then
-        log_error "Usage: tfgrid-compose config delete <key>"
+        echo ""
+        log_error "Key is required"
+        echo ""
+        echo "Usage:"
+        echo "  tfgrid-compose config delete <key>"
+        echo ""
+        echo "Examples:"
+        echo "  tfgrid-compose config delete github-token"
+        echo "  tfgrid-compose config delete gitea-token"
+        echo ""
         return 1
     fi
     
@@ -207,7 +239,13 @@ config_delete() {
     
     # Prevent deleting required mnemonic
     if [ "$key" = "threefold.mnemonic" ] || [ "$key" = "mnemonic" ]; then
-        log_error "Cannot delete mnemonic. Use 'tfgrid-compose logout' instead"
+        echo ""
+        log_error "Cannot delete mnemonic"
+        echo ""
+        echo "The mnemonic is required for deployments."
+        echo "To remove all credentials, use:"
+        echo "  tfgrid-compose logout"
+        echo ""
         return 1
     fi
     

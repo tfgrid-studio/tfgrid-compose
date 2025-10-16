@@ -37,9 +37,16 @@ load_mnemonic() {
     fi
     
     # Not found - provide helpful error
-    log_error "ThreeFold mnemonic not found"
     echo ""
-    log_info "Please set your mnemonic using one of these methods:"
+    log_error "ThreeFold mnemonic not configured"
+    echo ""
+    echo "You need to login with your ThreeFold wallet:"
+    echo "  tfgrid-compose login"
+    echo ""
+    echo "Need help? See the setup guide:"
+    echo "  → tfgrid-compose docs"
+    echo "  → https://docs.tfgrid.studio/getting-started/threefold-setup"
+    log_info ""    
     echo ""
     echo "  Option 1 (Recommended): Use standard ThreeFold location"
     echo "    mkdir -p ~/.config/threefold"
@@ -77,9 +84,13 @@ validate_prerequisites() {
         export TF_CMD="terraform"
         log_success "Terraform found: $(terraform --version | head -1)"
     else
-        log_error "Terraform/OpenTofu not found"
-        log_info "Install OpenTofu (recommended): https://opentofu.org/docs/intro/install/"
-        log_info "Or Terraform: https://www.terraform.io/downloads"
+        echo ""
+        log_error "Terraform or OpenTofu is required"
+        echo ""
+        echo "Install options:"
+        echo "  OpenTofu (recommended): https://opentofu.org/docs/intro/install/"
+        echo "  Terraform: https://www.terraform.io/downloads"
+        echo ""
         missing=1
     fi
     
@@ -87,9 +98,14 @@ validate_prerequisites() {
     if command_exists ansible-playbook; then
         log_success "Ansible found: $(ansible --version | head -1)"
     else
-        log_error "Ansible not found"
-        log_info "Install on Ubuntu/Debian: sudo apt install ansible"
-        log_info "Install on macOS: brew install ansible"
+        echo ""
+        log_error "Ansible is required"
+        echo ""
+        echo "Install:"
+        echo "  Ubuntu/Debian: sudo apt install ansible"
+        echo "  macOS: brew install ansible"
+        echo "  Docs: https://docs.ansible.com/ansible/latest/installation_guide/"
+        echo ""
         missing=1
     fi
     
@@ -97,8 +113,13 @@ validate_prerequisites() {
     if command_exists ssh; then
         log_success "SSH client found"
     else
-        log_error "SSH client not found"
-        log_info "Install: sudo apt install openssh-client"
+        echo ""
+        log_error "SSH client is required"
+        echo ""
+        echo "Install:"
+        echo "  Ubuntu/Debian: sudo apt install openssh-client"
+        echo "  macOS: Built-in (should already have ssh)"
+        echo ""
         missing=1
     fi
     
@@ -139,19 +160,49 @@ validate_app_path() {
     local app_path="$1"
     
     if [ -z "$app_path" ]; then
-        log_error "App path not specified"
-        log_info "Usage: tfgrid-compose up <app-path>"
+        echo ""
+        log_error "App name or path is required"
+        echo ""
+        echo "Usage:"
+        echo "  tfgrid-compose up <app-name>     # From registry"
+        echo "  tfgrid-compose up <app-path>     # Local app"
+        echo ""
+        echo "Examples:"
+        echo "  tfgrid-compose up tfgrid-ai-agent"
+        echo "  tfgrid-compose up ./my-app"
+        echo ""
+        echo "Browse available apps:"
+        echo "  tfgrid-compose search"
+        echo ""
         return 1
     fi
     
     if [ ! -d "$app_path" ]; then
+        echo ""
         log_error "App directory not found: $app_path"
+        echo ""
+        echo "Check:"
+        echo "  1. Path is correct"
+        echo "  2. Directory exists"
+        echo "  3. You're in the right location"
+        echo ""
+        echo "Browse registry apps:"
+        echo "  tfgrid-compose search"
+        echo ""
         return 1
     fi
     
     if [ ! -f "$app_path/tfgrid-compose.yaml" ]; then
-        log_error "App manifest not found: $app_path/tfgrid-compose.yaml"
-        log_info "Every app needs a tfgrid-compose.yaml manifest"
+        echo ""
+        log_error "App manifest not found"
+        echo ""
+        echo "Expected: $app_path/tfgrid-compose.yaml"
+        echo ""
+        echo "Every app needs a tfgrid-compose.yaml file."
+        echo "Learn more:"
+        echo "  → tfgrid-compose docs"
+        echo "  → https://docs.tfgrid.studio/development/pattern-contract"
+        echo ""
         return 1
     fi
     

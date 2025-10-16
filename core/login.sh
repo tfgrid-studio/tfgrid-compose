@@ -37,13 +37,27 @@ prompt_mnemonic() {
     read -r mnemonic
     
     if [ -z "$mnemonic" ]; then
-        log_error "Mnemonic is required"
+        echo "" >&2
+        log_error "Mnemonic is required to deploy on ThreeFold Grid"
+        echo "" >&2
+        echo "Need help getting started?" >&2
+        echo "  → tfgrid-compose docs" >&2
+        echo "  → https://docs.tfgrid.studio/getting-started/threefold-setup" >&2
+        echo "" >&2
         return 1
     fi
     
     if ! validate_mnemonic "$mnemonic"; then
         local word_count=$(echo "$mnemonic" | wc -w | tr -d ' ')
-        log_error "Invalid mnemonic format. Expected 12 or 24 words, got $word_count"
+        echo "" >&2
+        log_error "Invalid seed phrase format" >&2
+        echo "" >&2
+        echo "Expected: 12 or 24 words" >&2
+        echo "Got: $word_count words" >&2
+        echo "" >&2
+        echo "Check your seed phrase and try again." >&2
+        echo "Each word should be separated by spaces." >&2
+        echo "" >&2
         return 1
     fi
     
@@ -163,7 +177,15 @@ load_credentials() {
 
 check_credentials() {
     if ! is_logged_in; then
-        log_error "No credentials found. Run: tfgrid-compose login"
+        echo ""
+        log_error "No credentials configured"
+        echo ""
+        echo "You need to login first:"
+        echo "  tfgrid-compose login"
+        echo ""
+        echo "Need help? See the setup guide:"
+        echo "  → tfgrid-compose docs"
+        echo ""
         return 1
     fi
     load_credentials
@@ -222,8 +244,13 @@ cmd_login() {
                 shift
                 ;;
             *)
+                echo ""
                 log_error "Unknown option: $1"
-                echo "Usage: tfgrid-compose login [--check]"
+                echo ""
+                echo "Usage:"
+                echo "  tfgrid-compose login          # Interactive login"
+                echo "  tfgrid-compose login --check  # Check credentials"
+                echo ""
                 return 1
                 ;;
         esac
