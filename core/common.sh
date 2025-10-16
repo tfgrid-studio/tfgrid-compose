@@ -260,6 +260,7 @@ show_help() {
     echo ""
     echo -e "${CYAN}Other Commands:${NC}"
     echo -e "  ${GREEN}patterns${NC}              List available deployment patterns"
+    echo -e "  ${GREEN}docs${NC}                  Open documentation in browser"
     echo -e "  ${GREEN}update${NC}                Update to latest version"
     echo -e "  ${GREEN}help${NC}                  Show this help message"
     echo ""

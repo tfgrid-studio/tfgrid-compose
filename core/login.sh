@@ -15,12 +15,12 @@ is_logged_in() {
     [ -f "$CREDENTIALS_FILE" ] && [ -s "$CREDENTIALS_FILE" ]
 }
 
-# Validate mnemonic format (12 words)
+# Validate mnemonic format (12 or 24 words)
 validate_mnemonic() {
     local mnemonic="$1"
     local word_count=$(echo "$mnemonic" | wc -w | tr -d ' ')
     
-    if [ "$word_count" -ne 12 ]; then
+    if [ "$word_count" -ne 12 ] && [ "$word_count" -ne 24 ]; then
         return 1
     fi
     return 0
@@ -28,12 +28,12 @@ validate_mnemonic() {
 
 # Prompt for mnemonic
 prompt_mnemonic() {
-    echo ""
-    echo "ThreeFold Mnemonic (required):"
-    echo "  This is your 12-word secret phrase from your ThreeFold wallet"
-    echo "  ℹ  Need help? Visit: https://manual.grid.tf/"
-    echo ""
-    echo -n "→ Enter mnemonic: "
+    echo "" >&2
+    echo "ThreeFold Mnemonic (required):" >&2
+    echo "  This is your seed phrase from your ThreeFold Chain wallet" >&2
+    echo "  ℹ  Need help? See: tfgrid-compose docs" >&2
+    echo "" >&2
+    echo -n "→ Enter mnemonic: " >&2
     read -r mnemonic
     
     if [ -z "$mnemonic" ]; then
@@ -42,7 +42,8 @@ prompt_mnemonic() {
     fi
     
     if ! validate_mnemonic "$mnemonic"; then
-        log_error "Invalid mnemonic format. Expected 12 words, got $(echo "$mnemonic" | wc -w | tr -d ' ')"
+        local word_count=$(echo "$mnemonic" | wc -w | tr -d ' ')
+        log_error "Invalid mnemonic format. Expected 12 or 24 words, got $word_count"
         return 1
     fi
     
@@ -51,13 +52,13 @@ prompt_mnemonic() {
 
 # Prompt for GitHub token
 prompt_github_token() {
-    echo ""
-    echo "GitHub Token (optional):"
-    echo "  Required for deploying from private GitHub repositories"
-    echo "  ℹ  Create at: https://github.com/settings/tokens"
-    echo "  ℹ  Press Enter to skip"
-    echo ""
-    echo -n "→ GitHub token: "
+    echo "" >&2
+    echo "GitHub Token (optional):" >&2
+    echo "  Required for deploying from private GitHub repositories" >&2
+    echo "  ℹ  Create at: https://github.com/settings/tokens" >&2
+    echo "  ℹ  Press Enter to skip" >&2
+    echo "" >&2
+    echo -n "→ GitHub token: " >&2
     read -r token
     
     echo "$token"
@@ -65,12 +66,12 @@ prompt_github_token() {
 
 # Prompt for Gitea URL
 prompt_gitea_url() {
-    echo ""
-    echo "Gitea URL (optional):"
-    echo "  Default: https://git.ourworld.tf"
-    echo "  ℹ  Press Enter to use default"
-    echo ""
-    echo -n "→ Gitea URL: "
+    echo "" >&2
+    echo "Gitea URL (optional):" >&2
+    echo "  Default: https://git.ourworld.tf" >&2
+    echo "  ℹ  Press Enter to use default" >&2
+    echo "" >&2
+    echo -n "→ Gitea URL: " >&2
     read -r url
     
     if [ -z "$url" ]; then
@@ -82,12 +83,12 @@ prompt_gitea_url() {
 
 # Prompt for Gitea token
 prompt_gitea_token() {
-    echo ""
-    echo "Gitea Token (optional):"
-    echo "  Required for deploying from private Gitea repositories"
-    echo "  ℹ  Press Enter to skip"
-    echo ""
-    echo -n "→ Gitea token: "
+    echo "" >&2
+    echo "Gitea Token (optional):" >&2
+    echo "  Required for deploying from private Gitea repositories" >&2
+    echo "  ℹ  Press Enter to skip" >&2
+    echo "" >&2
+    echo -n "→ Gitea token: " >&2
     read -r token
     
     echo "$token"
@@ -160,13 +161,11 @@ load_credentials() {
     return 0
 }
 
-# Check credentials validity
 check_credentials() {
     if ! is_logged_in; then
         log_error "No credentials found. Run: tfgrid-compose login"
         return 1
     fi
-    
     load_credentials
     
     echo ""
@@ -176,7 +175,8 @@ check_credentials() {
     # Check mnemonic
     if [ -n "$TFGRID_MNEMONIC" ]; then
         if validate_mnemonic "$TFGRID_MNEMONIC"; then
-            echo "✓ Mnemonic: Valid (12 words)"
+            local word_count=$(echo "$TFGRID_MNEMONIC" | wc -w | tr -d ' ')
+            echo "✓ Mnemonic: Valid ($word_count words)"
         else
             echo "✗ Mnemonic: Invalid format"
             return 1

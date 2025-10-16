@@ -11,10 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`login` command**: Interactive credential setup with validation
 - **`logout` command**: Securely remove stored credentials
 - **`config` command**: Manage configuration (list, get, set, delete)
+- **`docs` command**: Open documentation in browser (auto-detects xdg-open/open)
 - **Credentials file**: Secure storage at `~/.config/tfgrid-compose/credentials.yaml`
 - **Improved help**: Updated help text with setup commands and new user quick start
+- **Enhanced .gitignore**: Added credential files for extra security
+- **Mnemonic validation**: Support for both 12 and 24 word seed phrases
 
 ### Fixed
+- **Login/Config commands**: Fixed `set -e` issue causing silent exit when no arguments provided
 - **CRITICAL: Makefile install bug**: Fixed wrapper script generation - the installed binary was only a shebang line and didn't execute the actual script, causing all commands to silently fail
 - **Registry URL**: Fixed registry URL to point to correct repo (`app-registry` not `registry`)
 - **Registry parser**: Updated YAML parser to handle nested `apps.official`/`apps.verified` format

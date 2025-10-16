@@ -239,7 +239,7 @@ config_delete() {
 # Config command dispatcher
 cmd_config() {
     local subcommand="$1"
-    shift
+    shift || true
     
     case "$subcommand" in
         list)

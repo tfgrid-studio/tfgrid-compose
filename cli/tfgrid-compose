@@ -870,7 +870,6 @@ EOF
 
     login)
         # Login command
-        shift
         cmd_login "$@"
         ;;
 
@@ -881,8 +880,28 @@ EOF
 
     config)
         # Config command
-        shift
         cmd_config "$@"
+        ;;
+
+    docs)
+        # Documentation command
+        echo ""
+        echo "📚 TFGrid Compose Documentation"
+        echo ""
+        echo "→ https://docs.tfgrid.studio"
+        echo ""
+        
+        # Try to open in browser
+        if command -v xdg-open &> /dev/null; then
+            echo "Opening in browser..."
+            xdg-open "https://docs.tfgrid.studio" 2>/dev/null &
+        elif command -v open &> /dev/null; then
+            echo "Opening in browser..."
+            open "https://docs.tfgrid.studio" 2>/dev/null &
+        else
+            echo "ℹ  Copy the URL above to view in your browser"
+        fi
+        echo ""
         ;;
 
     version|--version|-v)
