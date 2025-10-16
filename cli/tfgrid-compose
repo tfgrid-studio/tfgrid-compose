@@ -898,14 +898,14 @@ EOF
         # Try to open in browser
         if command -v xdg-open &> /dev/null; then
             echo "Opening in browser..."
-            sleep 0.3
+            sleep 0.5
             xdg-open "$DOCS_URL" >/dev/null 2>&1 &
             disown
             echo ""
             echo "✓ Done"
         elif command -v open &> /dev/null; then
             echo "Opening in browser..."
-            sleep 0.3
+            sleep 0.5
             open "$DOCS_URL" >/dev/null 2>&1 &
             echo "✓ Done"
         else
