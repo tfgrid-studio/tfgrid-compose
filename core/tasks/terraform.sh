@@ -57,15 +57,15 @@ log_info "Extracting infrastructure outputs..."
 
 # Get primary IP (REQUIRED by all patterns)
 primary_ip=$($TF_CMD output -raw primary_ip 2>/dev/null || echo "")
-primary_ip_type=$($TF_CMD output -raw primary_ip_type 2>/dev/null || echo "unknown")
 
 if [ -n "$primary_ip" ]; then
     # Strip CIDR notation if present (e.g., 185.69.167.152/24 → 185.69.167.152)
     primary_ip=$(echo "$primary_ip" | cut -d'/' -f1)
     
-    echo "vm_ip: $primary_ip" >> "$orig_dir/$STATE_DIR/state.yaml"
-    echo "primary_ip: $primary_ip" >> "$orig_dir/$STATE_DIR/state.yaml"
-    echo "primary_ip_type: $primary_ip_type" >> "$orig_dir/$STATE_DIR/state.yaml"
+    # STATE_DIR is already absolute path, don't prepend $orig_dir
+    echo "vm_ip: $primary_ip" >> "$STATE_DIR/state.yaml"
+    echo "primary_ip: $primary_ip" >> "$STATE_DIR/state.yaml"
+    echo "primary_ip_type: $primary_ip_type" >> "$STATE_DIR/state.yaml"
     log_success "Primary IP ($primary_ip_type): $primary_ip"
 else
     log_error "No primary_ip output from pattern!"
@@ -76,24 +76,26 @@ fi
 # Get deployment name
 deployment_name=$($TF_CMD output -raw deployment_name 2>/dev/null || echo "")
 if [ -n "$deployment_name" ]; then
-    echo "deployment_name: $deployment_name" >> "$orig_dir/$STATE_DIR/state.yaml"
+    echo "deployment_name: $deployment_name" >> "$STATE_DIR/state.yaml"
 fi
 
-# Get node IDs (as JSON array)
-node_ids=$($TF_CMD output -json node_ids 2>/dev/null || echo "[]")
-echo "node_ids: $node_ids" >> "$orig_dir/$STATE_DIR/state.yaml"
-
-# Optional: Mycelium IP
+# Pattern-specific outputs
 mycelium_ip=$($TF_CMD output -raw mycelium_ip 2>/dev/null || echo "")
 if [ -n "$mycelium_ip" ]; then
-    echo "mycelium_ip: $mycelium_ip" >> "$orig_dir/$STATE_DIR/state.yaml"
+    echo "mycelium_ip: $mycelium_ip" >> "$STATE_DIR/state.yaml"
     log_info "Mycelium IP: $mycelium_ip"
+fi
+
+wg_config=$($TF_CMD output -raw wg_config 2>/dev/null || echo "")
+if [ -n "$wg_config" ]; then
+    echo "$wg_config" > "$STATE_DIR/wg.conf"
+    log_info "WireGuard config saved to: $STATE_DIR/wg.conf"
 fi
 
 # Optional: Secondary IPs (for multi-node patterns like gateway, k3s)
 secondary_ips=$($TF_CMD output -json secondary_ips 2>/dev/null || echo "")
 if [ -n "$secondary_ips" ] && [ "$secondary_ips" != "null" ]; then
-    echo "secondary_ips: $secondary_ips" >> "$orig_dir/$STATE_DIR/state.yaml"
+    echo "secondary_ips: $secondary_ips" >> "$STATE_DIR/state.yaml"
 fi
 
 cd "$orig_dir"

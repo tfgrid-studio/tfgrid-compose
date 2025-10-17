@@ -263,8 +263,8 @@ generate_terraform_config() {
         log_info "Backend nodes: $TF_VAR_internal_nodes"
     fi
     
-    # Single-VM pattern nodes
-    if [ -n "$vm_node" ]; then
+    # Single-VM pattern nodes (only if not already set from node selection)
+    if [ -z "$TF_VAR_vm_node" ] && [ -n "$vm_node" ]; then
         export TF_VAR_vm_node="$vm_node"
         log_info "VM node: $TF_VAR_vm_node"
     fi
@@ -290,10 +290,11 @@ generate_terraform_config() {
     [ -n "$backend_mem" ] && export TF_VAR_internal_mem="$backend_mem"
     [ -n "$backend_disk" ] && export TF_VAR_internal_disk="$backend_disk"
     
-    # Export single-VM resources
-    [ -n "$vm_cpu" ] && export TF_VAR_vm_cpu="$vm_cpu"
-    [ -n "$vm_mem" ] && export TF_VAR_vm_mem="$vm_mem"
-    [ -n "$vm_disk" ] && export TF_VAR_vm_disk="$vm_disk"
+    # Export single-VM resources ONLY if not already set (from node selection)
+    # This prevents overwriting the values we set earlier based on auto-selection
+    [ -z "$TF_VAR_vm_cpu" ] && [ -n "$vm_cpu" ] && export TF_VAR_vm_cpu="$vm_cpu"
+    [ -z "$TF_VAR_vm_mem" ] && [ -n "$vm_mem" ] && export TF_VAR_vm_mem="$vm_mem"
+    [ -z "$TF_VAR_vm_disk" ] && [ -n "$vm_disk" ] && export TF_VAR_vm_disk="$vm_disk"
     
     # Log resources based on pattern
     if [ -n "$gateway_cpu" ]; then
