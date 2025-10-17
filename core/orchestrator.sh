@@ -90,12 +90,45 @@ deploy_app() {
         fi
     fi
     
-    # Export Terraform variables
-    export TF_VAR_ai_agent_node=$DEPLOY_NODE
-    export TF_VAR_ai_agent_cpu=$DEPLOY_CPU
-    export TF_VAR_ai_agent_mem=$DEPLOY_MEM
-    export TF_VAR_ai_agent_disk=$DEPLOY_DISK
+    # Export Terraform variables based on pattern
     export TF_VAR_tfgrid_network=$DEPLOY_NETWORK
+    
+    # Pattern-specific variable mapping
+    case "$PATTERN_NAME" in
+        single-vm)
+            # Single-VM pattern
+            export TF_VAR_vm_node=$DEPLOY_NODE
+            export TF_VAR_vm_cpu=$DEPLOY_CPU
+            export TF_VAR_vm_mem=$DEPLOY_MEM
+            export TF_VAR_vm_disk=$DEPLOY_DISK
+            log_info "Exporting single-vm variables: node=$DEPLOY_NODE, cpu=$DEPLOY_CPU, mem=$DEPLOY_MEM, disk=$DEPLOY_DISK"
+            ;;
+        gateway)
+            # Gateway pattern (for now, use single node for gateway)
+            export TF_VAR_gateway_node=$DEPLOY_NODE
+            export TF_VAR_gateway_cpu=$DEPLOY_CPU
+            export TF_VAR_gateway_mem=$DEPLOY_MEM
+            export TF_VAR_gateway_disk=$DEPLOY_DISK
+            # Backend nodes would need additional selection logic
+            log_warning "Gateway pattern: Using single node for gateway. Multi-node selection coming in v0.11.0"
+            ;;
+        k3s)
+            # K3s pattern (for now, use single node for management)
+            export TF_VAR_management_node=$DEPLOY_NODE
+            export TF_VAR_management_cpu=$DEPLOY_CPU
+            export TF_VAR_management_mem=$DEPLOY_MEM
+            export TF_VAR_management_disk=$DEPLOY_DISK
+            log_warning "K3s pattern: Using single node for management. Multi-node selection coming in v0.11.0"
+            ;;
+        *)
+            # Unknown pattern - export generic variables
+            export TF_VAR_vm_node=$DEPLOY_NODE
+            export TF_VAR_vm_cpu=$DEPLOY_CPU
+            export TF_VAR_vm_mem=$DEPLOY_MEM
+            export TF_VAR_vm_disk=$DEPLOY_DISK
+            log_warning "Unknown pattern '$PATTERN_NAME', using generic vm_* variables"
+            ;;
+    esac
     
     log_success "Configuration complete"
     echo ""
