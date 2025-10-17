@@ -10,8 +10,6 @@ source "$SCRIPT_DIR/../common.sh"
 STATE_DIR="${STATE_DIR:-.tfgrid-compose}"
 
 log_step "Running Terraform..."
-log_info "DEBUG: STATE_DIR=$STATE_DIR"
-log_info "DEBUG: pwd=$(pwd)"
 
 # Detect OpenTofu or Terraform (prefer OpenTofu as it's open source)
 if command -v tofu &> /dev/null; then
@@ -25,13 +23,12 @@ fi
 
 # Save current directory for log paths
 orig_dir="$(pwd)"
-
 cd "$STATE_DIR/terraform" || exit 1
 
 # Initialize
 log_info "Initializing Terraform..."
 echo ""
-if ! $TF_CMD init -input=false 2>&1 | tee "$orig_dir/$STATE_DIR/terraform-init.log"; then
+if ! $TF_CMD init -input=false 2>&1 | tee "$STATE_DIR/terraform-init.log"; then
     log_error "Terraform init failed. Check: $STATE_DIR/terraform-init.log"
     cd "$orig_dir"
     exit 1
@@ -41,7 +38,7 @@ fi
 echo ""
 log_info "Planning infrastructure..."
 echo ""
-if ! $TF_CMD plan -out=tfplan 2>&1 | tee "$orig_dir/$STATE_DIR/terraform-plan.log"; then
+if ! $TF_CMD plan -out=tfplan -input=false 2>&1 | tee "$STATE_DIR/terraform-plan.log"; then
     log_error "Terraform plan failed. Check: $STATE_DIR/terraform-plan.log"
     cd "$orig_dir"
     exit 1
@@ -51,13 +48,11 @@ fi
 echo ""
 log_info "Applying infrastructure changes..."
 echo ""
-if ! $TF_CMD apply -auto-approve tfplan 2>&1 | tee "$orig_dir/$STATE_DIR/terraform-apply.log"; then
+if ! $TF_CMD apply -input=false tfplan 2>&1 | tee "$STATE_DIR/terraform-apply.log"; then
     log_error "Terraform apply failed. Check: $STATE_DIR/terraform-apply.log"
     cd "$orig_dir"
     exit 1
 fi
-
-# Get outputs using STANDARD pattern contract
 log_info "Extracting infrastructure outputs..."
 
 # Get primary IP (REQUIRED by all patterns)

@@ -84,6 +84,8 @@ deploy_app() {
             log_info "Auto-selecting best available node..."
             echo ""
             DEPLOY_NODE=$(select_best_node "$DEPLOY_CPU" "$DEPLOY_MEM" "$DEPLOY_DISK" "$DEPLOY_NETWORK")
+            # Clean any whitespace/newlines from node ID
+            DEPLOY_NODE=$(echo "$DEPLOY_NODE" | tr -d '[:space:]')
             if [ -z "$DEPLOY_NODE" ] || [ "$DEPLOY_NODE" = "null" ]; then
                 log_error "Failed to select node"
                 echo ""
@@ -95,6 +97,12 @@ deploy_app() {
             fi
         fi
     fi
+    
+    # Ensure all values are clean integers (remove any whitespace/newlines)
+    DEPLOY_NODE=$(echo "$DEPLOY_NODE" | tr -d '[:space:]')
+    DEPLOY_CPU=$(echo "$DEPLOY_CPU" | tr -d '[:space:]')
+    DEPLOY_MEM=$(echo "$DEPLOY_MEM" | tr -d '[:space:]')
+    DEPLOY_DISK=$(echo "$DEPLOY_DISK" | tr -d '[:space:]')
     
     # Export Terraform variables based on pattern
     export TF_VAR_tfgrid_network=$DEPLOY_NETWORK
