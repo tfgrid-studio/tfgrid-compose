@@ -38,9 +38,14 @@ deploy_app() {
     echo ""
     
     # Determine resources (priority: flags > .env > manifest > defaults)
-    DEPLOY_CPU=${CUSTOM_CPU:-${TF_VAR_ai_agent_cpu:-$(yaml_get "$APP_MANIFEST" "resources.cpu" || echo "2")}}
-    DEPLOY_MEM=${CUSTOM_MEM:-${TF_VAR_ai_agent_mem:-$(yaml_get "$APP_MANIFEST" "resources.memory" || echo "4096")}}
-    DEPLOY_DISK=${CUSTOM_DISK:-${TF_VAR_ai_agent_disk:-$(yaml_get "$APP_MANIFEST" "resources.disk" || echo "50")}}
+    # Try recommended first, fallback to min, then default
+    MANIFEST_CPU=$(yaml_get "$APP_MANIFEST" "resources.cpu.recommended" || yaml_get "$APP_MANIFEST" "resources.cpu.min" || echo "2")
+    MANIFEST_MEM=$(yaml_get "$APP_MANIFEST" "resources.memory.recommended" || yaml_get "$APP_MANIFEST" "resources.memory.min" || echo "4096")
+    MANIFEST_DISK=$(yaml_get "$APP_MANIFEST" "resources.disk.recommended" || yaml_get "$APP_MANIFEST" "resources.disk.min" || echo "50")
+    
+    DEPLOY_CPU=${CUSTOM_CPU:-${TF_VAR_ai_agent_cpu:-$MANIFEST_CPU}}
+    DEPLOY_MEM=${CUSTOM_MEM:-${TF_VAR_ai_agent_mem:-$MANIFEST_MEM}}
+    DEPLOY_DISK=${CUSTOM_DISK:-${TF_VAR_ai_agent_disk:-$MANIFEST_DISK}}
     DEPLOY_NETWORK=${CUSTOM_NETWORK:-${TF_VAR_tfgrid_network:-"main"}}
     
     # Interactive mode
