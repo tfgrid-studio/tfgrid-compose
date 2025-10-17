@@ -68,8 +68,10 @@ config_get() {
         echo "  tfgrid-compose config get <key>"
         echo ""
         echo "Examples:"
-        echo "  tfgrid-compose config get mnemonic"
-        echo "  tfgrid-compose config get github-token"
+        echo "  tfgrid-compose config get gitea-url    # Safe to retrieve"
+        echo ""
+        echo "Note: Secrets (mnemonic, tokens) cannot be retrieved via CLI"
+        echo "      for security. Use 'tfgrid-compose config list' to see status."
         echo ""
         return 1
     fi
@@ -83,20 +85,35 @@ config_get() {
     
     case "$key" in
         threefold.mnemonic|mnemonic)
-            if [ -n "$TFGRID_MNEMONIC" ]; then
-                echo "$TFGRID_MNEMONIC"
-            else
-                log_error "Mnemonic not set"
-                return 1
-            fi
+            echo ""
+            log_error "Mnemonic cannot be retrieved for security reasons"
+            echo ""
+            echo "The mnemonic is used internally for deployments but cannot"
+            echo "be displayed via CLI to prevent accidental exposure."
+            echo ""
+            echo "To verify it's configured:"
+            echo "  tfgrid-compose config list"
+            echo ""
+            echo "To view or edit the file directly (requires proper permissions):"
+            echo "  cat $CREDENTIALS_FILE"
+            echo "  vi $CREDENTIALS_FILE"
+            echo ""
+            return 1
             ;;
         github.token|github-token)
-            if [ -n "$TFGRID_GITHUB_TOKEN" ]; then
-                echo "$TFGRID_GITHUB_TOKEN"
-            else
-                log_error "GitHub token not set"
-                return 1
-            fi
+            echo ""
+            log_error "GitHub token cannot be retrieved for security reasons"
+            echo ""
+            echo "Tokens are used internally but cannot be displayed via CLI"
+            echo "to prevent accidental exposure."
+            echo ""
+            echo "To verify it's configured:"
+            echo "  tfgrid-compose config list"
+            echo ""
+            echo "To view the file directly (requires proper permissions):"
+            echo "  cat $CREDENTIALS_FILE"
+            echo ""
+            return 1
             ;;
         gitea.url|gitea-url)
             if [ -n "$TFGRID_GITEA_URL" ]; then
@@ -107,21 +124,31 @@ config_get() {
             fi
             ;;
         gitea.token|gitea-token)
-            if [ -n "$TFGRID_GITEA_TOKEN" ]; then
-                echo "$TFGRID_GITEA_TOKEN"
-            else
-                log_error "Gitea token not set"
-                return 1
-            fi
+            echo ""
+            log_error "Gitea token cannot be retrieved for security reasons"
+            echo ""
+            echo "Tokens are used internally but cannot be displayed via CLI"
+            echo "to prevent accidental exposure."
+            echo ""
+            echo "To verify it's configured:"
+            echo "  tfgrid-compose config list"
+            echo ""
+            echo "To view the file directly (requires proper permissions):"
+            echo "  cat $CREDENTIALS_FILE"
+            echo ""
+            return 1
             ;;
         *)
             log_error "Unknown key: $key"
             echo ""
             echo "Valid keys:"
-            echo "  threefold.mnemonic (or mnemonic)"
-            echo "  github.token (or github-token)"
-            echo "  gitea.url (or gitea-url)"
-            echo "  gitea.token (or gitea-token)"
+            echo "  threefold.mnemonic (or mnemonic)   [secret - cannot retrieve]"
+            echo "  github.token (or github-token)     [secret - cannot retrieve]"
+            echo "  gitea.url (or gitea-url)           [safe to retrieve]"
+            echo "  gitea.token (or gitea-token)       [secret - cannot retrieve]"
+            echo ""
+            echo "To view all configured values (masked):"
+            echo "  tfgrid-compose config list"
             return 1
             ;;
     esac
