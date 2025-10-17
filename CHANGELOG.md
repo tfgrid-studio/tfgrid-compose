@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added - UX Improvements (v0.10.1 in progress)
+## [0.10.1] - 2025-10-16
+
+### Added - UX Improvements 🎯
 - **`login` command**: Interactive credential setup with validation
 - **`logout` command**: Securely remove stored credentials
 - **`config` command**: Manage configuration (list, get, set, delete)
