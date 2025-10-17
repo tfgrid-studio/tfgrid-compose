@@ -64,6 +64,28 @@ prompt_mnemonic() {
     echo "$mnemonic"
 }
 
+# Validate GitHub token format (basic check)
+validate_github_token() {
+    local token="$1"
+    
+    # Empty is OK (optional)
+    if [ -z "$token" ]; then
+        return 0
+    fi
+    
+    # GitHub tokens should not have spaces
+    if [[ "$token" =~ [[:space:]] ]]; then
+        return 1
+    fi
+    
+    # GitHub tokens are typically 40+ characters
+    if [ ${#token} -lt 20 ]; then
+        return 1
+    fi
+    
+    return 0
+}
+
 # Prompt for GitHub token
 prompt_github_token() {
     echo "" >&2
@@ -74,6 +96,33 @@ prompt_github_token() {
     echo "" >&2
     echo -n "→ GitHub token: " >&2
     read -r token
+    
+    # Skip validation if empty (optional)
+    if [ -z "$token" ]; then
+        echo ""
+        return 0
+    fi
+    
+    # Validate token format
+    if ! validate_github_token "$token"; then
+        echo "" >&2
+        log_error "Invalid GitHub token format" >&2
+        echo "" >&2
+        echo "GitHub tokens should:" >&2
+        echo "  - Be at least 20 characters long" >&2
+        echo "  - Not contain spaces" >&2
+        echo "" >&2
+        echo "Press Enter to skip, or paste a valid token:" >&2
+        echo -n "→ GitHub token: " >&2
+        read -r token
+        
+        # If still invalid after retry, skip it
+        if [ -n "$token" ] && ! validate_github_token "$token"; then
+            echo "" >&2
+            log_warning "Invalid token format, skipping..." >&2
+            token=""
+        fi
+    fi
     
     echo "$token"
 }
@@ -136,23 +185,19 @@ github:
 EOF
     fi
     
-    # Add Gitea config if URL provided
-    if [ -n "$gitea_url" ] && [ "$gitea_url" != "https://git.ourworld.tf" ]; then
+    # Add Gitea config (always add if URL or token is set)
+    if [ -n "$gitea_url" ] || [ -n "$gitea_token" ]; then
+        # Use default URL if not provided
+        local final_gitea_url="${gitea_url:-https://git.ourworld.tf}"
+        
         cat >> "$CREDENTIALS_FILE" << EOF
 gitea:
-  url: "$gitea_url"
+  url: "$final_gitea_url"
 EOF
         if [ -n "$gitea_token" ]; then
             echo "  token: \"$gitea_token\"" >> "$CREDENTIALS_FILE"
         fi
         echo "" >> "$CREDENTIALS_FILE"
-    elif [ -n "$gitea_token" ]; then
-        cat >> "$CREDENTIALS_FILE" << EOF
-gitea:
-  url: "https://git.ourworld.tf"
-  token: "$gitea_token"
-
-EOF
     fi
     
     # Set secure permissions
@@ -283,19 +328,21 @@ cmd_login() {
     echo ""
     echo "Let's set up your credentials."
     
-    # Prompt for credentials
-    local mnemonic=$(prompt_mnemonic)
-    if [ $? -ne 0 ]; then
+    # Prompt for credentials (with proper error handling)
+    local mnemonic
+    if ! mnemonic=$(prompt_mnemonic); then
         return 1
     fi
     
-    local github_token=$(prompt_github_token)
-    local gitea_url=$(prompt_gitea_url)
-    local gitea_token=""
+    local github_token
+    github_token=$(prompt_github_token)
     
-    if [ -n "$gitea_url" ]; then
-        gitea_token=$(prompt_gitea_token)
-    fi
+    local gitea_url
+    gitea_url=$(prompt_gitea_url)
+    
+    local gitea_token=""
+    # Only prompt for Gitea token if URL was provided (even if default)
+    gitea_token=$(prompt_gitea_token)
     
     # Save credentials
     save_credentials "$mnemonic" "$github_token" "$gitea_url" "$gitea_token"
