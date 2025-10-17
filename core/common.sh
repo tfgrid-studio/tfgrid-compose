@@ -184,8 +184,8 @@ get_deployer_root() {
     echo "$(pwd)"
 }
 
-# State directory
-STATE_DIR=".tfgrid-compose"
+# State directory (use exported value if set, otherwise default)
+STATE_DIR="${STATE_DIR:-.tfgrid-compose}"
 
 # Create state directory
 create_state_dir() {

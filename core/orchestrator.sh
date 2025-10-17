@@ -161,6 +161,8 @@ EOF
     fi
     
     # Step 2: Run Terraform
+    # Ensure STATE_DIR is exported for subprocess
+    export STATE_DIR
     if ! bash "$DEPLOYER_ROOT/core/tasks/terraform.sh"; then
         log_error "Terraform deployment failed"
         return 1

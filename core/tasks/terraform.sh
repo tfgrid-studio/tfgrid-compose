@@ -10,6 +10,8 @@ source "$SCRIPT_DIR/../common.sh"
 STATE_DIR="${STATE_DIR:-.tfgrid-compose}"
 
 log_step "Running Terraform..."
+log_info "DEBUG: STATE_DIR=$STATE_DIR"
+log_info "DEBUG: pwd=$(pwd)"
 
 # Detect OpenTofu or Terraform (prefer OpenTofu as it's open source)
 if command -v tofu &> /dev/null; then
