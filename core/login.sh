@@ -28,40 +28,74 @@ validate_mnemonic() {
 
 # Prompt for mnemonic
 prompt_mnemonic() {
+    local mnemonic=""
+    local attempts=0
+    local max_attempts=3
+    
     echo "" >&2
     echo "ThreeFold Mnemonic (required):" >&2
     echo "  This is your seed phrase from your ThreeFold Chain wallet" >&2
     echo "  ℹ  Need help? See: tfgrid-compose docs" >&2
-    echo "" >&2
-    echo -n "→ Enter mnemonic: " >&2
-    read -r mnemonic
     
-    if [ -z "$mnemonic" ]; then
+    while [ $attempts -lt $max_attempts ]; do
         echo "" >&2
-        log_error "Mnemonic is required to deploy on ThreeFold Grid"
-        echo "" >&2
-        echo "Need help getting started?" >&2
-        echo "  → tfgrid-compose docs" >&2
-        echo "  → https://docs.tfgrid.studio/getting-started/threefold-setup" >&2
-        echo "" >&2
-        return 1
-    fi
-    
-    if ! validate_mnemonic "$mnemonic"; then
+        echo "→ Enter mnemonic (12 or 24 words):" >&2
+        echo "  (input hidden for security)" >&2
+        echo -n "  " >&2
+        read -s -r mnemonic
+        echo "" >&2  # New line after hidden input
+        
+        # Check if empty
+        if [ -z "$mnemonic" ]; then
+            attempts=$((attempts + 1))
+            echo "" >&2
+            log_error "Mnemonic cannot be empty"
+            echo "" >&2
+            if [ $attempts -lt $max_attempts ]; then
+                echo "Try again ($attempts/$max_attempts attempts used)" >&2
+                continue
+            else
+                echo "Maximum attempts reached." >&2
+                echo "" >&2
+                echo "Need help getting started?" >&2
+                echo "  → tfgrid-compose docs" >&2
+                echo "  → https://docs.tfgrid.studio/getting-started/threefold-setup" >&2
+                echo "" >&2
+                return 1
+            fi
+        fi
+        
+        # Validate word count
+        if ! validate_mnemonic "$mnemonic"; then
+            attempts=$((attempts + 1))
+            local word_count=$(echo "$mnemonic" | wc -w | tr -d ' ')
+            echo "" >&2
+            log_error "Invalid seed phrase format" >&2
+            echo "" >&2
+            echo "Expected: 12 or 24 words" >&2
+            echo "Got: $word_count words" >&2
+            echo "" >&2
+            if [ $attempts -lt $max_attempts ]; then
+                echo "Try again ($attempts/$max_attempts attempts used)" >&2
+                continue
+            else
+                echo "Maximum attempts reached." >&2
+                echo "" >&2
+                echo "Each word should be separated by spaces." >&2
+                echo "Run 'tfgrid-compose login' again when ready." >&2
+                echo "" >&2
+                return 1
+            fi
+        fi
+        
+        # Success!
         local word_count=$(echo "$mnemonic" | wc -w | tr -d ' ')
         echo "" >&2
-        log_error "Invalid seed phrase format" >&2
+        log_success "Validated: $word_count words" >&2
         echo "" >&2
-        echo "Expected: 12 or 24 words" >&2
-        echo "Got: $word_count words" >&2
-        echo "" >&2
-        echo "Check your seed phrase and try again." >&2
-        echo "Each word should be separated by spaces." >&2
-        echo "" >&2
-        return 1
-    fi
-    
-    echo "$mnemonic"
+        echo "$mnemonic"
+        return 0
+    done
 }
 
 # Validate GitHub token format (basic check)
@@ -94,12 +128,15 @@ prompt_github_token() {
     echo "  ℹ  Create at: https://github.com/settings/tokens" >&2
     echo "  ℹ  Press Enter to skip" >&2
     echo "" >&2
-    echo -n "→ GitHub token: " >&2
-    read -r token
+    echo "→ GitHub token:" >&2
+    echo "  (input hidden for security)" >&2
+    echo -n "  " >&2
+    read -s -r token
+    echo "" >&2  # New line after hidden input
     
     # Skip validation if empty (optional)
     if [ -z "$token" ]; then
-        echo ""
+        echo "" >&2
         return 0
     fi
     
@@ -113,8 +150,10 @@ prompt_github_token() {
         echo "  - Not contain spaces" >&2
         echo "" >&2
         echo "Press Enter to skip, or paste a valid token:" >&2
-        echo -n "→ GitHub token: " >&2
-        read -r token
+        echo "  (input hidden for security)" >&2
+        echo -n "  " >&2
+        read -s -r token
+        echo "" >&2
         
         # If still invalid after retry, skip it
         if [ -n "$token" ] && ! validate_github_token "$token"; then
@@ -122,6 +161,12 @@ prompt_github_token() {
             log_warning "Invalid token format, skipping..." >&2
             token=""
         fi
+    fi
+    
+    if [ -n "$token" ]; then
+        echo "" >&2
+        log_success "GitHub token configured" >&2
+        echo "" >&2
     fi
     
     echo "$token"
@@ -151,8 +196,17 @@ prompt_gitea_token() {
     echo "  Required for deploying from private Gitea repositories" >&2
     echo "  ℹ  Press Enter to skip" >&2
     echo "" >&2
-    echo -n "→ Gitea token: " >&2
-    read -r token
+    echo "→ Gitea token:" >&2
+    echo "  (input hidden for security)" >&2
+    echo -n "  " >&2
+    read -s -r token
+    echo "" >&2  # New line after hidden input
+    
+    if [ -n "$token" ]; then
+        echo "" >&2
+        log_success "Gitea token configured" >&2
+        echo "" >&2
+    fi
     
     echo "$token"
 }

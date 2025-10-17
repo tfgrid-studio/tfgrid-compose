@@ -81,8 +81,8 @@ init_deployment_state() {
     ensure_state_dir
     mkdir -p "$state_dir"
     
-    # Set as current app
-    set_current_app "$app_name"
+    # Set as current app (without checking if deployed, since we're deploying it now)
+    echo "$app_name" > "$CURRENT_APP_FILE"
 }
 
 # Clean deployment state for an app
