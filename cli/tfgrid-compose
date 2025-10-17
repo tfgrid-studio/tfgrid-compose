@@ -200,12 +200,64 @@ case "$COMMAND" in
         init_deployment_state "$APP_NAME"
         export_app_state_dir "$APP_NAME"
         
-        PATTERN_NAME="${2:-}"
+        # Parse deployment flags
+        shift  # Remove app name
+        PATTERN_NAME=""
+        INTERACTIVE_MODE=false
+        CUSTOM_NODE=""
+        CUSTOM_CPU=""
+        CUSTOM_MEM=""
+        CUSTOM_DISK=""
+        CUSTOM_NETWORK=""
         
-        # Extract pattern from --pattern= flag
-        if [[ "$PATTERN_NAME" == --pattern=* ]]; then
-            PATTERN_NAME="${PATTERN_NAME#--pattern=}"
-        fi
+        while [[ $# -gt 0 ]]; do
+            case $1 in
+                --pattern)
+                    PATTERN_NAME="$2"
+                    shift 2
+                    ;;
+                --pattern=*)
+                    PATTERN_NAME="${1#--pattern=}"
+                    shift
+                    ;;
+                -i|--interactive)
+                    INTERACTIVE_MODE=true
+                    shift
+                    ;;
+                --node)
+                    CUSTOM_NODE="$2"
+                    shift 2
+                    ;;
+                --cpu)
+                    CUSTOM_CPU="$2"
+                    shift 2
+                    ;;
+                --mem|--memory)
+                    CUSTOM_MEM="$2"
+                    shift 2
+                    ;;
+                --disk)
+                    CUSTOM_DISK="$2"
+                    shift 2
+                    ;;
+                --network)
+                    CUSTOM_NETWORK="$2"
+                    shift 2
+                    ;;
+                *)
+                    log_warning "Unknown flag: $1"
+                    shift
+                    ;;
+            esac
+        done
+        
+        # Export for use in orchestrator
+        export INTERACTIVE_MODE
+        export CUSTOM_NODE
+        export CUSTOM_CPU
+        export CUSTOM_MEM
+        export CUSTOM_DISK
+        export CUSTOM_NETWORK
         
         # Load app
         if ! load_app "$APP_PATH"; then

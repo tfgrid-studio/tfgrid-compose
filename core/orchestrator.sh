@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 source "$SCRIPT_DIR/pattern-loader.sh"
 source "$SCRIPT_DIR/app-loader.sh"
+source "$SCRIPT_DIR/node-selector.sh"
+source "$SCRIPT_DIR/interactive-config.sh"
 
 # Deploy application
 deploy_app() {
@@ -29,6 +31,67 @@ deploy_app() {
     
     # Create state directory
     create_state_dir
+    
+    # === Node & Resource Selection ===
+    echo ""
+    log_step "Configuring deployment..."
+    echo ""
+    
+    # Determine resources (priority: flags > .env > manifest > defaults)
+    DEPLOY_CPU=${CUSTOM_CPU:-${TF_VAR_ai_agent_cpu:-$(yaml_get "$APP_MANIFEST" "resources.cpu" || echo "2")}}
+    DEPLOY_MEM=${CUSTOM_MEM:-${TF_VAR_ai_agent_mem:-$(yaml_get "$APP_MANIFEST" "resources.memory" || echo "4096")}}
+    DEPLOY_DISK=${CUSTOM_DISK:-${TF_VAR_ai_agent_disk:-$(yaml_get "$APP_MANIFEST" "resources.disk" || echo "50")}}
+    DEPLOY_NETWORK=${CUSTOM_NETWORK:-${TF_VAR_tfgrid_network:-"main"}}
+    
+    # Interactive mode
+    if [ "$INTERACTIVE_MODE" = "true" ]; then
+        if ! run_interactive_config; then
+            log_error "Interactive configuration cancelled"
+            return 1
+        fi
+        
+        # Use values from interactive config
+        DEPLOY_NODE=${SELECTED_NODE_ID}
+        DEPLOY_CPU=${SELECTED_CPU}
+        DEPLOY_MEM=${SELECTED_MEM}
+        DEPLOY_DISK=${SELECTED_DISK}
+        DEPLOY_NETWORK=${SELECTED_NETWORK}
+    else
+        # Non-interactive: Use custom node or auto-select
+        if [ -n "$CUSTOM_NODE" ]; then
+            # Verify custom node
+            log_info "Using specified node: $CUSTOM_NODE"
+            echo ""
+            if ! verify_node_exists "$CUSTOM_NODE"; then
+                return 1
+            fi
+            DEPLOY_NODE=$CUSTOM_NODE
+        else
+            # Auto-select via GridProxy
+            log_info "Resources: $DEPLOY_CPU CPU, ${DEPLOY_MEM}MB RAM, ${DEPLOY_DISK}GB disk"
+            echo ""
+            DEPLOY_NODE=$(select_best_node "$DEPLOY_CPU" "$DEPLOY_MEM" "$DEPLOY_DISK" "$DEPLOY_NETWORK")
+            if [ -z "$DEPLOY_NODE" ] || [ "$DEPLOY_NODE" = "null" ]; then
+                log_error "Failed to select node"
+                echo ""
+                echo "Try:"
+                echo "  - Use interactive mode: tfgrid-compose up $APP_NAME -i"
+                echo "  - Specify node manually: tfgrid-compose up $APP_NAME --node <id>"
+                echo "  - Browse available nodes: https://dashboard.grid.tf"
+                return 1
+            fi
+        fi
+    fi
+    
+    # Export Terraform variables
+    export TF_VAR_ai_agent_node=$DEPLOY_NODE
+    export TF_VAR_ai_agent_cpu=$DEPLOY_CPU
+    export TF_VAR_ai_agent_mem=$DEPLOY_MEM
+    export TF_VAR_ai_agent_disk=$DEPLOY_DISK
+    export TF_VAR_tfgrid_network=$DEPLOY_NETWORK
+    
+    log_success "Configuration complete"
+    echo ""
     
     # Save deployment metadata
     log_step "Saving deployment metadata..."
