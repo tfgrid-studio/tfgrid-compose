@@ -24,35 +24,31 @@ config_list() {
     
     load_credentials
     
-    # Show mnemonic (masked)
+    # Show mnemonic (never expose any part)
     if [ -n "$TFGRID_MNEMONIC" ]; then
-        local first_word=$(echo "$TFGRID_MNEMONIC" | awk '{print $1}')
-        local last_word=$(echo "$TFGRID_MNEMONIC" | awk '{print $NF}')
         local word_count=$(echo "$TFGRID_MNEMONIC" | wc -w | tr -d ' ')
-        echo "threefold.mnemonic    $first_word ... $last_word ($word_count words)"
+        echo "threefold.mnemonic    ********** ($word_count words)"
     else
         echo "threefold.mnemonic    (not set)"
     fi
     
-    # Show GitHub token (masked)
+    # Show GitHub token (never expose any part)
     if [ -n "$TFGRID_GITHUB_TOKEN" ]; then
-        local prefix=$(echo "$TFGRID_GITHUB_TOKEN" | cut -c1-7)
-        echo "github.token          $prefix... (configured)"
+        echo "github.token          ********** (configured)"
     else
         echo "github.token          (not set)"
     fi
     
-    # Show Gitea URL
+    # Show Gitea URL (safe to show - it's a URL)
     if [ -n "$TFGRID_GITEA_URL" ]; then
         echo "gitea.url             $TFGRID_GITEA_URL"
     else
         echo "gitea.url             (not set)"
     fi
     
-    # Show Gitea token (masked)
+    # Show Gitea token (never expose any part)
     if [ -n "$TFGRID_GITEA_TOKEN" ]; then
-        local prefix=$(echo "$TFGRID_GITEA_TOKEN" | cut -c1-7)
-        echo "gitea.token           $prefix... (configured)"
+        echo "gitea.token           ********** (configured)"
     else
         echo "gitea.token           (not set)"
     fi
