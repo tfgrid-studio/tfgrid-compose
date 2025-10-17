@@ -29,8 +29,14 @@ deploy_app() {
         return 1
     fi
     
-    # Create state directory
-    create_state_dir
+    # State directory already created by init_deployment_state in CLI
+    # Verify STATE_DIR is set
+    if [ -z "$STATE_DIR" ]; then
+        log_error "STATE_DIR not set - internal error"
+        return 1
+    fi
+    
+    log_info "Using state directory: $STATE_DIR"
     
     # === Node & Resource Selection ===
     echo ""
