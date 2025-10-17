@@ -28,7 +28,10 @@ config_list() {
     if [ -n "$TFGRID_MNEMONIC" ]; then
         local first_word=$(echo "$TFGRID_MNEMONIC" | awk '{print $1}')
         local last_word=$(echo "$TFGRID_MNEMONIC" | awk '{print $NF}')
-        echo "threefold.mnemonic    $first_word ... $last_word (12 words)"
+        local word_count=$(echo "$TFGRID_MNEMONIC" | wc -w | tr -d ' ')
+        echo "threefold.mnemonic    $first_word ... $last_word ($word_count words)"
+    else
+        echo "threefold.mnemonic    (not set)"
     fi
     
     # Show GitHub token (masked)

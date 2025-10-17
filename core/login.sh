@@ -211,11 +211,19 @@ load_credentials() {
     fi
     
     # Export credentials as environment variables
-    # Note: This is a simple parser, assumes YAML structure
+    # Note: This is a simple YAML parser
+    
+    # Get mnemonic (under threefold section)
     export TFGRID_MNEMONIC=$(grep "mnemonic:" "$CREDENTIALS_FILE" | sed 's/.*mnemonic: "\(.*\)"/\1/')
-    export TFGRID_GITHUB_TOKEN=$(grep "token:" "$CREDENTIALS_FILE" | grep -A1 "github:" | tail -1 | sed 's/.*token: "\(.*\)"/\1/')
-    export TFGRID_GITEA_URL=$(grep "url:" "$CREDENTIALS_FILE" | grep -A2 "gitea:" | head -1 | sed 's/.*url: "\(.*\)"/\1/')
-    export TFGRID_GITEA_TOKEN=$(grep "token:" "$CREDENTIALS_FILE" | grep -A2 "gitea:" | tail -1 | sed 's/.*token: "\(.*\)"/\1/')
+    
+    # Get GitHub token (under github section)
+    export TFGRID_GITHUB_TOKEN=$(awk '/^github:/{flag=1; next} /^[a-z]/{flag=0} flag && /token:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*token: "\(.*\)"/\1/')
+    
+    # Get Gitea URL (under gitea section)
+    export TFGRID_GITEA_URL=$(awk '/^gitea:/{flag=1; next} /^[a-z]/{flag=0} flag && /url:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*url: "\(.*\)"/\1/')
+    
+    # Get Gitea token (under gitea section)
+    export TFGRID_GITEA_TOKEN=$(awk '/^gitea:/{flag=1; next} /^[a-z]/{flag=0} flag && /token:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*token: "\(.*\)"/\1/')
     
     return 0
 }
