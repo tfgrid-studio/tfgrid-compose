@@ -50,6 +50,7 @@ deploy_app() {
     
     # Interactive mode
     if [ "$INTERACTIVE_MODE" = "true" ]; then
+        log_info "Running interactive configuration..."
         if ! run_interactive_config; then
             log_error "Interactive configuration cancelled"
             return 1
@@ -63,7 +64,7 @@ deploy_app() {
         DEPLOY_NETWORK=${SELECTED_NETWORK}
     else
         # Non-interactive: Use custom node or auto-select
-        if [ -n "$CUSTOM_NODE" ]; then
+        if [ -n "$CUSTOM_NODE" ] && [ "$CUSTOM_NODE" != "" ]; then
             # Verify custom node
             log_info "Using specified node: $CUSTOM_NODE"
             echo ""
@@ -74,6 +75,7 @@ deploy_app() {
         else
             # Auto-select via GridProxy
             log_info "Resources: $DEPLOY_CPU CPU, ${DEPLOY_MEM}MB RAM, ${DEPLOY_DISK}GB disk"
+            log_info "Auto-selecting best available node..."
             echo ""
             DEPLOY_NODE=$(select_best_node "$DEPLOY_CPU" "$DEPLOY_MEM" "$DEPLOY_DISK" "$DEPLOY_NETWORK")
             if [ -z "$DEPLOY_NODE" ] || [ "$DEPLOY_NODE" = "null" ]; then
