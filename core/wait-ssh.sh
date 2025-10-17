@@ -6,7 +6,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-STATE_DIR=".tfgrid-compose"
+# Use STATE_DIR from environment (absolute path)
+STATE_DIR="${STATE_DIR:-.tfgrid-compose}"
 
 if [ ! -f "$STATE_DIR/state.yaml" ]; then
     log_error "No deployment found"
@@ -14,8 +15,23 @@ if [ ! -f "$STATE_DIR/state.yaml" ]; then
     exit 1
 fi
 
-# Get VM IP from state
-VM_IP=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" | awk '{print $2}')
+# Detect connectivity network type from state
+CONNECTIVITY_TYPE=$(grep "^primary_ip_type:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "wireguard")
+
+# Get appropriate IP based on connectivity type
+if [ "$CONNECTIVITY_TYPE" = "mycelium" ]; then
+    VM_IP=$(grep "^mycelium_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+    NETWORK_TYPE="Mycelium"
+else
+    VM_IP=$(grep "^primary_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+    NETWORK_TYPE="WireGuard"
+fi
+
+# Fallback to vm_ip if others not found
+if [ -z "$VM_IP" ]; then
+    VM_IP=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" | awk '{print $2}')
+    NETWORK_TYPE="Unknown"
+fi
 
 if [ -z "$VM_IP" ]; then
     log_error "No VM IP found in state"
@@ -25,8 +41,10 @@ fi
 # Strip CIDR notation if present (e.g., 185.69.167.152/24 → 185.69.167.152)
 VM_IP=$(echo "$VM_IP" | cut -d'/' -f1)
 
-log_step "Waiting for SSH to be ready on $VM_IP..."
-log_info "This may take a few minutes (timeout: 300 seconds)..."
+log_step "Waiting for SSH to be ready..."
+log_info "Network: $NETWORK_TYPE"
+log_info "IP: $VM_IP"
+log_info "Timeout: 300 seconds (5 minutes)"
 echo ""
 
 # Wait parameters
