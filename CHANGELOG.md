@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.5] - 2025-10-17
+
+### Fixed
+- **Destroy prompting for input**: Added `-input=false` to destroy command to use existing state without prompts
+
 ## [0.10.4] - 2025-10-17
 
 ### Fixed
-- **Destroy deployment bug**: Fixed duplicate log paths and missing tfvars in destroy command
-- **Interactive prompts on destroy**: Now uses existing tfvars file to avoid prompting for variables
+- **Destroy deployment bug**: Fixed duplicate log paths in destroy command
 
 ## [0.10.3] - 2025-10-17
 

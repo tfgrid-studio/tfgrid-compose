@@ -541,13 +541,8 @@ destroy_deployment() {
             log_warning "Init -upgrade failed, but continuing with destroy..."
         fi
 
-        # Use tfvars file if it exists, otherwise destroy will prompt for variables
-        local destroy_cmd="$TF_CMD destroy -auto-approve"
-        if [ -f "terraform.tfvars" ]; then
-            destroy_cmd="$destroy_cmd -var-file=terraform.tfvars"
-        fi
-
-        if $destroy_cmd 2>&1 | tee "$STATE_DIR/terraform-destroy.log"; then
+        # Destroy using state file (no variables needed, uses existing state)
+        if $TF_CMD destroy -auto-approve -input=false 2>&1 | tee "$STATE_DIR/terraform-destroy.log"; then
             log_success "Infrastructure destroyed"
         else
             log_error "Destroy failed. Check: $STATE_DIR/terraform-destroy.log"
