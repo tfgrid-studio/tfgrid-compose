@@ -20,7 +20,7 @@ source "$DEPLOYER_ROOT/core/login.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
 
 # Version
-VERSION="0.10.2"
+VERSION="0.10.3"
 
 # Context file support
 CONTEXT_FILE=".tfgrid-compose.yaml"
@@ -277,7 +277,13 @@ case "$COMMAND" in
             else
                 # Deployment exists but unhealthy - clean stale state
                 log_warning "Found unhealthy deployment state for $APP_NAME"
-                if ! validate_terraform_state "$APP_NAME"; then
+                
+                # Check if force deploy is requested
+                if [ "$FORCE_DEPLOY" = "true" ]; then
+                    log_info "Force deploy requested, cleaning unhealthy state..."
+                    clean_stale_state "$APP_NAME"
+                    echo ""
+                elif ! validate_terraform_state "$APP_NAME"; then
                     log_info "Detected stale Terraform state, cleaning..."
                     clean_stale_state "$APP_NAME"
                     echo ""

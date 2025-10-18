@@ -7,22 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.3] - 2025-10-17
+
+### Fixed
+- **Force flag in unhealthy state**: `--force` now properly triggers cleanup for unhealthy deployments
+
 ## [0.10.2] - 2025-10-17
 
 ### Fixed - Critical Production Bugs 🐛
 - **Missing `primary_ip_type` extraction**: Now properly extracted from Terraform outputs to fix connectivity detection
 - **Stale Terraform state handling**: Auto-detects and cleans corrupted state from deleted deployments
 - **Error state cleanup**: Automatically cleans partial state on deployment failures (disable with `TFGRID_DEBUG=1`)
+- **State detection bug**: Fixed `is_app_deployed()` to check `state.yaml` instead of non-existent `vm_ip` file
+- **Health check improvement**: `is_deployment_healthy()` now validates Terraform state integrity
+- **Log-based detection**: Validates against previous deployment errors in terraform logs
 
 ### Added - Deployment Resilience ✨
 - **`--force` flag**: Force redeploy with `tfgrid-compose up <app> --force`
 - **State validation**: `validate_terraform_state()`, `clean_stale_state()`, `is_deployment_healthy()`
 - **Auto-recovery**: Detects stale state and cleans automatically on next deployment
 - **Error trap**: Prevents corrupt state files from failed deployments
+- **Multi-layer detection**: Checks state.yaml, terraform state, and error logs for stale deployments
 
 ### Changed
 - Version bumped to v0.10.2
 - Improved deployment error messages with recovery suggestions
+- Enhanced state detection to support both old and new formats
 
 ## [0.10.1] - 2025-10-16
 
