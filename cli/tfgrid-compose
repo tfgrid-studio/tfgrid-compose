@@ -114,7 +114,8 @@ execute_app_command() {
     log_info "Executing '$command' on $APP_NAME ($vm_ip)"
     echo ""
     
-    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+    # Use -t to allocate TTY for interactive commands
+    ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
         root@$vm_ip "$SCRIPT_PATH $args"
     
     return $?
