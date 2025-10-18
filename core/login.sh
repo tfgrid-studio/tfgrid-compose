@@ -211,12 +211,125 @@ prompt_gitea_token() {
     echo "$token"
 }
 
+# Validate git name (basic check)
+validate_git_name() {
+    local name="$1"
+    
+    # Not empty and reasonable length
+    if [ -z "$name" ] || [ ${#name} -lt 2 ]; then
+        return 1
+    fi
+    
+    return 0
+}
+
+# Validate git email
+validate_git_email() {
+    local email="$1"
+    
+    # Basic email validation
+    if [[ "$email" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
+        return 0
+    fi
+    
+    return 1
+}
+
+# Prompt for git name
+prompt_git_name() {
+    echo "" >&2
+    echo "Git Name (for commits):" >&2
+    echo "  Your full name that will appear in git commits" >&2
+    echo "  ℹ  Example: John Doe" >&2
+    echo "" >&2
+    
+    local name=""
+    while [ -z "$name" ]; do
+        echo -n "→ Git name: " >&2
+        read -r name
+        
+        if [ -z "$name" ]; then
+            echo "" >&2
+            log_error "Name cannot be empty"
+            echo "" >&2
+        elif ! validate_git_name "$name"; then
+            echo "" >&2
+            log_error "Name too short (minimum 2 characters)"
+            echo "" >&2
+            name=""
+        fi
+    done
+    
+    echo "" >&2
+    log_success "Git name set: $name" >&2
+    echo "" >&2
+    echo "$name"
+}
+
+# Prompt for git email
+prompt_git_email() {
+    echo "" >&2
+    echo "Git Email (for commits):" >&2
+    echo "  Your email that will appear in git commits" >&2
+    echo "  ℹ  Example: john@example.com" >&2
+    echo "" >&2
+    
+    local email=""
+    local attempts=0
+    local max_attempts=3
+    
+    while [ $attempts -lt $max_attempts ]; do
+        echo -n "→ Git email: " >&2
+        read -r email
+        
+        if [ -z "$email" ]; then
+            attempts=$((attempts + 1))
+            echo "" >&2
+            log_error "Email cannot be empty"
+            echo "" >&2
+            if [ $attempts -lt $max_attempts ]; then
+                echo "Try again ($attempts/$max_attempts attempts used)" >&2
+                continue
+            else
+                echo "Maximum attempts reached." >&2
+                return 1
+            fi
+        fi
+        
+        if ! validate_git_email "$email"; then
+            attempts=$((attempts + 1))
+            echo "" >&2
+            log_error "Invalid email format"
+            echo "" >&2
+            if [ $attempts -lt $max_attempts ]; then
+                echo "Expected format: user@domain.com" >&2
+                echo "Try again ($attempts/$max_attempts attempts used)" >&2
+                continue
+            else
+                echo "Maximum attempts reached." >&2
+                return 1
+            fi
+        fi
+        
+        # Success!
+        echo "" >&2
+        log_success "Git email set: $email" >&2
+        echo "" >&2
+        echo "$email"
+        return 0
+    done
+    
+    return 1
+}
+
 # Save credentials to file
 save_credentials() {
     local mnemonic="$1"
     local github_token="$2"
     local gitea_url="$3"
     local gitea_token="$4"
+    local git_name="$5"
+    local git_email="$6"
     
     ensure_credentials_dir
     
@@ -254,6 +367,20 @@ EOF
         echo "" >> "$CREDENTIALS_FILE"
     fi
     
+    # Add git identity if provided
+    if [ -n "$git_name" ] || [ -n "$git_email" ]; then
+        cat >> "$CREDENTIALS_FILE" << EOF
+git:
+EOF
+        if [ -n "$git_name" ]; then
+            echo "  name: \"$git_name\"" >> "$CREDENTIALS_FILE"
+        fi
+        if [ -n "$git_email" ]; then
+            echo "  email: \"$git_email\"" >> "$CREDENTIALS_FILE"
+        fi
+        echo "" >> "$CREDENTIALS_FILE"
+    fi
+    
     # Set secure permissions
     chmod 600 "$CREDENTIALS_FILE"
 }
@@ -279,7 +406,104 @@ load_credentials() {
     # Get Gitea token (under gitea section)
     export TFGRID_GITEA_TOKEN=$(awk '/^gitea:/{flag=1; next} /^[a-z]/{flag=0} flag && /token:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*token: "\(.*\)"/\1/')
     
+    # Get git name (under git section)
+    export TFGRID_GIT_NAME=$(awk '/^git:/{flag=1; next} /^[a-z]/{flag=0} flag && /name:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*name: "\(.*\)"/\1/')
+    
+    # Get git email (under git section)
+    export TFGRID_GIT_EMAIL=$(awk '/^git:/{flag=1; next} /^[a-z]/{flag=0} flag && /email:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*email: "\(.*\)"/\1/')
+    
     return 0
+}
+
+# Show credential status
+show_credential_status() {
+    echo "Current credentials:"
+    
+    if [ -n "$TFGRID_MNEMONIC" ]; then
+        local word_count=$(echo "$TFGRID_MNEMONIC" | wc -w | tr -d ' ')
+        echo "  ✓ Mnemonic:     ********** ($word_count words)"
+    else
+        echo "  ✗ Mnemonic:     (not set)"
+    fi
+    
+    if [ -n "$TFGRID_GITHUB_TOKEN" ]; then
+        echo "  ✓ GitHub token: ********** (configured)"
+    else
+        echo "  ✗ GitHub token: (not set)"
+    fi
+    
+    if [ -n "$TFGRID_GITEA_URL" ]; then
+        echo "  ✓ Gitea URL:    $TFGRID_GITEA_URL"
+    else
+        echo "  ✗ Gitea URL:    (not set)"
+    fi
+    
+    if [ -n "$TFGRID_GITEA_TOKEN" ]; then
+        echo "  ✓ Gitea token:  ********** (configured)"
+    else
+        echo "  ✗ Gitea token:  (not set)"
+    fi
+    
+    if [ -n "$TFGRID_GIT_NAME" ]; then
+        echo "  ✓ Git name:     $TFGRID_GIT_NAME"
+    else
+        echo "  ✗ Git name:     (not set)"
+    fi
+    
+    if [ -n "$TFGRID_GIT_EMAIL" ]; then
+        echo "  ✓ Git email:    $TFGRID_GIT_EMAIL"
+    else
+        echo "  ✗ Git email:    (not set)"
+    fi
+}
+
+# Add only missing credentials
+add_missing_credentials() {
+    local updated=false
+    local git_name="$TFGRID_GIT_NAME"
+    local git_email="$TFGRID_GIT_EMAIL"
+    
+    echo ""
+    log_info "Adding missing credentials..."
+    echo ""
+    
+    # Check git name
+    if [ -z "$TFGRID_GIT_NAME" ]; then
+        if git_name=$(prompt_git_name); then
+            updated=true
+        else
+            log_error "Failed to set git name"
+            return 1
+        fi
+    else
+        echo "Git name already set: $TFGRID_GIT_NAME"
+        echo ""
+    fi
+    
+    # Check git email
+    if [ -z "$TFGRID_GIT_EMAIL" ]; then
+        if git_email=$(prompt_git_email); then
+            updated=true
+        else
+            log_error "Failed to set git email"
+            return 1
+        fi
+    else
+        echo "Git email already set: $TFGRID_GIT_EMAIL"
+        echo ""
+    fi
+    
+    if [ "$updated" = true ]; then
+        # Re-save credentials with new git info
+        save_credentials "$TFGRID_MNEMONIC" "$TFGRID_GITHUB_TOKEN" "$TFGRID_GITEA_URL" "$TFGRID_GITEA_TOKEN" "$git_name" "$git_email"
+        echo ""
+        log_success "✅ Git credentials added!"
+        echo ""
+    else
+        echo ""
+        log_info "All credentials already configured"
+        echo ""
+    fi
 }
 
 check_credentials() {
@@ -334,8 +558,30 @@ check_credentials() {
         echo "⊘ Gitea: Not configured (optional)"
     fi
     
+    # Check git identity
+    if [ -n "$TFGRID_GIT_NAME" ]; then
+        echo "✓ Git name: $TFGRID_GIT_NAME"
+    else
+        echo "⊘ Git name: Not configured (recommended for commits)"
+    fi
+    
+    if [ -n "$TFGRID_GIT_EMAIL" ]; then
+        echo "✓ Git email: $TFGRID_GIT_EMAIL"
+    else
+        echo "⊘ Git email: Not configured (recommended for commits)"
+    fi
+    
     echo ""
     log_success "Credentials valid! ✅"
+    
+    # Show helpful message if git identity is missing
+    if [ -z "$TFGRID_GIT_NAME" ] || [ -z "$TFGRID_GIT_EMAIL" ]; then
+        echo ""
+        log_info "💡 Tip: Add git identity for better commit attribution"
+        echo "  Run: tfgrid-compose login"
+        echo "  (Select option 1 to add missing credentials)"
+    fi
+    
     return 0
 }
 
@@ -372,19 +618,56 @@ cmd_login() {
     # Check if already logged in
     if is_logged_in; then
         echo ""
-        log_warning "You are already logged in."
+        log_info "You are already logged in."
         echo ""
-        echo "Credentials stored at: $CREDENTIALS_FILE"
+        
+        # Load and show current credentials
+        load_credentials
+        show_credential_status
+        
         echo ""
-        echo "To re-login, first logout:"
-        echo "  tfgrid-compose logout"
+        echo "What would you like to do?"
+        echo "  1) Add missing credentials (recommended)"
+        echo "  2) Update all credentials (re-enter everything)"
+        echo "  3) Check credentials and exit"
         echo ""
-        echo "To check credentials:"
-        echo "  tfgrid-compose login --check"
-        return 0
+        
+        read -p "Choice [1-3]: " choice
+        choice=${choice:-1}  # Default to 1
+        
+        case $choice in
+            1)
+                # Add missing only
+                add_missing_credentials
+                return $?
+                ;;
+            2)
+                # Update all - ask for confirmation
+                echo ""
+                log_warning "This will re-enter all credentials."
+                echo ""
+                read -p "Continue? (yes/no): " confirm
+                if [ "$confirm" != "yes" ]; then
+                    echo "Cancelled"
+                    return 0
+                fi
+                # Fall through to normal login flow below
+                ;;
+            3)
+                # Just check
+                echo ""
+                check_credentials
+                return $?
+                ;;
+            *)
+                echo ""
+                log_info "Cancelled"
+                return 0
+                ;;
+        esac
     fi
     
-    # Welcome message
+    # Welcome message (first-time or update-all)
     echo ""
     log_info "Welcome to TFGrid Compose! 👋"
     echo ""
@@ -406,8 +689,21 @@ cmd_login() {
     # Only prompt for Gitea token if URL was provided (even if default)
     gitea_token=$(prompt_gitea_token)
     
+    # Prompt for git identity
+    local git_name
+    if ! git_name=$(prompt_git_name); then
+        log_warning "Skipping git name (you can add it later with: tfgrid-compose login)"
+        git_name=""
+    fi
+    
+    local git_email
+    if ! git_email=$(prompt_git_email); then
+        log_warning "Skipping git email (you can add it later with: tfgrid-compose login)"
+        git_email=""
+    fi
+    
     # Save credentials
-    save_credentials "$mnemonic" "$github_token" "$gitea_url" "$gitea_token"
+    save_credentials "$mnemonic" "$github_token" "$gitea_url" "$gitea_token" "$git_name" "$git_email"
     
     echo ""
     log_success "✅ Credentials saved securely!"

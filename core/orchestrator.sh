@@ -416,6 +416,23 @@ run_app_hooks() {
         return 1
     fi
     
+    # Load credentials to get git config
+    if [ -f "$CREDENTIALS_FILE" ]; then
+        source "$DEPLOYER_ROOT/core/login.sh"
+        load_credentials || true
+    fi
+    
+    # Prepare environment variables for deployment hooks
+    local env_vars=""
+    if [ -n "$TFGRID_GIT_NAME" ]; then
+        env_vars="export TFGRID_GIT_NAME='$TFGRID_GIT_NAME';"
+        log_info "Passing git name to deployment: $TFGRID_GIT_NAME"
+    fi
+    if [ -n "$TFGRID_GIT_EMAIL" ]; then
+        env_vars="$env_vars export TFGRID_GIT_EMAIL='$TFGRID_GIT_EMAIL';"
+        log_info "Passing git email to deployment: $TFGRID_GIT_EMAIL"
+    fi
+    
     # Check if Ansible playbook exists (Option B: Ansible deployment)
     if [ -f "$APP_DIR/deployment/playbook.yml" ]; then
         log_info "Detected Ansible playbook deployment"
@@ -437,7 +454,7 @@ run_app_hooks() {
     # Hook 1: setup.sh
     log_info "Running setup hook..."
     if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        root@$vm_ip "cd /tmp/app-deployment && chmod +x setup.sh && ./setup.sh" > "$STATE_DIR/hook-setup.log" 2>&1; then
+        root@$vm_ip "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" > "$STATE_DIR/hook-setup.log" 2>&1; then
         log_error "Setup hook failed. Check: $STATE_DIR/hook-setup.log"
         cat "$STATE_DIR/hook-setup.log"
         return 1
@@ -447,7 +464,7 @@ run_app_hooks() {
     # Hook 2: configure.sh
     log_info "Running configure hook..."
     if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && ./configure.sh" > "$STATE_DIR/hook-configure.log" 2>&1; then
+        root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" > "$STATE_DIR/hook-configure.log" 2>&1; then
         log_error "Configure hook failed. Check: $STATE_DIR/hook-configure.log"
         cat "$STATE_DIR/hook-configure.log"
         return 1
