@@ -19,8 +19,8 @@ source "$DEPLOYER_ROOT/core/deployment-state.sh"
 source "$DEPLOYER_ROOT/core/login.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
 
-# Version
-VERSION="0.10.11"
+# Version (read from VERSION file)
+VERSION=$(cat "$DEPLOYER_ROOT/VERSION" 2>/dev/null || echo "unknown")
 
 # Context file support
 CONTEXT_FILE=".tfgrid-compose.yaml"

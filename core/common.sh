@@ -285,7 +285,12 @@ show_help() {
     echo -e "${CYAN}Documentation:${NC}"
     echo "  https://docs.tfgrid.studio"
     echo ""
-    echo -e "${CYAN}Version:${NC} ${VERSION:-0.10.11}"
+    # Read version from VERSION file if not already set
+    local version="${VERSION}"
+    if [ -z "$version" ]; then
+        version=$(cat "$(dirname "${BASH_SOURCE[0]}")/../VERSION" 2>/dev/null || echo "unknown")
+    fi
+    echo -e "${CYAN}Version:${NC} $version"
 }
 
 # Export functions for use in other scripts

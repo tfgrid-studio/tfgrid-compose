@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.12] - 2025-10-17
+
+### Changed
+- **Centralized version management**: Version now stored in single `VERSION` file instead of hardcoded in multiple places
+
 ## [0.10.11] - 2025-10-17
 
 ### Fixed
