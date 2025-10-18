@@ -174,6 +174,10 @@ cmd_gitconfig() {
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
+            --context=*)
+                context="${1#*=}"
+                shift
+                ;;
             --context)
                 context="$2"
                 shift 2
