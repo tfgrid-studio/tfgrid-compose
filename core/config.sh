@@ -623,6 +623,9 @@ cmd_config() {
         gitconfig)
             config_gitconfig "$@"
             ;;
+        git-identity|gitidentity)
+            config_gitconfig "$@"
+            ;;
         *)
             echo "Usage: tfgrid-compose config <subcommand>"
             echo ""
@@ -632,6 +635,7 @@ cmd_config() {
             echo "  set <key> <value> Set configuration value"
             echo "  delete <key>      Delete configuration value"
             echo "  gitconfig         Configure git identity (context-aware)"
+            echo "  git-identity      Alias for gitconfig"
             echo ""
             echo "Examples:"
             echo "  tfgrid-compose config list"
@@ -639,6 +643,7 @@ cmd_config() {
             echo "  tfgrid-compose config set github-token ghp_abc123"
             echo "  tfgrid-compose config delete github-token"
             echo "  tfgrid-compose config gitconfig --context=github"
+            echo "  tfgrid-compose config git-identity --context=github"
             return 1
             ;;
     esac
