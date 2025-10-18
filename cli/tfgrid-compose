@@ -908,8 +908,8 @@ EOF
         export APP_NAME
         
         # Get VM IP from state
-        local base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
-        local state_dir="$base_dir/$APP_NAME"
+        base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
+        state_dir="$base_dir/$APP_NAME"
         
         if [ ! -d "$state_dir" ]; then
             log_error "No deployment found for: $APP_NAME"

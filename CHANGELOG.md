@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.16] - 2025-10-17
+
+### Fixed
+- **Exec command**: Removed `local` keywords from case statement (only valid in functions)
+
 ## [0.10.15] - 2025-10-17
 
 ### Fixed
