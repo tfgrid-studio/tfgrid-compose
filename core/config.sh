@@ -388,10 +388,12 @@ config_gitconfig() {
     log_info "TFGrid Compose - Git Configuration"
     echo ""
 
-    # Prompt for identity
-    local identity
-    if ! identity=$(prompt_git_identity "$context" "$context_desc"); then
-        return 1
+    # Prompt for identity (only if not showing config)
+    if [ "$show_only" = false ]; then
+        local identity
+        if ! identity=$(prompt_git_identity "$context" "$context_desc"); then
+            return 1
+        fi
     fi
 
     # Parse identity
