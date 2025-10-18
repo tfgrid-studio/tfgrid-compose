@@ -245,6 +245,8 @@ show_help() {
     echo -e "  ${GREEN}list${NC}                  List deployed apps (local)"
     echo -e "  ${GREEN}select${NC} [app]          Select active app (interactive or direct)"
     echo -e "  ${GREEN}unselect${NC}              Clear app selection"
+    echo -e "  ${GREEN}select-project${NC}        Select active project (for selected app)"
+    echo -e "  ${GREEN}unselect-project${NC}      Clear project selection"
     echo -e "  ${GREEN}commands${NC}              Show commands for selected app"
     echo ""
     echo -e "${CYAN}Deployment Commands:${NC}"

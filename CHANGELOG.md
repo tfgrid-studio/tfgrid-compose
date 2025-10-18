@@ -7,6 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added - Git Config Integration & Multi-Project Support 🚀
+- **Git identity in login flow**: `tfgrid-compose login` now collects git name and email
+  - Stored securely in `~/.config/tfgrid-compose/credentials.yaml`
+  - Used automatically across all deployments
+  - Proper commit attribution for AI-generated code
+- **Incremental credential updates**: Smart menu when already logged in
+  - Option 1: Add only missing credentials (git name/email)
+  - Option 2: Update all credentials (re-enter everything)
+  - Option 3: Check credentials and exit
+  - No need to re-enter everything to add git identity
+- **Git config deployment to VMs**: Credentials automatically deployed during setup
+  - `orchestrator.sh` loads and exports git config to deployment hooks
+  - `setup.sh` configures git with user's identity
+  - No more "AI Agent" default commits
+- **`update-git-config` command**: Update git config on existing VMs
+  - `tfgrid-compose update-git-config <app-name>`
+  - Reads credentials from login, applies to running VMs
+  - Useful for VMs deployed before git config feature
+- **Multi-project systemd support**: Run multiple AI projects simultaneously
+  - Systemd template service: `tfgrid-ai-project@.service`
+  - Each project gets its own systemd instance
+  - Per-project resource limits (2GB memory, 150% CPU)
+  - Auto-restart on failure with 10s delay
+  - Logs per project in project directory
+- **Project selection system**: Two-level app + project context
+  - `tfgrid-compose select-project`: Interactive project selector
+  - `tfgrid-compose select-project <name>`: Direct selection
+  - `tfgrid-compose unselect-project`: Clear project selection
+  - Works alongside existing app selection
+- **Context-aware commands**: Commands use selected project when no arg provided
+  - All project commands (`run`, `stop`, `logs`, `monitor`) support context
+  - `tfgrid-compose run` → runs selected project
+  - `tfgrid-compose logs` → logs for selected project
+  - Can still override: `tfgrid-compose logs other-project`
+- **Manifest metadata**: New YAML properties for commands
+  - `uses_context: active_project` - Command uses project context
+  - `save_to_context: active_project` - Command saves selection to context
+  - Enables smart command routing
+
+### Changed
+- **tfgrid-ai-agent**: Updated to use systemd per-project architecture
+  - `run-project.sh`: Uses `systemctl start tfgrid-ai-project@PROJECT.service`
+  - `stop-project.sh`: Uses `systemctl stop tfgrid-ai-project@PROJECT.service`
+  - `logs-project.sh`: Shows systemd status + project logs
+  - `monitor-project.sh`: Displays PID, memory usage from systemd
+- **Git config validation**: Enhanced credential checking
+  - Shows git name/email status in `tfgrid-compose login --check`
+  - Helpful tips if git identity is missing
+- **Credential storage**: Extended format to include git identity
+  ```yaml
+  git:
+    name: "John Doe"
+    email: "john@example.com"
+  ```
+- **Setup.sh**: Reads git config from environment and applies to developer user
+  - Uses `$TFGRID_GIT_NAME` and `$TFGRID_GIT_EMAIL` from orchestrator
+  - Falls back to "AI Agent" defaults if not provided
+- **create-project.sh**: Better git config UX
+  - Shows: "Username: X / Email: Y" on two lines (clearer)
+  - Press Enter to continue with existing config
+  - Type "override" to change (prevents typos like "overide")
+  - Validates input: only accepts Enter or exact "override"
+  - Auto-sets ownership to developer user (fixes permission issues)
+
+### Fixed
+- **Permission issues**: Projects created as root now owned by developer
+  - `create-project.sh` runs `chown -R developer:developer` after creation
+  - AI agent can now write logs and commit changes
+  - No more "Permission denied" errors
+- **Next steps message**: Updated to show tfgrid-compose commands
+  - Old: `cd ../ai-agent && make run PROJECT_NAME=X`
+  - New: `tfgrid-compose run X`
+  - Consistent with current CLI workflow
+- **README.md in projects**: Uses correct commands
+  - Shows `tfgrid-compose run` instead of `make run`
+  - Shows `tfgrid-compose monitor` for progress
+
+### Technical Details
+- **New files**:
+  - `deployment/tfgrid-ai-project@.service` - Systemd template
+  - `src/scripts/select-project-command.sh` - Project selector
+  - `core/update-git-config.sh` - Git config updater
+- **Modified scripts**: All project management scripts now systemd-aware
+- **Context system**: Uses `~/.config/tfgrid-compose/context.yaml` for app + project
+- **Security**: Git credentials stored with 600 permissions
+
 ## [0.13.4] - 2025-10-18
 
 ### Fixed

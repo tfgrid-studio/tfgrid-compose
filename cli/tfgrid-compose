@@ -137,15 +137,44 @@ execute_app_command() {
         return 1
     fi
     
+    # Check if this command should save to context
+    MANIFEST="$APP_PATH/tfgrid-compose.yaml"
+    SAVE_TO_CONTEXT=$(grep -A 3 "^  $command:" "$MANIFEST" 2>/dev/null | grep "save_to_context:" | awk '{print $2}')
+    
     # Execute command on VM
     log_info "Executing '$command' on $APP_NAME ($vm_ip)"
     echo ""
     
-    # Use -t to allocate TTY for interactive commands
-    ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        root@$vm_ip "$SCRIPT_PATH $args"
-    
-    return $?
+    if [ -n "$SAVE_TO_CONTEXT" ]; then
+        # Capture output to save to context
+        OUTPUT=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "$SCRIPT_PATH $args" 2>/dev/null)
+        RESULT=$?
+        
+        if [ $RESULT -eq 0 ] && [ -n "$OUTPUT" ]; then
+            # Save to context file
+            CONTEXT_FILE="$HOME/.config/tfgrid-compose/context.yaml"
+            mkdir -p "$(dirname "$CONTEXT_FILE")"
+            
+            # Remove old value if exists
+            if [ -f "$CONTEXT_FILE" ]; then
+                sed -i "/^$SAVE_TO_CONTEXT:/d" "$CONTEXT_FILE"
+            fi
+            
+            # Add new value
+            echo "$SAVE_TO_CONTEXT: $OUTPUT" >> "$CONTEXT_FILE"
+            
+            log_success "Selected $command: $OUTPUT"
+        fi
+        
+        return $RESULT
+    else
+        # Use -t to allocate TTY for interactive commands
+        ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "$SCRIPT_PATH $args"
+        
+        return $?
+    fi
 }
 
 # Resolve app input to path (handles both registry names and local paths)
@@ -363,6 +392,19 @@ case "$COMMAND" in
             log_info "Built-in commands will now be used"
         else
             log_info "No app currently selected"
+        fi
+        exit 0
+        ;;
+    
+    unselect-project)
+        # Unselect active project
+        CONTEXT_FILE="$HOME/.config/tfgrid-compose/context.yaml"
+        if [ -f "$CONTEXT_FILE" ]; then
+            # Remove active_project line from context
+            sed -i '/^active_project:/d' "$CONTEXT_FILE"
+            log_success "Cleared project selection"
+        else
+            log_info "No project currently selected"
         fi
         exit 0
         ;;
