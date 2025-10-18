@@ -363,6 +363,28 @@ config_gitconfig() {
         return 0
     fi
 
+    # If no arguments provided, show help
+    if [ $# -eq 0 ] && [ -z "$context" ]; then
+        echo ""
+        echo "Git Configuration for TFGrid Compose"
+        echo ""
+        echo "USAGE:"
+        echo "  tfgrid-compose config gitconfig                    # Set default git config"
+        echo "  tfgrid-compose config gitconfig --context=github   # Set GitHub-specific config"
+        echo "  tfgrid-compose config gitconfig --context=gitea    # Set Gitea-specific config"
+        echo "  tfgrid-compose config gitconfig --context=tfgrid-ai-agent  # Set AI agent config"
+        echo "  tfgrid-compose config gitconfig --show             # Show current config"
+        echo ""
+        echo "CONTEXTS:"
+        echo "  github          - For ~/code/github.com/ repos"
+        echo "  gitea           - For ~/code/tfgrid-gitea/ repos"
+        echo "  tfgrid-ai-agent - For ~/code/tfgrid-ai-agent-projects/ repos"
+        echo ""
+        echo "Git automatically uses the appropriate identity based on repository location."
+        echo ""
+        return 0
+    fi
+
     # Determine context description
     local context_desc=""
     case "$context" in
@@ -388,12 +410,10 @@ config_gitconfig() {
     log_info "TFGrid Compose - Git Configuration"
     echo ""
 
-    # Prompt for identity (only if not showing config)
-    if [ "$show_only" = false ]; then
-        local identity
-        if ! identity=$(prompt_git_identity "$context" "$context_desc"); then
-            return 1
-        fi
+    # Prompt for identity
+    local identity
+    if ! identity=$(prompt_git_identity "$context" "$context_desc"); then
+        return 1
     fi
 
     # Parse identity
