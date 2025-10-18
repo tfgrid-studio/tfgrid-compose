@@ -16,7 +16,7 @@ TFGrid Compose is a production-ready deployment platform that makes deploying ap
 **Key Features:**
 - ✅ **One-command deployment** - From zero to running app in 2-3 minutes
 - ✅ **Context file support** - Set app once, use short commands everywhere
-- ✅ **Agent subcommand** - Simple AI agent management (`tfgrid-compose agent list`)
+- ✅ **App-specific commands** - Apps define custom commands (`tfgrid-compose create`, `tfgrid-compose run`)
 - ✅ **Auto-install** - Automatically sets up PATH in your shell
 - ✅ **Multiple patterns** - single-vm, gateway, k3s (coming soon)
 - ✅ **Smart validation** - Checks prerequisites and prevents errors
@@ -189,9 +189,9 @@ echo "app: ../tfgrid-ai-agent" > .tfgrid-compose.yaml
 tfgrid-compose up
 
 # Use AI agent with simple commands
-tfgrid-compose agent list
-tfgrid-compose agent create
-tfgrid-compose agent run my-project
+tfgrid-compose projects
+tfgrid-compose create
+tfgrid-compose run my-project
 
 # Specify app path every time
 tfgrid-compose up ../tfgrid-ai-agent
@@ -210,11 +210,11 @@ tfgrid-compose up [app-path]
 tfgrid-compose exec [app-path] <command>
 
 # AI Agent management (requires context)
-tfgrid-compose agent list
-tfgrid-compose agent create
-tfgrid-compose agent run <project>
-tfgrid-compose agent monitor <project>
-tfgrid-compose agent stop <project>
+tfgrid-compose projects
+tfgrid-compose create
+tfgrid-compose run <project>
+tfgrid-compose monitor <project>
+tfgrid-compose stop <project>
 
 # Status & logs
 tfgrid-compose status [app-path]
@@ -235,15 +235,15 @@ echo "app: ../tfgrid-ai-agent" > .tfgrid-compose.yaml
 tfgrid-compose up
 
 # 3. Use AI agent
-tfgrid-compose agent create
+tfgrid-compose create
 # Follow prompts: name, duration, prompt
 
 # 4. Monitor
-tfgrid-compose agent list
-tfgrid-compose agent monitor my-project
+tfgrid-compose projects
+tfgrid-compose monitor my-project
 
 # 5. Cleanup
-tfgrid-compose agent stop my-project
+tfgrid-compose stop my-project
 tfgrid-compose down
 ```
 

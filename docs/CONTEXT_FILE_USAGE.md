@@ -16,7 +16,7 @@ tfgrid-compose exec ../tfgrid-ai-agent "/opt/ai-agent/scripts/run-project.sh my-
 
 **After (simple):**
 ```bash
-tfgrid-compose agent run my-app
+tfgrid-compose run my-app
 ```
 
 ---
@@ -35,29 +35,29 @@ That's it! Now all commands know which app to use.
 
 ## New Commands
 
-### Agent Subcommand
+### App-Specific Commands
 
 ```bash
 # List all projects
-tfgrid-compose agent list
+tfgrid-compose projects
 
 # Create new project (interactive)
-tfgrid-compose agent create
+tfgrid-compose create
 
 # Run project
-tfgrid-compose agent run my-project
+tfgrid-compose run my-project
 
 # Or interactive selection
-tfgrid-compose agent run
+tfgrid-compose run
 
 # Monitor project
-tfgrid-compose agent monitor my-project
+tfgrid-compose monitor my-project
 
 # Stop project
-tfgrid-compose agent stop my-project
+tfgrid-compose stop my-project
 
 # Remove project
-tfgrid-compose agent remove my-project
+tfgrid-compose remove my-project
 ```
 
 ### Standard Commands (Now Shorter!)
@@ -91,17 +91,17 @@ echo "app: ../tfgrid-ai-agent" > .tfgrid-compose.yaml
 tfgrid-compose up
 
 # 3. Create project
-tfgrid-compose agent create
+tfgrid-compose create
 
 # 4. Run agent
-tfgrid-compose agent run my-project
+tfgrid-compose run my-project
 
 # 5. Monitor
-tfgrid-compose agent list
-tfgrid-compose agent monitor my-project
+tfgrid-compose projects
+tfgrid-compose monitor my-project
 
 # 6. Stop
-tfgrid-compose agent stop my-project
+tfgrid-compose stop my-project
 
 # 7. Cleanup
 tfgrid-compose down

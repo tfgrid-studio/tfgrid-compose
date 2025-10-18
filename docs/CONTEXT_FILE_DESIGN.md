@@ -33,10 +33,10 @@ EOF
 
 **2. Commands become simple**
 ```bash
-tfgrid-compose agent list
-tfgrid-compose agent run my-app
-tfgrid-compose agent create
-tfgrid-compose agent stop my-app
+tfgrid-compose projects
+tfgrid-compose run my-app
+tfgrid-compose create
+tfgrid-compose stop my-app
 ```
 
 ---
@@ -117,11 +117,11 @@ cmd_up() {
 }
 ```
 
-### 3. Add `agent` Subcommand
+### 3. App-Specific Commands (Manifest-Based)
 
 ```bash
-# New command: tfgrid-compose agent <action>
-cmd_agent() {
+# Commands defined in app's tfgrid-compose.yaml
+execute_app_command() {
     local action="$1"
     shift
     
@@ -168,7 +168,7 @@ cmd_agent() {
             fi
             ;;
         *)
-            echo "Usage: tfgrid-compose agent {list|run|create|stop|monitor} [project]"
+            echo "Unknown command. Check app's commands: section in manifest"
             exit 1
             ;;
     esac
@@ -217,9 +217,9 @@ EOF
 
 # Use short commands
 tfgrid-compose up
-tfgrid-compose agent list
-tfgrid-compose agent run my-project
-tfgrid-compose agent create
+tfgrid-compose projects
+tfgrid-compose run my-project
+tfgrid-compose create
 tfgrid-compose ssh
 tfgrid-compose down
 ```
@@ -279,7 +279,7 @@ tfgrid-compose up ../other-app
 # Test with context
 echo "app: ../tfgrid-ai-agent" > .tfgrid-compose.yaml
 tfgrid-compose up
-tfgrid-compose agent list
+tfgrid-compose projects
 
 # Test without context
 rm .tfgrid-compose.yaml
