@@ -280,7 +280,7 @@ show_help() {
     echo "  tfgrid-compose up tfgrid-ai-agent        # Deploy from registry"
     echo "  tfgrid-compose up ./my-app               # Deploy from local path"
     echo "  tfgrid-compose list                      # List deployed apps"
-    echo "  tfgrid-compose switch ai-agent           # Make ai-agent active"
+    echo "  tfgrid-compose select                    # Select active app (interactive)"
     echo "  tfgrid-compose logs                      # Logs for active app"
     echo "  tfgrid-compose exec create my-project    # Run command on active app"
     echo "  tfgrid-compose shortcut tf               # Create 'tf' shortcut"
