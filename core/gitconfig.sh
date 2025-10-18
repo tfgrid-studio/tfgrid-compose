@@ -278,6 +278,11 @@ cmd_gitconfig() {
     echo "Email: $email"
     echo ""
 
+    if [ -z "$name" ] || [ -z "$email" ]; then
+        echo "⚠️  Warning: Empty values detected. Please check your input."
+        echo ""
+    fi
+
     if [ -n "$context" ]; then
         echo "This identity will be used for repositories in:"
         echo "  ~/code/$context/"
