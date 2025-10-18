@@ -1297,6 +1297,11 @@ EOF
         fi
         ;;
 
+    gitconfig)
+        # Git configuration command
+        cmd_gitconfig "$@"
+        ;;
+
     logout)
         # Logout command
         cmd_logout
