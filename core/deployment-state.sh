@@ -37,17 +37,46 @@ is_app_deployed() {
     
     # Also check for terraform directory (stale state without yaml)
     if [ -d "$state_dir/terraform" ] && [ -f "$state_dir/terraform/terraform.tfstate" ]; then
-        return 0
-    fi
-    
     return 1
 }
 
-# Get current active app
+# Get current app from context file
 get_current_app() {
     if [ -f "$CURRENT_APP_FILE" ]; then
         cat "$CURRENT_APP_FILE"
     fi
+}
+
+# Get smart context: use current app, or auto-detect if only one deployed
+get_smart_context() {
+    # First try explicit context
+    local current=$(get_current_app)
+    if [ -n "$current" ]; then
+        echo "$current"
+        return 0
+    fi
+    
+    # Count deployed apps
+    local count=0
+    local only_app=""
+    
+    if [ -d "$STATE_BASE_DIR" ]; then
+        for state_dir in "$STATE_BASE_DIR"/*; do
+            if [ -d "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
+                count=$((count + 1))
+                only_app=$(basename "$state_dir")
+            fi
+        done
+    fi
+    
+    # If exactly one app, use it
+    if [ $count -eq 1 ]; then
+        echo "$only_app"
+        return 0
+    fi
+    
+    # Multiple or no apps
+    return 1
 }
 
 # Set current active app
@@ -76,19 +105,25 @@ list_deployed_apps() {
     fi
     
     for state_dir in "$STATE_BASE_DIR"/*; do
-        if [ -d "$state_dir" ] && [ -f "$state_dir/vm_ip" ]; then
+        if [ -d "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
             local app_name=$(basename "$state_dir")
             found_any=1
             
+            # Get VM IP for display
+            local vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
+            
             if [ "$app_name" = "$current_app" ]; then
-                echo "  * $app_name (active)"
+                echo "  * $app_name (active) - $vm_ip"
             else
-                echo "    $app_name"
+                echo "    $app_name - $vm_ip"
             fi
         fi
     done
     
-    return $found_any
+    if [ $found_any -eq 0 ]; then
+        return 1
+    fi
+    return 0
 }
 
 # Initialize deployment state for an app

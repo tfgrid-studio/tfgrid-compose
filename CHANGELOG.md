@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2025-10-17
+
+### Added
+- **App-specific commands**: Apps can now define custom commands in their manifest (e.g., `create`, `run`, `stop` for tfgrid-ai-agent)
+- **Smart context detection**: Automatically uses single deployed app as context, no need to switch
+- **Command routing**: tfgrid-compose dynamically routes commands to appropriate app scripts
+
+### Fixed
+- **List command**: Now properly displays deployed apps with VM IPs and context indicators
+
+### Changed
+- **Better UX**: No need to switch when only one app is deployed
+- **Helpful errors**: Shows available apps and switch suggestion when context is missing
+
 ## [0.10.16] - 2025-10-17
 
 ### Fixed

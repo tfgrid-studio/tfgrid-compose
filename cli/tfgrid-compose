@@ -42,6 +42,84 @@ load_context() {
     fi
 }
 
+# Get app command script path from manifest
+get_app_command_script() {
+    local app_path="$1"
+    local command="$2"
+    
+    # Read command script from manifest
+    grep -A 2 "^  ${command}:" "$app_path/tfgrid-compose.yaml" 2>/dev/null | \
+        grep "script:" | awk '{print $2}'
+}
+
+# Execute app-specific command
+execute_app_command() {
+    local command="$1"
+    shift
+    local args="$@"
+    
+    # Get smart context (auto-detect or use current)
+    CONTEXT_APP=$(get_smart_context)
+    
+    if [ -z "$CONTEXT_APP" ]; then
+        # Multiple or no apps, need explicit context
+        log_error "No app context set"
+        echo ""
+        log_info "Deployed apps:"
+        list_deployed_apps
+        echo ""
+        log_info "Set context with: tfgrid-compose switch <app>"
+        return 1
+    fi
+    
+    # Resolve app path
+    APP_PATH=$(resolve_app_path "$CONTEXT_APP")
+    if [ -z "$APP_PATH" ]; then
+        log_error "Failed to resolve app: $CONTEXT_APP"
+        return 1
+    fi
+    
+    # Get command script
+    SCRIPT_PATH=$(get_app_command_script "$APP_PATH" "$command")
+    
+    if [ -z "$SCRIPT_PATH" ]; then
+        log_error "Unknown command: $command"
+        log_info "App '$CONTEXT_APP' does not support command '$command'"
+        echo ""
+        log_info "Run 'tfgrid-compose help' to see available commands"
+        return 1
+    fi
+    
+    APP_NAME=$(basename "$APP_PATH")
+    export APP_NAME
+    
+    # Get VM IP from state
+    base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
+    state_dir="$base_dir/$APP_NAME"
+    
+    if [ ! -d "$state_dir" ]; then
+        log_error "No deployment found for: $APP_NAME"
+        log_info "Deploy first with: tfgrid-compose up $APP_NAME"
+        return 1
+    fi
+    
+    vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
+    
+    if [ -z "$vm_ip" ]; then
+        log_error "No VM IP found in state for $APP_NAME"
+        return 1
+    fi
+    
+    # Execute command on VM
+    log_info "Executing '$command' on $APP_NAME ($vm_ip)"
+    echo ""
+    
+    ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        root@$vm_ip "$SCRIPT_PATH $args"
+    
+    return $?
+}
+
 # Resolve app input to path (handles both registry names and local paths)
 resolve_app_path() {
     local app_input="$1"
@@ -150,6 +228,18 @@ case "$COMMAND" in
             log_warning "No apps deployed"
             echo ""
             log_info "Deploy an app: tfgrid-compose up <app-name>"
+        else
+            echo ""
+            # Show smart context info
+            SMART_CTX=$(get_smart_context)
+            CURRENT=$(get_current_app)
+            
+            if [ -n "$SMART_CTX" ] && [ -z "$CURRENT" ]; then
+                log_info "Using '$SMART_CTX' as default (only app deployed)"
+            elif [ -n "$CURRENT" ]; then
+                log_info "Active context: $CURRENT"
+                log_info "Switch with: tfgrid-compose switch <app>"
+            fi
         fi
         
         exit 0
@@ -1138,9 +1228,12 @@ EOF
         ;;
 
     *)
-        log_error "Unknown command: $COMMAND"
-        echo ""
-        show_help
-        exit 1
+        # Try to execute as app-specific command
+        if execute_app_command "$COMMAND" "$@"; then
+            exit 0
+        else
+            # Not an app command, show error
+            exit 1
+        fi
         ;;
 esac
