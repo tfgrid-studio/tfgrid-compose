@@ -365,6 +365,73 @@ case "$COMMAND" in
         exit 0
         ;;
         
+    commands)
+        # Show app-specific commands for selected app
+        CURRENT_APP=$(get_current_app)
+        
+        if [ -z "$CURRENT_APP" ]; then
+            log_error "No app selected"
+            echo ""
+            log_info "Select an app first: tfgrid-compose select"
+            exit 1
+        fi
+        
+        # Resolve app path
+        APP_PATH=$(resolve_app_path "$CURRENT_APP")
+        if [ -z "$APP_PATH" ] || [ ! -f "$APP_PATH/tfgrid-compose.yaml" ]; then
+            log_error "Cannot find app: $CURRENT_APP"
+            exit 1
+        fi
+        
+        echo ""
+        echo "📋 Commands for $CURRENT_APP:"
+        echo ""
+        
+        # Parse commands from manifest
+        in_commands=false
+        while IFS= read -r line; do
+            # Check if we're entering commands section
+            if [[ "$line" =~ ^commands: ]]; then
+                in_commands=true
+                continue
+            fi
+            
+            # Exit commands section if we hit another top-level key
+            if [ "$in_commands" = true ] && [[ "$line" =~ ^[a-z_-]+: ]] && [[ ! "$line" =~ ^[[:space:]] ]]; then
+                break
+            fi
+            
+            # Parse command name
+            if [ "$in_commands" = true ] && [[ "$line" =~ ^[[:space:]]+([a-z_-]+): ]]; then
+                cmd_name="${BASH_REMATCH[1]}"
+                # Read description
+                desc=""
+                args=""
+                while IFS= read -r detail_line; do
+                    if [[ "$detail_line" =~ ^[[:space:]]+description:[[:space:]]*(.+)$ ]]; then
+                        desc="${BASH_REMATCH[1]}"
+                    elif [[ "$detail_line" =~ ^[[:space:]]+args:[[:space:]]*(.+)$ ]]; then
+                        args="${BASH_REMATCH[1]}"
+                    elif [[ "$detail_line" =~ ^[[:space:]]+[a-z_-]+: ]] || [[ "$detail_line" =~ ^[a-z_-]+: ]]; then
+                        break
+                    fi
+                done < <(sed -n "/$cmd_name:/,/^[[:space:]]*$/p" "$APP_PATH/tfgrid-compose.yaml" | tail -n +2)
+                
+                # Format output
+                if [ -n "$args" ]; then
+                    printf "  ${GREEN}%-15s${NC} %s %s\n" "$cmd_name" "$args" "$desc"
+                else
+                    printf "  ${GREEN}%-15s${NC} %s\n" "$cmd_name" "$desc"
+                fi
+            fi
+        done < "$APP_PATH/tfgrid-compose.yaml"
+        
+        echo ""
+        log_info "Run commands with: tfgrid-compose <command> [args]"
+        echo ""
+        exit 0
+        ;;
+        
     up)
         # Deploy command
         log_info "TFGrid Compose v$VERSION"

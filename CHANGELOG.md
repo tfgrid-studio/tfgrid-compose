@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2025-10-18
+
+### Added
+- **`commands` command**: Show all available commands for the selected app with descriptions and arguments
+
 ## [0.13.0] - 2025-10-18
 
 ### Added
