@@ -106,6 +106,9 @@ prompt_git_identity() {
             echo "$current_name|$current_email"
             return 0
         fi
+    else
+        echo "No current config found for this context."
+        echo ""
     fi
 
     # Prompt for new values
