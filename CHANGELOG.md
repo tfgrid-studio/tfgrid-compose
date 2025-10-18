@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.11] - 2025-10-17
+
+### Fixed
+- **Global STATE_DIR override**: Removed global `STATE_DIR=".tfgrid-compose"` from common.sh that was overriding dynamic state paths
+
 ## [0.10.10] - 2025-10-17
 
 ### Fixed

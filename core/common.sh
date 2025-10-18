@@ -184,8 +184,8 @@ get_deployer_root() {
     echo "$(pwd)"
 }
 
-# State directory (use exported value if set, otherwise default)
-STATE_DIR="${STATE_DIR:-.tfgrid-compose}"
+# Note: STATE_DIR is now set dynamically per app, not globally
+# Use STATE_BASE_DIR from deployment-state.sh
 
 # Create state directory
 create_state_dir() {
@@ -285,7 +285,7 @@ show_help() {
     echo -e "${CYAN}Documentation:${NC}"
     echo "  https://docs.tfgrid.studio"
     echo ""
-    echo -e "${CYAN}Version:${NC} ${VERSION:-0.10.10}"
+    echo -e "${CYAN}Version:${NC} ${VERSION:-0.10.11}"
 }
 
 # Export functions for use in other scripts
