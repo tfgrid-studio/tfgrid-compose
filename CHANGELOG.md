@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2025-10-18
+
+### Added
+- **Command shortcuts**: Create custom shortcuts for `tfgrid-compose` (e.g., `tfgrid`, `tf`, `grid`)
+- **Default shortcut**: Automatically creates `tfgrid` shortcut during installation
+- **Interactive shortcut management**: Run `tfgrid-compose shortcut` for an easy menu-driven interface
+- **Shortcut management**: New `shortcut` command with subcommands: create, list, remove, default
+- **Improved install output**: Shows shortcut information during installation
+
+### Changed
+- **Uninstall**: Now removes all shortcuts when uninstalling
+
 ## [0.11.2] - 2025-10-17
 
 ### Fixed

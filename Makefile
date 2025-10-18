@@ -112,6 +112,10 @@ install:
 	@chmod +x "$$HOME/.local/share/tfgrid-compose/cli/tfgrid-compose"
 	@echo "✅ Installed to ~/.local/bin/tfgrid-compose"
 	@echo ""
+	@echo "🔗 Creating default shortcut..."
+	@ln -sf "$$HOME/.local/bin/tfgrid-compose" "$$HOME/.local/bin/tfgrid"
+	@echo "✅ Created shortcut: tfgrid -> tfgrid-compose"
+	@echo ""
 	@echo "🔧 Setting up PATH..."
 	@if [ -n "$$FISH_VERSION" ] || [ -f "$$HOME/.config/fish/config.fish" ]; then \
 		if ! grep -q "$$HOME/.local/bin" "$$HOME/.config/fish/config.fish" 2>/dev/null; then \
@@ -149,8 +153,15 @@ install:
 	fi
 	@echo ""
 	@echo "✅ Installation complete!"
+	@echo ""
+	@echo "💡 You can now use either command:"
+	@echo "   • tfgrid-compose  (full name)"
+	@echo "   • tfgrid          (shortcut)"
+	@echo ""
+	@echo "To create a custom shortcut: tfgrid-compose shortcut <name>"
+	@echo ""
 	@echo "🔄 Reload your shell or run: source ~/.bashrc (or ~/.zshrc or ~/.config/fish/config.fish)"
-	@echo "🧪 Test with: tfgrid-compose --version"
+	@echo "🧪 Test with: tfgrid --version"
 
 # Uninstall tfgrid-compose
 uninstall:
@@ -159,6 +170,13 @@ uninstall:
 		rm "$$HOME/.local/bin/tfgrid-compose"; \
 		echo "✅ Removed ~/.local/bin/tfgrid-compose"; \
 	fi
+	@echo "🔗 Removing shortcuts..."
+	@for link in $$HOME/.local/bin/*; do \
+		if [ -L "$$link" ] && [ "$$(readlink "$$link")" = "$$HOME/.local/bin/tfgrid-compose" ]; then \
+			rm "$$link"; \
+			echo "✅ Removed shortcut: $$(basename $$link)"; \
+		fi \
+	done
 	@if [ -d "$$HOME/.local/share/tfgrid-compose" ]; then \
 		rm -rf "$$HOME/.local/share/tfgrid-compose"; \
 		echo "✅ Removed ~/.local/share/tfgrid-compose"; \

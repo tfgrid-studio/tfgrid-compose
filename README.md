@@ -5,7 +5,7 @@
 > **Note:** This repository was renamed from `tfgrid-deployer` to `tfgrid-compose` on Oct 9, 2025 as part of the TFGrid Studio rebrand.
 
 [![Status](https://img.shields.io/badge/status-production--ready-green)]() 
-[![Version](https://img.shields.io/badge/version-0.11.2-blue)]() 
+[![Version](https://img.shields.io/badge/version-0.12.0-blue)]() 
 [![Patterns](https://img.shields.io/badge/patterns-3%2F3-success)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)]()
 
@@ -54,7 +54,7 @@ tfgrid-compose/
 
 ## Current Status
 
-**🎉 v0.11.2 - Production Ready**
+**🎉 v0.12.0 - Production Ready**
 
 All 3 core deployment patterns are production-ready!
 
@@ -158,7 +158,9 @@ cd tfgrid-compose
 make install
 ```
 
-This automatically adds `tfgrid-compose` to your PATH!
+This automatically adds `tfgrid-compose` to your PATH and creates a default `tfgrid` shortcut!
+
+**Shortcuts:** Use `tfgrid` instead of `tfgrid-compose` for shorter commands, or create your own with `tfgrid-compose shortcut <name>`.
 
 **Note:** We use `~/code/github.com/{org}/{repo}` as the standard workspace structure. See [WORKSPACE_STANDARD.md](../WORKSPACE_STANDARD.md) for details.
 
@@ -223,6 +225,37 @@ tfgrid-compose logs [app-path]
 
 # Destroy
 tfgrid-compose down [app-path]
+
+# Shortcuts (optional)
+tfgrid-compose shortcut <name>    # Create custom shortcut
+tfgrid-compose shortcut --list    # List shortcuts
+```
+
+### Command Shortcuts
+
+Save typing with custom shortcuts:
+
+```bash
+# Default shortcut (created during install)
+tfgrid up              # Instead of: tfgrid-compose up
+
+# Interactive mode - easy menu-driven interface
+tfgrid-compose shortcut
+# 1) Create a new shortcut
+# 2) Remove a shortcut
+# 3) List all shortcuts
+# 4) Reset to default (tfgrid)
+# 5) Exit
+
+# Or create directly
+tfgrid-compose shortcut tf
+tf up                  # Even shorter!
+
+# List all shortcuts
+tfgrid-compose shortcut --list
+
+# Remove a shortcut
+tfgrid-compose shortcut --remove tf
 ```
 
 ### Complete Workflow Example
@@ -327,7 +360,7 @@ Apache 2.0 - See LICENSE file
 
 **Part of:** [TFGrid Studio](https://github.com/tfgrid-studio)  
 **Status:** ✅ Complete First Layer  
-**Version:** 0.11.2  
+**Version:** 0.12.0  
 **Patterns:** 3/3 Production Ready
 
 **All deployment patterns complete and ready for production!** 🚀

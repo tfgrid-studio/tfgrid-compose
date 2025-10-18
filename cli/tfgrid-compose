@@ -1130,6 +1130,315 @@ EOF
         echo ""
         ;;
 
+    shortcut)
+        # Shortcut command - create/manage command shortcuts
+        SHORTCUT_NAME="$1"
+        
+        # Handle subcommands
+        case "$SHORTCUT_NAME" in
+            --list|-l)
+                # List all shortcuts
+                echo ""
+                echo "🔗 Active shortcuts:"
+                echo ""
+                
+                FOUND=false
+                for file in "$HOME/.local/bin"/*; do
+                    if [ -L "$file" ] && [ "$(readlink "$file")" = "$HOME/.local/bin/tfgrid-compose" ]; then
+                        echo "  • $(basename "$file") -> tfgrid-compose"
+                        FOUND=true
+                    fi
+                done
+                
+                if [ "$FOUND" = "false" ]; then
+                    echo "  (no shortcuts configured)"
+                fi
+                echo ""
+                exit 0
+                ;;
+                
+            --remove|-r)
+                # Remove shortcut
+                REMOVE_NAME="$2"
+                if [ -z "$REMOVE_NAME" ]; then
+                    log_error "Usage: tfgrid-compose shortcut --remove <name>"
+                    exit 1
+                fi
+                
+                # Don't allow removing tfgrid-compose itself
+                if [ "$REMOVE_NAME" = "tfgrid-compose" ]; then
+                    log_error "Cannot remove tfgrid-compose (main command)"
+                    exit 1
+                fi
+                
+                SHORTCUT_PATH="$HOME/.local/bin/$REMOVE_NAME"
+                
+                if [ ! -L "$SHORTCUT_PATH" ]; then
+                    log_error "Shortcut '$REMOVE_NAME' does not exist"
+                    exit 1
+                fi
+                
+                if [ "$(readlink "$SHORTCUT_PATH")" != "$HOME/.local/bin/tfgrid-compose" ]; then
+                    log_error "'$REMOVE_NAME' is not a tfgrid-compose shortcut"
+                    exit 1
+                fi
+                
+                rm "$SHORTCUT_PATH"
+                log_success "Removed shortcut: $REMOVE_NAME"
+                exit 0
+                ;;
+                
+            --default|-d)
+                # Reset to default (tfgrid)
+                SHORTCUT_PATH="$HOME/.local/bin/tfgrid"
+                
+                if [ -L "$SHORTCUT_PATH" ] && [ "$(readlink "$SHORTCUT_PATH")" = "$HOME/.local/bin/tfgrid-compose" ]; then
+                    log_info "Default shortcut 'tfgrid' already exists"
+                else
+                    ln -sf "$HOME/.local/bin/tfgrid-compose" "$SHORTCUT_PATH"
+                    log_success "Created default shortcut: tfgrid"
+                fi
+                exit 0
+                ;;
+                
+            --help|-h)
+                # Show help
+                echo ""
+                echo "🔗 Shortcut Management"
+                echo ""
+                echo "Usage:"
+                echo "  tfgrid-compose shortcut               Interactive mode"
+                echo "  tfgrid-compose shortcut <name>        Create shortcut"
+                echo "  tfgrid-compose shortcut --list        List all shortcuts"
+                echo "  tfgrid-compose shortcut --remove <name>  Remove shortcut"
+                echo "  tfgrid-compose shortcut --default     Reset to 'tfgrid'"
+                echo ""
+                echo "Examples:"
+                echo "  tfgrid-compose shortcut               # Interactive menu"
+                echo "  tfgrid-compose shortcut tf            # Create 'tf' shortcut"
+                echo "  tfgrid-compose shortcut grid          # Create 'grid' shortcut"
+                echo "  tfgrid-compose shortcut --list        # Show all shortcuts"
+                echo "  tfgrid-compose shortcut --remove tf   # Remove 'tf' shortcut"
+                echo ""
+                exit 0
+                ;;
+                
+            "")
+                # Interactive mode (no arguments)
+                echo ""
+                echo "🔗 Shortcut Management (Interactive)"
+                echo ""
+                
+                # Show current shortcuts
+                echo "Current shortcuts:"
+                FOUND=false
+                for file in "$HOME/.local/bin"/*; do
+                    if [ -L "$file" ] && [ "$(readlink "$file")" = "$HOME/.local/bin/tfgrid-compose" ]; then
+                        echo "  • $(basename "$file")"
+                        FOUND=true
+                    fi
+                done
+                
+                if [ "$FOUND" = "false" ]; then
+                    echo "  (none configured)"
+                fi
+                echo ""
+                
+                # Interactive menu
+                echo "What would you like to do?"
+                echo "  1) Create a new shortcut"
+                echo "  2) Remove a shortcut"
+                echo "  3) List all shortcuts (detailed)"
+                echo "  4) Reset to default (tfgrid)"
+                echo "  5) Exit"
+                echo ""
+                
+                read -p "Enter choice [1-5]: " choice
+                
+                case $choice in
+                    1)
+                        # Create shortcut
+                        echo ""
+                        echo "Popular choices: tf, grid, tfc"
+                        read -p "Enter shortcut name: " new_name
+                        
+                        if [ -z "$new_name" ]; then
+                            log_error "No name provided"
+                            exit 1
+                        fi
+                        
+                        # Validate shortcut name
+                        if [[ ! "$new_name" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]]; then
+                            log_error "Invalid shortcut name: $new_name"
+                            log_info "Name must start with a letter and contain only letters, numbers, hyphens, and underscores"
+                            exit 1
+                        fi
+                        
+                        # Don't allow overwriting tfgrid-compose itself
+                        if [ "$new_name" = "tfgrid-compose" ]; then
+                            log_error "Cannot use 'tfgrid-compose' as shortcut name"
+                            exit 1
+                        fi
+                        
+                        SHORTCUT_PATH="$HOME/.local/bin/$new_name"
+                        
+                        # Warn if shortcut already exists
+                        if [ -e "$SHORTCUT_PATH" ]; then
+                            if [ -L "$SHORTCUT_PATH" ] && [ "$(readlink "$SHORTCUT_PATH")" = "$HOME/.local/bin/tfgrid-compose" ]; then
+                                log_info "Shortcut '$new_name' already exists"
+                                exit 0
+                            else
+                                log_error "File '$new_name' already exists in ~/.local/bin"
+                                log_info "Choose a different name"
+                                exit 1
+                            fi
+                        fi
+                        
+                        # Create symlink
+                        ln -s "$HOME/.local/bin/tfgrid-compose" "$SHORTCUT_PATH"
+                        echo ""
+                        log_success "Created shortcut: $new_name"
+                        echo ""
+                        log_info "You can now use: $new_name <command>"
+                        echo ""
+                        ;;
+                        
+                    2)
+                        # Remove shortcut
+                        echo ""
+                        read -p "Enter shortcut name to remove: " remove_name
+                        
+                        if [ -z "$remove_name" ]; then
+                            log_error "No name provided"
+                            exit 1
+                        fi
+                        
+                        # Don't allow removing tfgrid-compose itself
+                        if [ "$remove_name" = "tfgrid-compose" ]; then
+                            log_error "Cannot remove tfgrid-compose (main command)"
+                            exit 1
+                        fi
+                        
+                        SHORTCUT_PATH="$HOME/.local/bin/$remove_name"
+                        
+                        if [ ! -L "$SHORTCUT_PATH" ]; then
+                            log_error "Shortcut '$remove_name' does not exist"
+                            exit 1
+                        fi
+                        
+                        if [ "$(readlink "$SHORTCUT_PATH")" != "$HOME/.local/bin/tfgrid-compose" ]; then
+                            log_error "'$remove_name' is not a tfgrid-compose shortcut"
+                            exit 1
+                        fi
+                        
+                        rm "$SHORTCUT_PATH"
+                        echo ""
+                        log_success "Removed shortcut: $remove_name"
+                        echo ""
+                        ;;
+                        
+                    3)
+                        # List shortcuts (detailed)
+                        echo ""
+                        echo "🔗 Active shortcuts:"
+                        echo ""
+                        
+                        FOUND=false
+                        for file in "$HOME/.local/bin"/*; do
+                            if [ -L "$file" ] && [ "$(readlink "$file")" = "$HOME/.local/bin/tfgrid-compose" ]; then
+                                echo "  • $(basename "$file") -> tfgrid-compose"
+                                FOUND=true
+                            fi
+                        done
+                        
+                        if [ "$FOUND" = "false" ]; then
+                            echo "  (no shortcuts configured)"
+                        fi
+                        echo ""
+                        ;;
+                        
+                    4)
+                        # Reset to default
+                        echo ""
+                        SHORTCUT_PATH="$HOME/.local/bin/tfgrid"
+                        
+                        if [ -L "$SHORTCUT_PATH" ] && [ "$(readlink "$SHORTCUT_PATH")" = "$HOME/.local/bin/tfgrid-compose" ]; then
+                            log_info "Default shortcut 'tfgrid' already exists"
+                        else
+                            ln -sf "$HOME/.local/bin/tfgrid-compose" "$SHORTCUT_PATH"
+                            log_success "Created default shortcut: tfgrid"
+                        fi
+                        echo ""
+                        ;;
+                        
+                    5)
+                        # Exit
+                        echo ""
+                        log_info "Goodbye!"
+                        echo ""
+                        exit 0
+                        ;;
+                        
+                    *)
+                        log_error "Invalid choice"
+                        exit 1
+                        ;;
+                esac
+                
+                exit 0
+                ;;
+                
+            *)
+                # Create new shortcut
+                if [ -z "$SHORTCUT_NAME" ]; then
+                    log_error "Usage: tfgrid-compose shortcut <name>"
+                    log_info "Try: tfgrid-compose shortcut --help"
+                    exit 1
+                fi
+                
+                # Validate shortcut name
+                if [[ ! "$SHORTCUT_NAME" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]]; then
+                    log_error "Invalid shortcut name: $SHORTCUT_NAME"
+                    log_info "Name must start with a letter and contain only letters, numbers, hyphens, and underscores"
+                    exit 1
+                fi
+                
+                # Don't allow overwriting tfgrid-compose itself
+                if [ "$SHORTCUT_NAME" = "tfgrid-compose" ]; then
+                    log_error "Cannot use 'tfgrid-compose' as shortcut name"
+                    exit 1
+                fi
+                
+                SHORTCUT_PATH="$HOME/.local/bin/$SHORTCUT_NAME"
+                
+                # Warn if shortcut already exists
+                if [ -e "$SHORTCUT_PATH" ]; then
+                    if [ -L "$SHORTCUT_PATH" ] && [ "$(readlink "$SHORTCUT_PATH")" = "$HOME/.local/bin/tfgrid-compose" ]; then
+                        log_info "Shortcut '$SHORTCUT_NAME' already exists"
+                        exit 0
+                    else
+                        log_error "File '$SHORTCUT_NAME' already exists in ~/.local/bin"
+                        log_info "Choose a different name"
+                        exit 1
+                    fi
+                fi
+                
+                # Create symlink
+                ln -s "$HOME/.local/bin/tfgrid-compose" "$SHORTCUT_PATH"
+                
+                echo ""
+                log_success "Created shortcut: $SHORTCUT_NAME"
+                echo ""
+                log_info "You can now use: $SHORTCUT_NAME <command>"
+                echo ""
+                log_info "Example: $SHORTCUT_NAME up"
+                echo ""
+                
+                exit 0
+                ;;
+        esac
+        ;;
+
     version|--version|-v)
         # Version command
         echo "TFGrid Compose v$VERSION"
