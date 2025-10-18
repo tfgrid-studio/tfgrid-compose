@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.2] - 2025-10-18
+
+### Fixed
+- **`commands` command**: Fixed YAML parsing to correctly extract command names, descriptions, and arguments
+
 ## [0.13.1] - 2025-10-18
 
 ### Added
