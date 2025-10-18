@@ -52,6 +52,31 @@ get_app_command_script() {
         grep "script:" | awk '{print $2}'
 }
 
+# Check if selected app has a specific command
+app_has_command() {
+    local command="$1"
+    
+    # Get current app
+    local current_app=$(get_current_app)
+    if [ -z "$current_app" ]; then
+        return 1
+    fi
+    
+    # Resolve app path
+    local app_path=$(resolve_app_path "$current_app" "true")
+    if [ -z "$app_path" ] || [ ! -f "$app_path/tfgrid-compose.yaml" ]; then
+        return 1
+    fi
+    
+    # Check if command exists in manifest
+    local script_path=$(get_app_command_script "$app_path" "$command")
+    if [ -n "$script_path" ]; then
+        return 0
+    fi
+    
+    return 1
+}
+
 # Execute app-specific command
 execute_app_command() {
     local command="$1"
@@ -63,12 +88,12 @@ execute_app_command() {
     
     if [ -z "$CONTEXT_APP" ]; then
         # Multiple or no apps, need explicit context
-        log_error "No app context set"
+        log_error "No app selected"
         echo ""
         log_info "Deployed apps:"
         list_deployed_apps
         echo ""
-        log_info "Set context with: tfgrid-compose switch <app>"
+        log_info "Select an app with: tfgrid-compose select <app>"
         return 1
     fi
     
@@ -687,14 +712,22 @@ case "$COMMAND" in
         ;;
         
     logs)
-        # Logs command
+        # Logs command - context-based precedence
+        # If app is selected and has 'logs' command, use app version
+        if app_has_command "logs"; then
+            execute_app_command "logs" "$@"
+            exit $?
+        fi
+        
+        # Use built-in logs (pattern-based)
         # Try to get app from argument or context
         APP_INPUT="$1"
         if [ -z "$APP_INPUT" ]; then
             APP_INPUT=$(load_context)
             if [ -z "$APP_INPUT" ]; then
-                log_error "No app specified and no context file found"
+                log_error "No app specified and no app selected"
                 log_info "Usage: tfgrid-compose logs <app>"
+                log_info "   Or: tfgrid-compose select <app> && tfgrid-compose logs"
                 exit 1
             fi
         fi
@@ -1144,8 +1177,14 @@ EOF
         ;;
 
     login)
-        # Login command
-        cmd_login "$@"
+        # Login command - context-based precedence
+        # If app is selected and has 'login' command, use app version
+        if app_has_command "login"; then
+            execute_app_command "login" "$@"
+        else
+            # Use built-in login
+            cmd_login "$@"
+        fi
         ;;
 
     logout)

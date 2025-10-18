@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2025-10-18
+
+### Added
+- **Context-based command precedence**: App-specific commands now override built-ins when an app is selected
+- **`select` command**: New command to select active app (replaces `switch`)
+- **`unselect` command**: Clear app selection
+
+### Changed
+- **Command resolution**: When an app is selected, its commands (like `login`, `logs`) take precedence over built-ins
+- **Built-in access**: Built-in commands always accessible via `config` subcommand
+- **`switch` command**: Deprecated in favor of `select` (still works with deprecation warning)
+- **Error messages**: Updated to use "select" terminology
+
+### Breaking Changes
+- **Command behavior**: `login` and `logs` now execute app versions when app is selected
+- Users can access built-ins via: `tfgrid-compose config login`, etc.
+
 ## [0.12.2] - 2025-10-18
 
 ### Added
