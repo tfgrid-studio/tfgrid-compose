@@ -243,7 +243,7 @@ show_help() {
     echo -e "${CYAN}Registry Commands:${NC}"
     echo -e "  ${GREEN}search${NC} [query]        Search available apps in registry"
     echo -e "  ${GREEN}list${NC}                  List deployed apps (local)"
-    echo -e "  ${GREEN}select${NC} <app>          Select active app (app commands take precedence)"
+    echo -e "  ${GREEN}select${NC} [app]          Select active app (interactive or direct)"
     echo -e "  ${GREEN}unselect${NC}              Clear app selection"
     echo ""
     echo -e "${CYAN}Deployment Commands:${NC}"

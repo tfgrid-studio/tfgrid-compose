@@ -264,7 +264,7 @@ case "$COMMAND" in
                 log_info "Using '$SMART_CTX' as default (only app deployed)"
             elif [ -n "$CURRENT" ]; then
                 log_info "Active context: $CURRENT"
-                log_info "Switch with: tfgrid-compose switch <app>"
+                log_info "Change with: tfgrid-compose select"
             fi
         fi
         
@@ -276,14 +276,74 @@ case "$COMMAND" in
         APP_NAME="$1"
         
         if [ -z "$APP_NAME" ]; then
-            log_error "Usage: tfgrid-compose select <app>"
-            log_info "       tfgrid-compose unselect    (clear selection)"
-            exit 1
+            # Interactive selection
+            echo ""
+            echo "📱 Select an app:"
+            echo ""
+            
+            # Get list of deployed apps
+            base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
+            
+            if [ ! -d "$base_dir" ] || [ -z "$(ls -A "$base_dir" 2>/dev/null)" ]; then
+                log_error "No apps deployed"
+                echo ""
+                log_info "Deploy an app first: tfgrid-compose up <app>"
+                exit 1
+            fi
+            
+            # Build array of apps
+            APPS=()
+            i=1
+            for app_dir in "$base_dir"/*; do
+                if [ -d "$app_dir" ]; then
+                    app=$(basename "$app_dir")
+                    APPS+=("$app")
+                    
+                    # Get VM IP if available
+                    vm_ip=$(grep "^vm_ip:" "$app_dir/state.yaml" 2>/dev/null | awk '{print $2}')
+                    
+                    # Check if currently selected
+                    CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
+                    if [ -f "$CURRENT_APP_FILE" ] && [ "$(cat "$CURRENT_APP_FILE")" = "$app" ]; then
+                        echo "  $i) $app ($vm_ip) ← (currently selected)"
+                    else
+                        echo "  $i) $app ($vm_ip)"
+                    fi
+                    
+                    ((i++))
+                fi
+            done
+            
+            if [ ${#APPS[@]} -eq 0 ]; then
+                log_error "No apps deployed"
+                exit 1
+            fi
+            
+            echo ""
+            read -p "Enter number [1-${#APPS[@]}] or 'q' to quit: " choice
+            
+            if [ "$choice" = "q" ] || [ "$choice" = "Q" ]; then
+                echo ""
+                log_info "Cancelled"
+                exit 0
+            fi
+            
+            # Validate choice
+            if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#APPS[@]} ]; then
+                echo ""
+                log_error "Invalid choice"
+                exit 1
+            fi
+            
+            # Get selected app (arrays are 0-indexed)
+            APP_NAME="${APPS[$((choice-1))]}"
         fi
         
         if set_current_app "$APP_NAME"; then
+            echo ""
             log_success "Selected $APP_NAME"
             log_info "App-specific commands will now take precedence"
+            echo ""
         else
             exit 1
         fi

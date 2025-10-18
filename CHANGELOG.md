@@ -11,8 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Context-based command precedence**: App-specific commands now override built-ins when an app is selected
-- **`select` command**: New command to select active app (replaces `switch`)
+- **`select` command**: New command to select active app with interactive menu (replaces `switch`)
 - **`unselect` command**: Clear app selection
+- **Interactive app selection**: Running `select` without arguments shows a menu of deployed apps
 
 ### Changed
 - **Command resolution**: When an app is selected, its commands (like `login`, `logs`) take precedence over built-ins
