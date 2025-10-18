@@ -259,6 +259,7 @@ show_help() {
     echo -e "  ${GREEN}status${NC} [app]          Check application status"
     echo -e "  ${GREEN}ssh${NC} [app]             SSH into the deployment"
     echo -e "  ${GREEN}address${NC} [app]         Show deployment addresses"
+    echo -e "  ${GREEN}update-git-config${NC} <app> Update git config on existing VM"
     echo ""
     echo -e "${CYAN}Other Commands:${NC}"
     echo -e "  ${GREEN}patterns${NC}              List available deployment patterns"

@@ -19,6 +19,7 @@ source "$DEPLOYER_ROOT/core/deployment-state.sh"
 source "$DEPLOYER_ROOT/core/login.sh"
 source "$DEPLOYER_ROOT/core/gitconfig.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
+source "$DEPLOYER_ROOT/core/update-git-config.sh"
 
 # Version (read from VERSION file)
 VERSION=$(cat "$DEPLOYER_ROOT/VERSION" 2>/dev/null || echo "unknown")
@@ -1686,6 +1687,11 @@ EOF
                 exit 0
                 ;;
         esac
+        ;;
+
+    update-git-config)
+        # Update git config on running VM
+        update_git_config "$1"
         ;;
 
     version|--version|-v)
