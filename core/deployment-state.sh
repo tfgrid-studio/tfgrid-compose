@@ -22,7 +22,22 @@ is_app_deployed() {
     local app_name="$1"
     local state_dir=$(get_app_state_dir "$app_name")
     
-    [ -f "$state_dir/vm_ip" ]
+    # Check if state.yaml exists (current format)
+    if [ -f "$state_dir/state.yaml" ]; then
+        return 0
+    fi
+    
+    # Fallback: check for old vm_ip file format (backward compatibility)
+    if [ -f "$state_dir/vm_ip" ]; then
+        return 0
+    fi
+    
+    # Also check for terraform directory (stale state without yaml)
+    if [ -d "$state_dir/terraform" ] && [ -f "$state_dir/terraform/terraform.tfstate" ]; then
+        return 0
+    fi
+    
+    return 1
 }
 
 # Get current active app
@@ -150,6 +165,23 @@ validate_terraform_state() {
         return 1
     fi
     
+    # Check for known stale state indicators
+    # If terraform-apply.log contains "deployment not found" or "invalid endpoint IP"
+    if [ -f "$state_dir/terraform-apply.log" ]; then
+        if grep -q "deployment not found" "$state_dir/terraform-apply.log" 2>/dev/null || \
+           grep -q "invalid endpoint IP: <nil>" "$state_dir/terraform-apply.log" 2>/dev/null; then
+            log_warning "Detected failed deployment in logs (stale state)"
+            return 1
+        fi
+    fi
+    
+    if [ -f "$state_dir/terraform-plan.log" ]; then
+        if grep -q "deployment not found" "$state_dir/terraform-plan.log" 2>/dev/null; then
+            log_warning "Detected stale deployment reference in plan"
+            return 1
+        fi
+    fi
+    
     return 0
 }
 
@@ -189,6 +221,12 @@ is_deployment_healthy() {
     # Check if VM IP is accessible (basic health check)
     local vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
     if [ -z "$vm_ip" ]; then
+        return 1
+    fi
+    
+    # Also validate terraform state health
+    # If terraform state is stale, deployment is not healthy
+    if ! validate_terraform_state "$app_name"; then
         return 1
     fi
     
