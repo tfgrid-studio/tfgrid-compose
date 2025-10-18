@@ -115,6 +115,9 @@ prompt_git_identity() {
     local name=""
     local email=""
 
+    echo "Please enter your git identity information:"
+    echo ""
+
     while [ -z "$name" ]; do
         echo -n "Enter name: "
         read -r name
