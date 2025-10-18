@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.7] - 2025-10-17
+
+### Fixed
+- **Registry apps not resolved in status/logs/ssh**: Commands now properly resolve registry app names to cached paths
+
 ## [0.10.6] - 2025-10-17
 
 ### Fixed

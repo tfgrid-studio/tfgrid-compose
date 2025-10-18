@@ -20,7 +20,7 @@ source "$DEPLOYER_ROOT/core/login.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
 
 # Version
-VERSION="0.10.6"
+VERSION="0.10.7"
 
 # Context file support
 CONTEXT_FILE=".tfgrid-compose.yaml"
@@ -31,15 +31,54 @@ MANIFEST_FILE="tfgrid-compose.yaml"
 # Load context from .tfgrid-compose.yaml
 load_context() {
     if [ -f "$CONTEXT_FILE" ]; then
-        # Parse YAML (simple grep approach for 'app:' line)
-        local app_from_context=$(grep '^app:' "$CONTEXT_FILE" | sed 's/app: *//' | sed 's/["'\'']//g' | tr -d '\r')
-        
-        if [ -n "$app_from_context" ]; then
-            echo "$app_from_context"
-            return 0
-        fi
+        grep "^app:" "$CONTEXT_FILE" | awk '{print $2}'
     fi
-    return 1
+}
+
+# Resolve app input to path (handles both registry names and local paths)
+resolve_app_path() {
+    local app_input="$1"
+    local quiet="${2:-false}"
+    
+    if [ -z "$app_input" ]; then
+        return 1
+    fi
+    
+    # If it's a path (contains / or starts with .), return as-is
+    if [[ "$app_input" == */* ]] || [[ "$app_input" == .* ]]; then
+        echo "$app_input"
+        return 0
+    fi
+    
+    # It's a registry app name - resolve to cached path
+    local app_name="$app_input"
+    local cached_path="$APP_CACHE_DIR/$app_name"
+    
+    if [ -d "$cached_path" ]; then
+        echo "$cached_path"
+        return 0
+    fi
+    
+    # Not cached - try to download
+    if [ "$quiet" != "true" ]; then
+        log_info "Looking up $app_name in registry..."
+    fi
+    
+    local repo_url=$(get_app_repo "$app_name")
+    if [ -z "$repo_url" ]; then
+        if [ "$quiet" != "true" ]; then
+            log_error "App '$app_name' not found in registry"
+        fi
+        return 1
+    fi
+    
+    local app_path=$(get_app "$app_name" "$repo_url")
+    if [ -z "$app_path" ]; then
+        return 1
+    fi
+    
+    echo "$app_path"
+    return 0
 }
 
 # Parse global flags
@@ -492,15 +531,22 @@ case "$COMMAND" in
         
     logs)
         # Logs command
-        # Try to get app path from argument or context
-        APP_PATH="$1"
-        if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(load_context)
-            if [ -z "$APP_PATH" ]; then
+        # Try to get app from argument or context
+        APP_INPUT="$1"
+        if [ -z "$APP_INPUT" ]; then
+            APP_INPUT=$(load_context)
+            if [ -z "$APP_INPUT" ]; then
                 log_error "No app specified and no context file found"
                 log_info "Usage: tfgrid-compose logs <app>"
                 exit 1
             fi
+        fi
+        
+        # Resolve app path (registry name or local path)
+        APP_PATH=$(resolve_app_path "$APP_INPUT")
+        if [ -z "$APP_PATH" ]; then
+            log_error "Failed to resolve app: $APP_INPUT"
+            exit 1
         fi
         
         # Validate app path
@@ -537,15 +583,22 @@ case "$COMMAND" in
         
     status)
         # Status command
-        # Try to get app path from argument or context
-        APP_PATH="$1"
-        if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(load_context)
-            if [ -z "$APP_PATH" ]; then
+        # Try to get app from argument or context
+        APP_INPUT="$1"
+        if [ -z "$APP_INPUT" ]; then
+            APP_INPUT=$(load_context)
+            if [ -z "$APP_INPUT" ]; then
                 log_error "No app specified and no context file found"
                 log_info "Usage: tfgrid-compose status <app>"
                 exit 1
             fi
+        fi
+        
+        # Resolve app path (registry name or local path)
+        APP_PATH=$(resolve_app_path "$APP_INPUT")
+        if [ -z "$APP_PATH" ]; then
+            log_error "Failed to resolve app: $APP_INPUT"
+            exit 1
         fi
         
         # Validate app path
@@ -582,15 +635,22 @@ case "$COMMAND" in
         
     ssh|connect)
         # SSH command
-        # Try to get app path from argument or context
-        APP_PATH="$1"
-        if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(load_context)
-            if [ -z "$APP_PATH" ]; then
+        # Try to get app from argument or context
+        APP_INPUT="$1"
+        if [ -z "$APP_INPUT" ]; then
+            APP_INPUT=$(load_context)
+            if [ -z "$APP_INPUT" ]; then
                 log_error "No app specified and no context file found"
                 log_info "Usage: tfgrid-compose ssh <app>"
                 exit 1
             fi
+        fi
+        
+        # Resolve app path (registry name or local path)
+        APP_PATH=$(resolve_app_path "$APP_INPUT")
+        if [ -z "$APP_PATH" ]; then
+            log_error "Failed to resolve app: $APP_INPUT"
+            exit 1
         fi
         
         # Load app
