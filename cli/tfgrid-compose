@@ -387,56 +387,58 @@ case "$COMMAND" in
         echo "📋 Commands for $CURRENT_APP:"
         echo ""
         
-        # Use awk to parse YAML commands section
-        awk '
-            /^commands:/ { in_commands=1; next }
-            in_commands && /^[a-z]/ && /:/ { in_commands=0 }
-            in_commands && /^  [a-z_-]+:/ {
-                # Extract command name
-                match($0, /^  ([a-z_-]+):/, arr)
-                cmd = arr[1]
-                desc = ""
-                args = ""
-                
-                # Read next lines for description and args
-                while (getline > 0) {
-                    if (/^    description:/) {
-                        match($0, /description: *(.+)/, arr)
-                        desc = arr[1]
-                    }
-                    else if (/^    args:/) {
-                        match($0, /args: *(.+)/, arr)
-                        args = arr[1]
-                    }
-                    else if (/^  [a-z_-]+:/ || /^[a-z]/) {
-                        # Start of next command or section
-                        if (cmd != "") {
-                            if (args != "")
-                                printf "  \033[32m%-15s\033[0m %s %s\n", cmd, args, desc
-                            else
-                                printf "  \033[32m%-15s\033[0m %s\n", cmd, desc
-                        }
-                        # Process this line as new command
-                        if (/^  [a-z_-]+:/) {
-                            match($0, /^  ([a-z_-]+):/, arr)
-                            cmd = arr[1]
-                            desc = ""
-                            args = ""
-                        } else {
-                            exit
-                        }
-                    }
-                }
-                
-                # Print last command
-                if (cmd != "") {
-                    if (args != "")
-                        printf "  \033[32m%-15s\033[0m %s %s\n", cmd, args, desc
-                    else
-                        printf "  \033[32m%-15s\033[0m %s\n", cmd, desc
-                }
-            }
-        ' "$APP_PATH/tfgrid-compose.yaml"
+        # Parse commands section with sed/grep (compatible approach)
+        in_commands=false
+        current_cmd=""
+        current_desc=""
+        current_args=""
+        
+        while IFS= read -r line; do
+            # Check if entering commands section
+            if [[ "$line" == "commands:" ]]; then
+                in_commands=true
+                continue
+            fi
+            
+            # Exit if we hit another top-level section
+            if [ "$in_commands" = true ] && [[ "$line" =~ ^[a-z] ]]; then
+                break
+            fi
+            
+            # Parse command entries (2-space indent)
+            if [ "$in_commands" = true ]; then
+                if [[ "$line" =~ ^[[:space:]]{2}([a-z_-]+):$ ]]; then
+                    # Print previous command if exists
+                    if [ -n "$current_cmd" ]; then
+                        if [ -n "$current_args" ]; then
+                            printf "  ${GREEN}%-15s${NC} %s %s\n" "$current_cmd" "$current_args" "$current_desc"
+                        else
+                            printf "  ${GREEN}%-15s${NC} %s\n" "$current_cmd" "$current_desc"
+                        fi
+                    fi
+                    
+                    # Start new command
+                    current_cmd="${BASH_REMATCH[1]}"
+                    current_desc=""
+                    current_args=""
+                    
+                elif [[ "$line" =~ ^[[:space:]]{4}description:[[:space:]]*(.+)$ ]]; then
+                    current_desc="${BASH_REMATCH[1]}"
+                    
+                elif [[ "$line" =~ ^[[:space:]]{4}args:[[:space:]]*(.+)$ ]]; then
+                    current_args="${BASH_REMATCH[1]}"
+                fi
+            fi
+        done < "$APP_PATH/tfgrid-compose.yaml"
+        
+        # Print last command
+        if [ -n "$current_cmd" ]; then
+            if [ -n "$current_args" ]; then
+                printf "  ${GREEN}%-15s${NC} %s %s\n" "$current_cmd" "$current_args" "$current_desc"
+            else
+                printf "  ${GREEN}%-15s${NC} %s\n" "$current_cmd" "$current_desc"
+            fi
+        fi
         
         echo ""
         log_info "Run commands with: tfgrid-compose <command> [args]"

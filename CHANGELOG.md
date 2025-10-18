@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.3] - 2025-10-18
+
+### Fixed
+- **`commands` command**: Replaced awk parsing with pure bash regex for better compatibility across systems
+
 ## [0.13.2] - 2025-10-18
 
 ### Fixed
