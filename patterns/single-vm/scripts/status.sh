@@ -3,8 +3,8 @@
 
 set -e
 
-# Get state directory
-STATE_DIR=".tfgrid-compose"
+# Get state directory (use global state if not set)
+STATE_DIR="${STATE_DIR:-$STATE_BASE_DIR/$APP_NAME}"
 
 # Read deployment info
 if [ ! -f "$STATE_DIR/state.yaml" ]; then

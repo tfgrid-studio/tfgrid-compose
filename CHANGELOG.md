@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.10] - 2025-10-17
+
+### Fixed
+- **Pattern scripts using hardcoded paths**: Updated pattern scripts to use global state directory and exported STATE_BASE_DIR/APP_NAME for subshells
+
 ## [0.10.9] - 2025-10-17
 
 ### Fixed

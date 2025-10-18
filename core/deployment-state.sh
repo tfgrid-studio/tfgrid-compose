@@ -6,6 +6,9 @@
 STATE_BASE_DIR="$HOME/.config/tfgrid-compose/state"
 CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
 
+# Export for use in pattern scripts
+export STATE_BASE_DIR
+
 # Ensure state directory exists
 ensure_state_dir() {
     mkdir -p "$STATE_BASE_DIR"

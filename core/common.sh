@@ -285,7 +285,7 @@ show_help() {
     echo -e "${CYAN}Documentation:${NC}"
     echo "  https://docs.tfgrid.studio"
     echo ""
-    echo -e "${CYAN}Version:${NC} ${VERSION:-0.10.9}"
+    echo -e "${CYAN}Version:${NC} ${VERSION:-0.10.10}"
 }
 
 # Export functions for use in other scripts

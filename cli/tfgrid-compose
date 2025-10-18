@@ -20,7 +20,7 @@ source "$DEPLOYER_ROOT/core/login.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
 
 # Version
-VERSION="0.10.9"
+VERSION="0.10.10"
 
 # Context file support
 CONTEXT_FILE=".tfgrid-compose.yaml"
@@ -551,6 +551,7 @@ case "$COMMAND" in
         
         # Set app name for validation
         APP_NAME=$(basename "$APP_PATH")
+        export APP_NAME
         
         # Validate app path
         if ! validate_app_path "$APP_PATH"; then
@@ -606,6 +607,7 @@ case "$COMMAND" in
         
         # Set app name for validation
         APP_NAME=$(basename "$APP_PATH")
+        export APP_NAME
         
         # Validate app path
         if ! validate_app_path "$APP_PATH"; then
@@ -658,6 +660,10 @@ case "$COMMAND" in
             log_error "Failed to resolve app: $APP_INPUT"
             exit 1
         fi
+        
+        # Set and export app name
+        APP_NAME=$(basename "$APP_PATH")
+        export APP_NAME
         
         # Load app
         if ! load_app "$APP_PATH"; then
