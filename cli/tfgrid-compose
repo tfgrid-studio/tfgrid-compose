@@ -1280,6 +1280,26 @@ EOF
                             exit 1
                         fi
                         
+                        # Check if command already exists in PATH
+                        if command -v "$new_name" &> /dev/null; then
+                            EXISTING_CMD=$(command -v "$new_name")
+                            # Skip warning if it's already our shortcut
+                            if [ ! -L "$EXISTING_CMD" ] || [ "$(readlink "$EXISTING_CMD")" != "$HOME/.local/bin/tfgrid-compose" ]; then
+                                echo ""
+                                log_warning "Command '$new_name' already exists!"
+                                log_info "Existing command: $EXISTING_CMD"
+                                log_info "Creating this shortcut will shadow the existing command"
+                                echo ""
+                                read -p "Continue anyway? (y/N): " confirm
+                                if [[ ! $confirm =~ ^[Yy]$ ]]; then
+                                    echo ""
+                                    log_info "Cancelled - shortcut not created"
+                                    echo ""
+                                    exit 0
+                                fi
+                            fi
+                        fi
+                        
                         SHORTCUT_PATH="$HOME/.local/bin/$new_name"
                         
                         # Warn if shortcut already exists
@@ -1407,6 +1427,26 @@ EOF
                 if [ "$SHORTCUT_NAME" = "tfgrid-compose" ]; then
                     log_error "Cannot use 'tfgrid-compose' as shortcut name"
                     exit 1
+                fi
+                
+                # Check if command already exists in PATH
+                if command -v "$SHORTCUT_NAME" &> /dev/null; then
+                    EXISTING_CMD=$(command -v "$SHORTCUT_NAME")
+                    # Skip warning if it's already our shortcut
+                    if [ ! -L "$EXISTING_CMD" ] || [ "$(readlink "$EXISTING_CMD")" != "$HOME/.local/bin/tfgrid-compose" ]; then
+                        echo ""
+                        log_warning "Command '$SHORTCUT_NAME' already exists!"
+                        log_info "Existing command: $EXISTING_CMD"
+                        log_info "Creating this shortcut will shadow the existing command"
+                        echo ""
+                        read -p "Continue anyway? (y/N): " confirm
+                        if [[ ! $confirm =~ ^[Yy]$ ]]; then
+                            echo ""
+                            log_info "Cancelled - shortcut not created"
+                            echo ""
+                            exit 0
+                        fi
+                    fi
                 fi
                 
                 SHORTCUT_PATH="$HOME/.local/bin/$SHORTCUT_NAME"

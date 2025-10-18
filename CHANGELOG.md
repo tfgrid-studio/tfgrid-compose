@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2025-10-18
+
+### Added
+- **Command collision detection**: Warns when creating shortcuts that would shadow existing system commands
+- **Smart PATH checking**: Detects existing commands before creating shortcuts (e.g., warns if `tf` is Terraform)
+- **User confirmation**: Asks for confirmation when shadowing would occur
+
 ## [0.12.0] - 2025-10-18
 
 ### Added
