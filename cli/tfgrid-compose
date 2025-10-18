@@ -17,6 +17,7 @@ source "$DEPLOYER_ROOT/core/registry.sh"
 source "$DEPLOYER_ROOT/core/app-cache.sh"
 source "$DEPLOYER_ROOT/core/deployment-state.sh"
 source "$DEPLOYER_ROOT/core/login.sh"
+source "$DEPLOYER_ROOT/core/gitconfig.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
 
 # Version (read from VERSION file)
