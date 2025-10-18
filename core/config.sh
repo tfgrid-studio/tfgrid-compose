@@ -498,6 +498,22 @@ prompt_git_identity() {
     local context="$1"
     local context_desc="$2"
 
+    # Check if running interactively
+    if [ ! -t 0 ]; then
+        echo ""
+        log_error "Interactive input required but not available"
+        echo ""
+        echo "This command requires interactive input to configure git identity."
+        echo "Please run this command in an interactive terminal:"
+        echo ""
+        echo "  tfgrid-compose config gitconfig --context=$context"
+        echo ""
+        echo "Or use --show to view current configuration:"
+        echo "  tfgrid-compose config gitconfig --show"
+        echo ""
+        return 1
+    fi
+
     echo ""
     if [ -n "$context" ]; then
         echo "👤 Git Identity for $context_desc:"
