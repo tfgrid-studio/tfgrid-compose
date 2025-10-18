@@ -386,14 +386,22 @@ deploy_app_source() {
     fi
     
     log_info "Preparing VM for app deployment..."
-    # Create deployment directory on VM
+    # Create directories on VM
     ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        root@$vm_ip "mkdir -p /tmp/app-deployment"
+        root@$vm_ip "mkdir -p /tmp/app-deployment /tmp/app-source"
     
-    # Copy app deployment files to VM
+    # Copy app deployment hooks to VM
     log_info "Copying deployment hooks..."
     scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
         "$APP_DEPLOYMENT_DIR"/*.sh root@$vm_ip:/tmp/app-deployment/ > /dev/null 2>&1
+    
+    # Copy app source directory if it exists (for scripts, templates, etc.)
+    if [ -d "$APP_DIR/src" ]; then
+        log_info "Copying app source files..."
+        scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "$APP_DIR/src" root@$vm_ip:/tmp/app-source/ > /dev/null 2>&1
+    fi
+    
     return 0
 }
 

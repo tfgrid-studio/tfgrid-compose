@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.6] - 2025-10-17
+
+### Fixed
+- **App source not copied to VM**: Now copies `src/` directory to VM for apps that need source files during setup
+
 ## [0.10.5] - 2025-10-17
 
 ### Fixed
