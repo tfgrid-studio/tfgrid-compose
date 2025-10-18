@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.14] - 2025-10-17
+
+### Fixed
+- **Context system**: Fixed `load_context()` to read from global current-app file set by `switch` command
+- **Exec command**: Updated `exec` to use context when no app specified, supports both `exec <command>` and `exec <app> <command>`
+
 ## [0.10.13] - 2025-10-17
 
 ### Fixed

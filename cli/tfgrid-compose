@@ -28,10 +28,17 @@ CONTEXT_FILE=".tfgrid-compose.yaml"
 # Default manifest file
 MANIFEST_FILE="tfgrid-compose.yaml"
 
-# Load context from .tfgrid-compose.yaml
+# Load context from .tfgrid-compose.yaml or global current-app file
 load_context() {
+    # First try local context file
     if [ -f "$CONTEXT_FILE" ]; then
         grep "^app:" "$CONTEXT_FILE" | awk '{print $2}'
+        return
+    fi
+    
+    # Fall back to global current app (from switch command)
+    if [ -f "$HOME/.config/tfgrid-compose/current-app" ]; then
+        cat "$HOME/.config/tfgrid-compose/current-app"
     fi
 }
 
@@ -841,27 +848,66 @@ EOF
         
     exec)
         # Execute command on deployed VM
-        # Validate app path
-        if ! validate_app_path "$1"; then
+        # Usage: tfgrid-compose exec [app] <command> [args...]
+        # If app is not specified, uses context from switch
+        
+        if [ -z "$1" ]; then
+            log_error "No command specified"
+            log_info "Usage: tfgrid-compose exec [app] <command> [args...]"
+            log_info "Examples:"
+            log_info "  tfgrid-compose exec list"
+            log_info "  tfgrid-compose exec create my-project"
+            log_info "  tfgrid-compose exec tfgrid-ai-agent list"
             exit 1
         fi
+        
+        # Try to determine if first arg is app name or command
+        APP_INPUT="$1"
+        FIRST_ARG="$1"
+        
+        # Check if it looks like an app (path or registry name)
+        if [[ "$FIRST_ARG" == */* ]] || [[ "$FIRST_ARG" == .* ]] || [ -d "$FIRST_ARG" ]; then
+            # It's a path, use it as app
+            APP_INPUT="$1"
+            shift
+        else
+            # Try to resolve as registry app
+            APP_PATH_TEST=$(resolve_app_path "$FIRST_ARG" "true" 2>/dev/null)
+            if [ -n "$APP_PATH_TEST" ] && [ -d "$APP_PATH_TEST" ]; then
+                # It's a valid app name
+                APP_INPUT="$1"
+                shift
+            else
+                # Not an app, assume it's a command and use context
+                APP_INPUT=$(load_context)
+                if [ -z "$APP_INPUT" ]; then
+                    log_error "No app specified and no context found"
+                    log_info "Run 'tfgrid-compose switch <app>' first or specify app:"
+                    log_info "  tfgrid-compose exec <app> <command>"
+                    exit 1
+                fi
+                # Don't shift, $1 is the command
+            fi
+        fi
+        
+        # Resolve app path
+        APP_PATH=$(resolve_app_path "$APP_INPUT")
+        if [ -z "$APP_PATH" ]; then
+            log_error "Failed to resolve app: $APP_INPUT"
+            exit 1
+        fi
+        
+        APP_NAME=$(basename "$APP_PATH")
+        export APP_NAME
         
         # Check deployment exists
         if ! validate_deployment_exists; then
             exit 1
         fi
         
-        APP_PATH="$1"
-        shift
-        
-        # Get remaining arguments as the command to execute
+        # Check we have a command
         if [ $# -eq 0 ]; then
             log_error "No command specified"
-            log_info "Usage: tfgrid-compose exec <app> <command> [args...]"
-            log_info "Examples:"
-            log_info "  tfgrid-compose exec ../tfgrid-ai-agent login"
-            log_info "  tfgrid-compose exec ../tfgrid-ai-agent create my-project"
-            log_info "  tfgrid-compose exec ../tfgrid-ai-agent run my-project"
             exit 1
         fi
         
@@ -871,7 +917,9 @@ EOF
         fi
         
         # Get VM IP from state
-        vm_ip=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+        local base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
+        local state_dir="$base_dir/$APP_NAME"
+        vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
         
         if [ -z "$vm_ip" ]; then
             log_error "No VM IP found in state"
@@ -881,7 +929,7 @@ EOF
         # Get the command and arguments
         REMOTE_CMD="$@"
         
-        log_info "Executing on VM ($vm_ip): $REMOTE_CMD"
+        log_info "Executing on $APP_NAME ($vm_ip): $REMOTE_CMD"
         echo ""
         
         # Execute command on VM
