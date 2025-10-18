@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.8] - 2025-10-17
+
+### Fixed
+- **State validation using wrong directory**: Fixed `validate_deployment_exists()` to properly construct state path from app name
+
 ## [0.10.7] - 2025-10-17
 
 ### Fixed

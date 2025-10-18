@@ -235,19 +235,31 @@ validate_pattern_name() {
 
 # Validate state directory for commands that need existing deployment
 validate_deployment_exists() {
-    local state_dir="${STATE_DIR:-.tfgrid-compose}"
+    # Derive app name from APP_PATH or APP_NAME
+    local app_name="${APP_NAME}"
+    if [ -z "$app_name" ] && [ -n "$APP_PATH" ]; then
+        app_name=$(basename "$APP_PATH")
+    fi
+    
+    if [ -z "$app_name" ]; then
+        log_error "Cannot determine app name"
+        return 1
+    fi
+    
+    # Construct state directory path
+    local state_dir="${STATE_DIR:-$STATE_BASE_DIR/$app_name}"
     
     if [ ! -d "$state_dir" ]; then
-        log_error "No deployment found"
+        log_error "No deployment found for: $app_name"
         log_info "State directory not found: $state_dir"
-        log_info "Deploy first with: make up APP=<app-path>"
+        log_info "Deploy first with: tfgrid-compose up $app_name"
         return 1
     fi
     
     if [ ! -f "$state_dir/state.yaml" ]; then
-        log_error "Deployment state corrupted"
+        log_error "Deployment state corrupted for: $app_name"
         log_info "State file not found: $state_dir/state.yaml"
-        log_info "Try cleaning and redeploying: make clean && make up"
+        log_info "Try cleaning and redeploying: tfgrid-compose down $app_name && tfgrid-compose up $app_name"
         return 1
     fi
     
