@@ -246,17 +246,65 @@ case "$COMMAND" in
         exit 0
         ;;
     
-    switch)
-        # Switch active app
+    select)
+        # Select active app
         APP_NAME="$1"
         
         if [ -z "$APP_NAME" ]; then
-            log_error "Usage: tfgrid-compose switch <app>"
+            log_error "Usage: tfgrid-compose select <app>"
+            log_info "       tfgrid-compose unselect    (clear selection)"
             exit 1
         fi
         
         if set_current_app "$APP_NAME"; then
-            log_success "Switched to $APP_NAME"
+            log_success "Selected $APP_NAME"
+            log_info "App-specific commands will now take precedence"
+        else
+            exit 1
+        fi
+        
+        exit 0
+        ;;
+        
+    unselect)
+        # Unselect active app
+        CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
+        if [ -f "$CURRENT_APP_FILE" ]; then
+            CURRENT=$(cat "$CURRENT_APP_FILE")
+            rm "$CURRENT_APP_FILE"
+            log_success "Unselected $CURRENT"
+            log_info "Built-in commands will now be used"
+        else
+            log_info "No app currently selected"
+        fi
+        exit 0
+        ;;
+        
+    switch)
+        # Legacy alias for select (backwards compatibility)
+        log_warning "Command 'switch' is deprecated, use 'select' instead"
+        APP_NAME="$1"
+        
+        # Handle old --clear flag
+        if [ "$APP_NAME" = "--clear" ] || [ "$APP_NAME" = "--none" ] || [ "$APP_NAME" = "-c" ]; then
+            CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
+            if [ -f "$CURRENT_APP_FILE" ]; then
+                rm "$CURRENT_APP_FILE"
+                log_success "Cleared app context"
+                log_info "No app is active - built-in commands will be used"
+            else
+                log_info "No app context set"
+            fi
+            exit 0
+        fi
+        
+        if [ -z "$APP_NAME" ]; then
+            log_error "Usage: tfgrid-compose select <app>"
+            exit 1
+        fi
+        
+        if set_current_app "$APP_NAME"; then
+            log_success "Selected $APP_NAME"
         else
             exit 1
         fi
@@ -601,6 +649,17 @@ case "$COMMAND" in
         if ! destroy_deployment; then
             log_error "Destroy failed"
             exit 1
+        fi
+        
+        # Auto-unselect if this was the active app
+        CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
+        if [ -f "$CURRENT_APP_FILE" ]; then
+            CURRENT_APP=$(cat "$CURRENT_APP_FILE")
+            if [ "$CURRENT_APP" = "$APP_NAME" ]; then
+                rm "$CURRENT_APP_FILE"
+                echo ""
+                log_info "Unselected (app no longer deployed)"
+            fi
         fi
         
         exit 0

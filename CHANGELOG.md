@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2025-10-18
+
+### Added
+- **Unswitch functionality**: Clear app context with `tfgrid-compose switch --clear`
+- **Auto-clear context**: Automatically clears context when destroying the active app
+
+### Changed
+- **Switch command**: Now supports `--clear`, `--none`, and `-c` flags to clear context
+- **Down command**: Auto-clears context if destroying the currently active app
+
 ## [0.12.1] - 2025-10-18
 
 ### Added
