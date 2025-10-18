@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.2] - 2025-10-17
+
+### Fixed - Critical Production Bugs 🐛
+- **Missing `primary_ip_type` extraction**: Now properly extracted from Terraform outputs to fix connectivity detection
+- **Stale Terraform state handling**: Auto-detects and cleans corrupted state from deleted deployments
+- **Error state cleanup**: Automatically cleans partial state on deployment failures (disable with `TFGRID_DEBUG=1`)
+
+### Added - Deployment Resilience ✨
+- **`--force` flag**: Force redeploy with `tfgrid-compose up <app> --force`
+- **State validation**: `validate_terraform_state()`, `clean_stale_state()`, `is_deployment_healthy()`
+- **Auto-recovery**: Detects stale state and cleans automatically on next deployment
+- **Error trap**: Prevents corrupt state files from failed deployments
+
+### Changed
+- Version bumped to v0.10.2
+- Improved deployment error messages with recovery suggestions
+
 ## [0.10.1] - 2025-10-16
 
 ### Added - UX Improvements 🎯
