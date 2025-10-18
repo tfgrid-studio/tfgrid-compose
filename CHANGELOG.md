@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.15] - 2025-10-17
+
+### Fixed
+- **Exec command logic**: Simplified smart detection to check deployed apps first, fixes silent failures
+
 ## [0.10.14] - 2025-10-17
 
 ### Fixed

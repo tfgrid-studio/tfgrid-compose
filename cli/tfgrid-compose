@@ -855,31 +855,31 @@ EOF
             log_error "No command specified"
             log_info "Usage: tfgrid-compose exec [app] <command> [args...]"
             log_info "Examples:"
-            log_info "  tfgrid-compose exec list"
-            log_info "  tfgrid-compose exec create my-project"
-            log_info "  tfgrid-compose exec tfgrid-ai-agent list"
+            log_info "  tfgrid-compose exec ls /opt"
+            log_info "  tfgrid-compose exec tfgrid-ai-agent ls /opt"
             exit 1
         fi
         
-        # Try to determine if first arg is app name or command
-        APP_INPUT="$1"
+        # Simplified detection: Check if first arg is a deployed app
         FIRST_ARG="$1"
+        APP_INPUT=""
+        USE_CONTEXT=false
         
-        # Check if it looks like an app (path or registry name)
-        if [[ "$FIRST_ARG" == */* ]] || [[ "$FIRST_ARG" == .* ]] || [ -d "$FIRST_ARG" ]; then
-            # It's a path, use it as app
+        # Check if first arg looks like an app (path or has context)
+        if [[ "$FIRST_ARG" == */* ]] || [[ "$FIRST_ARG" == .* ]]; then
+            # It's a path
             APP_INPUT="$1"
             shift
         else
-            # Try to resolve as registry app
-            APP_PATH_TEST=$(resolve_app_path "$FIRST_ARG" "true" 2>/dev/null)
-            if [ -n "$APP_PATH_TEST" ] && [ -d "$APP_PATH_TEST" ]; then
-                # It's a valid app name
+            # Check if it's a deployed app name
+            if [ -d "$STATE_BASE_DIR/$FIRST_ARG" ]; then
+                # It's a deployed app
                 APP_INPUT="$1"
                 shift
             else
-                # Not an app, assume it's a command and use context
+                # Not a deployed app, use context
                 APP_INPUT=$(load_context)
+                USE_CONTEXT=true
                 if [ -z "$APP_INPUT" ]; then
                     log_error "No app specified and no context found"
                     log_info "Run 'tfgrid-compose switch <app>' first or specify app:"
@@ -888,6 +888,13 @@ EOF
                 fi
                 # Don't shift, $1 is the command
             fi
+        fi
+        
+        # Check we have a command after figuring out the app
+        if [ $# -eq 0 ]; then
+            log_error "No command specified"
+            log_info "Usage: tfgrid-compose exec [app] <command> [args...]"
+            exit 1
         fi
         
         # Resolve app path
@@ -900,35 +907,29 @@ EOF
         APP_NAME=$(basename "$APP_PATH")
         export APP_NAME
         
-        # Check deployment exists
-        if ! validate_deployment_exists; then
-            exit 1
-        fi
-        
-        # Check we have a command
-        if [ $# -eq 0 ]; then
-            log_error "No command specified"
-            exit 1
-        fi
-        
-        # Load app
-        if ! load_app "$APP_PATH"; then
-            exit 1
-        fi
-        
         # Get VM IP from state
         local base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
         local state_dir="$base_dir/$APP_NAME"
+        
+        if [ ! -d "$state_dir" ]; then
+            log_error "No deployment found for: $APP_NAME"
+            log_info "Deploy first with: tfgrid-compose up $APP_NAME"
+            exit 1
+        fi
+        
         vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
         
         if [ -z "$vm_ip" ]; then
-            log_error "No VM IP found in state"
+            log_error "No VM IP found in state for $APP_NAME"
             exit 1
         fi
         
         # Get the command and arguments
         REMOTE_CMD="$@"
         
+        if [ "$USE_CONTEXT" = "true" ]; then
+            log_info "Using context: $APP_NAME"
+        fi
         log_info "Executing on $APP_NAME ($vm_ip): $REMOTE_CMD"
         echo ""
         
