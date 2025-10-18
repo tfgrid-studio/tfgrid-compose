@@ -305,6 +305,39 @@ tfgrid-compose shortcut tfgrid-compose  ❌ (main command)
 
 ---
 
+## Command Collision Detection
+
+**Smart Safety Check:** Before creating a shortcut, tfgrid-compose checks if the command already exists in your PATH.
+
+### Example: Shadowing Warning
+
+```bash
+$ tfgrid-compose shortcut tf
+
+⚠ Command 'tf' already exists!
+ℹ Existing command: /usr/local/bin/terraform
+ℹ Creating this shortcut will shadow the existing command
+
+Continue anyway? (y/N): n
+
+ℹ Cancelled - shortcut not created
+```
+
+### Common Conflicts
+
+Commands you might want to avoid shadowing:
+
+| Shortcut | May Conflict With | Alternative |
+|----------|-------------------|-------------|
+| `tf` | Terraform CLI | Use `tfg` or `grid` |
+| `k` | kubectl shortcut | Use `tfgrid` |
+| `docker` | Docker CLI | Don't do this! |
+| `git` | Git CLI | Seriously, don't! |
+
+**Note:** If the command is already a tfgrid-compose shortcut, no warning is shown.
+
+---
+
 ## Troubleshooting
 
 ### Shortcut Not Working
