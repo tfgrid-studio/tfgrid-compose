@@ -37,6 +37,9 @@ is_app_deployed() {
     
     # Also check for terraform directory (stale state without yaml)
     if [ -d "$state_dir/terraform" ] && [ -f "$state_dir/terraform/terraform.tfstate" ]; then
+        return 0
+    fi
+    
     return 1
 }
 
