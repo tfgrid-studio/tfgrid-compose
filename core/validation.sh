@@ -246,8 +246,9 @@ validate_deployment_exists() {
         return 1
     fi
     
-    # Construct state directory path
-    local state_dir="${STATE_DIR:-$STATE_BASE_DIR/$app_name}"
+    # Construct state directory path (with fallback for STATE_BASE_DIR)
+    local base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
+    local state_dir="${STATE_DIR:-$base_dir/$app_name}"
     
     if [ ! -d "$state_dir" ]; then
         log_error "No deployment found for: $app_name"

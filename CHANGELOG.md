@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.9] - 2025-10-17
+
+### Fixed
+- **STATE_BASE_DIR fallback**: Added fallback value for STATE_BASE_DIR in validation to ensure correct state path resolution
+
 ## [0.10.8] - 2025-10-17
 
 ### Fixed
