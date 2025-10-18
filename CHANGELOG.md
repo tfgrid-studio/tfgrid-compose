@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.13] - 2025-10-17
+
+### Fixed
+- **VERSION file not installed**: Added VERSION file to Makefile install command
+
 ## [0.10.12] - 2025-10-17
 
 ### Changed
