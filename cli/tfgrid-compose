@@ -47,9 +47,9 @@ get_app_command_script() {
     local app_path="$1"
     local command="$2"
     
-    # Read command script from manifest
+    # Read command script from manifest (including any arguments after script path)
     grep -A 2 "^  ${command}:" "$app_path/tfgrid-compose.yaml" 2>/dev/null | \
-        grep "script:" | awk '{print $2}'
+        grep "script:" | sed 's/.*script:[[:space:]]*//'
 }
 
 # Check if selected app has a specific command

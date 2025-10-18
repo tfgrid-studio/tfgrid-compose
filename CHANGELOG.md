@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.4] - 2025-10-18
+
+### Fixed
+- **`get_app_command_script`**: Now correctly extracts script path with arguments (e.g., `interactive-wrapper.sh monitor`)
+
 ## [0.13.3] - 2025-10-18
 
 ### Fixed
