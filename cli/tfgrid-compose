@@ -20,7 +20,7 @@ source "$DEPLOYER_ROOT/core/login.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
 
 # Version
-VERSION="0.10.1"
+VERSION="0.10.2"
 
 # Context file support
 CONTEXT_FILE=".tfgrid-compose.yaml"
@@ -188,22 +188,11 @@ case "$COMMAND" in
             exit 1
         fi
         
-        # Check if app is already deployed
-        if is_app_deployed "$APP_NAME"; then
-            log_error "App '$APP_NAME' is already deployed"
-            log_info "Destroy first: tfgrid-compose down $APP_NAME"
-            log_info "Or switch to it: tfgrid-compose switch $APP_NAME"
-            exit 1
-        fi
-        
-        # Initialize deployment state for this app
-        init_deployment_state "$APP_NAME"
-        export_app_state_dir "$APP_NAME"
-        
-        # Parse deployment flags
+        # Parse deployment flags FIRST (before checking deployment status)
         shift  # Remove app name
         PATTERN_NAME=""
         INTERACTIVE_MODE=false
+        FORCE_DEPLOY=false
         CUSTOM_NODE=""
         CUSTOM_CPU=""
         CUSTOM_MEM=""
@@ -222,6 +211,10 @@ case "$COMMAND" in
                     ;;
                 -i|--interactive)
                     INTERACTIVE_MODE=true
+                    shift
+                    ;;
+                --force|-f)
+                    FORCE_DEPLOY=true
                     shift
                     ;;
                 --node)
@@ -258,6 +251,47 @@ case "$COMMAND" in
         export CUSTOM_MEM
         export CUSTOM_DISK
         export CUSTOM_NETWORK
+        
+        # Check if app is already deployed or has stale state
+        if is_app_deployed "$APP_NAME"; then
+            # Check if deployment is healthy
+            if is_deployment_healthy "$APP_NAME"; then
+                if [ "$FORCE_DEPLOY" = "true" ]; then
+                    log_warning "Force deploy requested, destroying existing deployment..."
+                    export_app_state_dir "$APP_NAME"
+                    # Load app for destroy operation
+                    if ! load_app "$APP_PATH"; then
+                        exit 1
+                    fi
+                    if ! destroy_deployment; then
+                        log_error "Failed to destroy existing deployment"
+                        exit 1
+                    fi
+                    echo ""
+                else
+                    log_error "App '$APP_NAME' is already deployed"
+                    log_info "Destroy first: tfgrid-compose down $APP_NAME"
+                    log_info "Or force redeploy: tfgrid-compose up $APP_NAME --force"
+                    exit 1
+                fi
+            else
+                # Deployment exists but unhealthy - clean stale state
+                log_warning "Found unhealthy deployment state for $APP_NAME"
+                if ! validate_terraform_state "$APP_NAME"; then
+                    log_info "Detected stale Terraform state, cleaning..."
+                    clean_stale_state "$APP_NAME"
+                    echo ""
+                else
+                    log_error "Deployment exists but is unhealthy"
+                    log_info "Use --force to clean and redeploy: tfgrid-compose up $APP_NAME --force"
+                    exit 1
+                fi
+            fi
+        fi
+        
+        # Initialize deployment state for this app
+        init_deployment_state "$APP_NAME"
+        export_app_state_dir "$APP_NAME"
         
         # Load app
         if ! load_app "$APP_PATH"; then

@@ -9,10 +9,29 @@ source "$SCRIPT_DIR/app-loader.sh"
 source "$SCRIPT_DIR/node-selector.sh"
 source "$SCRIPT_DIR/interactive-config.sh"
 
+# Cleanup on deployment error
+cleanup_on_error() {
+    local app_name="$1"
+    log_warning "Deployment failed, cleaning up partial state..."
+    
+    # Don't clean if user wants to debug
+    if [ "${TFGRID_DEBUG:-}" = "1" ]; then
+        log_info "Debug mode: Keeping state for inspection"
+        return 0
+    fi
+    
+    # Clean stale state to allow retry
+    clean_stale_state "$app_name"
+    log_info "State cleaned. You can retry deployment."
+}
+
 # Deploy application
 deploy_app() {
     log_step "Starting deployment orchestration..."
     echo ""
+    
+    # Setup error trap
+    trap 'cleanup_on_error "$APP_NAME"' ERR
     
     # Source .env from app directory if it exists
     if [ -f "$APP_DIR/.env" ]; then
@@ -231,6 +250,9 @@ EOF
     echo "  • View logs: tfgrid-compose logs $APP_NAME"
     echo "  • Connect: tfgrid-compose ssh $APP_NAME"
     echo ""
+    
+    # Disable error trap on success
+    trap - ERR
     
     return 0
 }
@@ -538,6 +560,7 @@ destroy_deployment() {
 }
 
 # Export functions
+export -f cleanup_on_error
 export -f deploy_app
 export -f generate_terraform_config
 export -f deploy_app_source

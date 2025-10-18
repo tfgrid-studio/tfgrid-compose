@@ -55,8 +55,9 @@ if ! $TF_CMD apply -input=false tfplan 2>&1 | tee "$STATE_DIR/terraform-apply.lo
 fi
 log_info "Extracting infrastructure outputs..."
 
-# Get primary IP (REQUIRED by all patterns)
+# Get primary IP and type (REQUIRED by all patterns)
 primary_ip=$($TF_CMD output -raw primary_ip 2>/dev/null || echo "")
+primary_ip_type=$($TF_CMD output -raw primary_ip_type 2>/dev/null || echo "wireguard")
 
 if [ -n "$primary_ip" ]; then
     # Strip CIDR notation if present (e.g., 185.69.167.152/24 → 185.69.167.152)

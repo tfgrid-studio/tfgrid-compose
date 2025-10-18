@@ -128,3 +128,69 @@ export_app_state_dir() {
     local app_name="$1"
     export STATE_DIR=$(get_app_state_dir "$app_name")
 }
+
+# Validate Terraform state health
+validate_terraform_state() {
+    local app_name="$1"
+    local state_dir=$(get_app_state_dir "$app_name")
+    
+    if [ ! -d "$state_dir/terraform" ]; then
+        return 0  # No terraform dir yet, fresh deployment
+    fi
+    
+    # Check if terraform state file exists and is not empty
+    if [ ! -s "$state_dir/terraform/terraform.tfstate" ]; then
+        log_warning "Found empty Terraform state for $app_name"
+        return 1
+    fi
+    
+    # Check if state references actual deployments (basic check)
+    if grep -q '"resources": \[\]' "$state_dir/terraform/terraform.tfstate" 2>/dev/null; then
+        log_warning "Terraform state has no resources for $app_name"
+        return 1
+    fi
+    
+    return 0
+}
+
+# Clean stale Terraform state
+clean_stale_state() {
+    local app_name="$1"
+    local state_dir=$(get_app_state_dir "$app_name")
+    
+    log_warning "Cleaning stale state for $app_name"
+    
+    # Remove terraform state but keep state directory
+    if [ -d "$state_dir/terraform" ]; then
+        rm -rf "$state_dir/terraform"
+        log_info "Removed stale Terraform state"
+    fi
+    
+    # Remove state.yaml to force fresh metadata
+    if [ -f "$state_dir/state.yaml" ]; then
+        rm -f "$state_dir/state.yaml"
+        log_info "Removed stale state metadata"
+    fi
+    
+    # Keep the state directory itself for new deployment
+    return 0
+}
+
+# Check if deployment actually exists (not just state files)
+is_deployment_healthy() {
+    local app_name="$1"
+    local state_dir=$(get_app_state_dir "$app_name")
+    
+    # Check if we have valid state files
+    if [ ! -f "$state_dir/state.yaml" ]; then
+        return 1
+    fi
+    
+    # Check if VM IP is accessible (basic health check)
+    local vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
+    if [ -z "$vm_ip" ]; then
+        return 1
+    fi
+    
+    return 0
+}
