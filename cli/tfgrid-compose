@@ -365,38 +365,6 @@ case "$COMMAND" in
         exit 0
         ;;
         
-    switch)
-        # Legacy alias for select (backwards compatibility)
-        log_warning "Command 'switch' is deprecated, use 'select' instead"
-        APP_NAME="$1"
-        
-        # Handle old --clear flag
-        if [ "$APP_NAME" = "--clear" ] || [ "$APP_NAME" = "--none" ] || [ "$APP_NAME" = "-c" ]; then
-            CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
-            if [ -f "$CURRENT_APP_FILE" ]; then
-                rm "$CURRENT_APP_FILE"
-                log_success "Cleared app context"
-                log_info "No app is active - built-in commands will be used"
-            else
-                log_info "No app context set"
-            fi
-            exit 0
-        fi
-        
-        if [ -z "$APP_NAME" ]; then
-            log_error "Usage: tfgrid-compose select <app>"
-            exit 1
-        fi
-        
-        if set_current_app "$APP_NAME"; then
-            log_success "Selected $APP_NAME"
-        else
-            exit 1
-        fi
-        
-        exit 0
-        ;;
-        
     up)
         # Deploy command
         log_info "TFGrid Compose v$VERSION"

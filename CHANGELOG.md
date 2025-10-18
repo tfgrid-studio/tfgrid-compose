@@ -18,14 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Command resolution**: When an app is selected, its commands (like `login`, `logs`) take precedence over built-ins
 - **Built-in access**: Built-in commands always accessible via `config` subcommand
-- **`switch` command**: Deprecated in favor of `select` (still works with deprecation warning)
 - **Error messages**: Updated to use "select" terminology
 
 ### Breaking Changes
+- **`switch` command removed**: Replaced by `select`/`unselect` commands
 - **Command behavior**: `login` and `logs` now execute app versions when app is selected
 - Users can access built-ins via: `tfgrid-compose config login`, etc.
 
-## [0.12.2] - 2025-10-18
+### Removed
+- **`switch` command**: Use `select` and `unselect` instead
+
+## [0.12.2] - 2025-10-18 (superseded by v0.13.0)
 
 ### Added
 - **Unswitch functionality**: Clear app context with `tfgrid-compose switch --clear`
@@ -34,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Switch command**: Now supports `--clear`, `--none`, and `-c` flags to clear context
 - **Down command**: Auto-clears context if destroying the currently active app
+
+**Note:** This version was never publicly released. Functionality merged into v0.13.0 with better naming (`select`/`unselect`).
 
 ## [0.12.1] - 2025-10-18
 
