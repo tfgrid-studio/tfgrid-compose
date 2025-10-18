@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.4] - 2025-10-17
+
+### Fixed
+- **Destroy deployment bug**: Fixed duplicate log paths and missing tfvars in destroy command
+- **Interactive prompts on destroy**: Now uses existing tfvars file to avoid prompting for variables
+
 ## [0.10.3] - 2025-10-17
 
 ### Fixed

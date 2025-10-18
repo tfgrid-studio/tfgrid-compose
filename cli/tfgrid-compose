@@ -20,7 +20,7 @@ source "$DEPLOYER_ROOT/core/login.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
 
 # Version
-VERSION="0.10.3"
+VERSION="0.10.4"
 
 # Context file support
 CONTEXT_FILE=".tfgrid-compose.yaml"

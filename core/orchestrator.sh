@@ -537,11 +537,17 @@ destroy_deployment() {
 
         # Update lock file to match current configuration
         log_info "Updating lock file..."
-        if ! $TF_CMD init -upgrade -input=false 2>&1 | tee "$orig_dir/$STATE_DIR/terraform-init-upgrade.log"; then
+        if ! $TF_CMD init -upgrade -input=false 2>&1 | tee "$STATE_DIR/terraform-init-upgrade.log"; then
             log_warning "Init -upgrade failed, but continuing with destroy..."
         fi
 
-        if $TF_CMD destroy -auto-approve 2>&1 | tee "$orig_dir/$STATE_DIR/terraform-destroy.log"; then
+        # Use tfvars file if it exists, otherwise destroy will prompt for variables
+        local destroy_cmd="$TF_CMD destroy -auto-approve"
+        if [ -f "terraform.tfvars" ]; then
+            destroy_cmd="$destroy_cmd -var-file=terraform.tfvars"
+        fi
+
+        if $destroy_cmd 2>&1 | tee "$STATE_DIR/terraform-destroy.log"; then
             log_success "Infrastructure destroyed"
         else
             log_error "Destroy failed. Check: $STATE_DIR/terraform-destroy.log"
