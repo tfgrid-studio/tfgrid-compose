@@ -98,24 +98,20 @@ if [ -n "$our_ip_range" ]; then
     fi
 fi
 
-# Stop our interface if it exists from previous deployment
-if sudo wg show "$wg_interface" 2>/dev/null | grep -q "interface:"; then
-    log_info "Stopping existing interface: $wg_interface"
-    sudo wg-quick down "$wg_interface" 2>/dev/null || true
-fi
-
-# Clean up any lingering routes from previous deployments
-log_info "Cleaning up existing routes..."
-sudo ip route del 100.64.0.0/16 2>/dev/null || true
-sudo ip route del 10.1.0.0/16 2>/dev/null || true
-
-# Remove any orphaned WireGuard interfaces
-existing_wg_links=$(ip link show | grep -oP 'wg[0-9]*(?=:)' || true)
-if [ -n "$existing_wg_links" ]; then
-    for wg_link in $existing_wg_links; do
-        log_info "Removing orphaned interface: $wg_link"
-        sudo ip link del "$wg_link" 2>/dev/null || true
-    done
+# Clean up THIS app's previous interface if it exists
+if [ -f "$STATE_DIR/wg_interface" ]; then
+    OLD_INTERFACE=$(cat "$STATE_DIR/wg_interface")
+    log_info "Cleaning up previous interface: $OLD_INTERFACE"
+    
+    # Stop the old interface
+    sudo wg-quick down "$OLD_INTERFACE" 2>/dev/null || true
+    
+    # Remove the interface
+    sudo ip link del "$OLD_INTERFACE" 2>/dev/null || true
+    
+    # Clean up routes from old interface
+    sudo ip route del 100.64.0.0/16 dev "$OLD_INTERFACE" 2>/dev/null || true
+    sudo ip route del 10.1.0.0/16 dev "$OLD_INTERFACE" 2>/dev/null || true
 fi
 
 # Start WireGuard (simple, like external)
@@ -125,6 +121,9 @@ if ! sudo wg-quick up "$wg_interface"; then
     log_info "Check config: /etc/wireguard/${wg_interface}.conf"
     exit 1
 fi
+
+# Save interface name to state for future cleanup
+echo "$wg_interface" > "$STATE_DIR/wg_interface"
 
 log_success "WireGuard connection established: $wg_interface"
 
