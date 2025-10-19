@@ -556,6 +556,8 @@ case "$COMMAND" in
         PATTERN_NAME=""
         INTERACTIVE_MODE=false
         FORCE_DEPLOY=false
+        REFRESH_CACHE=false
+        NO_REFRESH=false
         CUSTOM_NODE=""
         CUSTOM_CPU=""
         CUSTOM_MEM=""
@@ -578,6 +580,14 @@ case "$COMMAND" in
                     ;;
                 --force|-f)
                     FORCE_DEPLOY=true
+                    shift
+                    ;;
+                --refresh)
+                    REFRESH_CACHE=true
+                    shift
+                    ;;
+                --no-refresh)
+                    NO_REFRESH=true
                     shift
                     ;;
                 --node)
@@ -614,6 +624,19 @@ case "$COMMAND" in
         export CUSTOM_MEM
         export CUSTOM_DISK
         export CUSTOM_NETWORK
+        
+        # Handle cache refresh logic
+        # --force implies --refresh unless --no-refresh is specified
+        if [ "$FORCE_DEPLOY" = "true" ] && [ "$NO_REFRESH" != "true" ]; then
+            REFRESH_CACHE=true
+        fi
+        
+        # Clear app cache if refresh requested
+        if [ "$REFRESH_CACHE" = "true" ]; then
+            log_info "Refreshing app cache..."
+            clean_app_cache "$APP_NAME"
+            echo ""
+        fi
         
         # Check if app is already deployed or has stale state
         if is_app_deployed "$APP_NAME"; then
