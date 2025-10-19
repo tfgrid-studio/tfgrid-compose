@@ -176,6 +176,11 @@ app_version: $APP_VERSION
 app_dir: $APP_DIR
 pattern_name: $PATTERN_NAME
 pattern_version: $PATTERN_VERSION
+deploy_node: $DEPLOY_NODE
+deploy_cpu: $DEPLOY_CPU
+deploy_mem: $DEPLOY_MEM
+deploy_disk: $DEPLOY_DISK
+deploy_network: $DEPLOY_NETWORK
 EOF
     
     log_success "Metadata saved"
@@ -540,6 +545,50 @@ destroy_deployment() {
         sudo wg-quick down "$wg_interface" 2>/dev/null || true
         sudo rm -f "/etc/wireguard/${wg_interface}.conf"
         log_success "WireGuard interface removed"
+    fi
+    
+    # Load deployment variables from state for Terraform destroy
+    if [ -f "$STATE_DIR/state.yaml" ]; then
+        log_info "Loading deployment configuration..."
+        local pattern_name=$(yaml_get "$STATE_DIR/state.yaml" "pattern_name")
+        local deploy_node=$(yaml_get "$STATE_DIR/state.yaml" "deploy_node")
+        local deploy_cpu=$(yaml_get "$STATE_DIR/state.yaml" "deploy_cpu")
+        local deploy_mem=$(yaml_get "$STATE_DIR/state.yaml" "deploy_mem")
+        local deploy_disk=$(yaml_get "$STATE_DIR/state.yaml" "deploy_disk")
+        local deploy_network=$(yaml_get "$STATE_DIR/state.yaml" "deploy_network")
+        
+        # Export network variable
+        export TF_VAR_tfgrid_network="${deploy_network:-main}"
+        
+        # Export pattern-specific variables
+        case "$pattern_name" in
+            single-vm)
+                export TF_VAR_vm_node=$deploy_node
+                export TF_VAR_vm_cpu=$deploy_cpu
+                export TF_VAR_vm_mem=$deploy_mem
+                export TF_VAR_vm_disk=$deploy_disk
+                ;;
+            gateway)
+                export TF_VAR_gateway_node=$deploy_node
+                export TF_VAR_gateway_cpu=$deploy_cpu
+                export TF_VAR_gateway_mem=$deploy_mem
+                export TF_VAR_gateway_disk=$deploy_disk
+                ;;
+            k3s)
+                export TF_VAR_management_node=$deploy_node
+                export TF_VAR_management_cpu=$deploy_cpu
+                export TF_VAR_management_mem=$deploy_mem
+                export TF_VAR_management_disk=$deploy_disk
+                ;;
+            *)
+                # Fallback for unknown patterns
+                export TF_VAR_vm_node=$deploy_node
+                export TF_VAR_vm_cpu=$deploy_cpu
+                export TF_VAR_vm_mem=$deploy_mem
+                export TF_VAR_vm_disk=$deploy_disk
+                ;;
+        esac
+        log_info "Loaded variables: pattern=$pattern_name, node=$deploy_node"
     fi
     
     # Run Terraform destroy
