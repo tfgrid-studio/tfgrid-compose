@@ -692,7 +692,14 @@ case "$COMMAND" in
                 # For --force, delete and re-clone to guarantee fresh code
                 log_info "Force deploy: removing cached app for fresh download..."
                 clean_app_cache "$APP_NAME"
-                # Will be re-downloaded when load_app is called below
+                
+                # Re-download fresh from registry
+                log_info "Downloading fresh app from registry..."
+                APP_PATH=$(get_app "$APP_NAME" "$REPO_URL")
+                if [ -z "$APP_PATH" ]; then
+                    log_error "Failed to download app after cache cleanup"
+                    exit 1
+                fi
             else
                 # For regular refresh, try git pull
                 update_cached_app "$APP_NAME" || true  # Don't fail if update fails, use existing cache
