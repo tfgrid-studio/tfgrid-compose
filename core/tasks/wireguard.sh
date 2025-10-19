@@ -104,6 +104,20 @@ if sudo wg show "$wg_interface" 2>/dev/null | grep -q "interface:"; then
     sudo wg-quick down "$wg_interface" 2>/dev/null || true
 fi
 
+# Clean up any lingering routes from previous deployments
+log_info "Cleaning up existing routes..."
+sudo ip route del 100.64.0.0/16 2>/dev/null || true
+sudo ip route del 10.1.0.0/16 2>/dev/null || true
+
+# Remove any orphaned WireGuard interfaces
+existing_wg_links=$(ip link show | grep -oP 'wg[0-9]*(?=:)' || true)
+if [ -n "$existing_wg_links" ]; then
+    for wg_link in $existing_wg_links; do
+        log_info "Removing orphaned interface: $wg_link"
+        sudo ip link del "$wg_link" 2>/dev/null || true
+    done
+fi
+
 # Start WireGuard (simple, like external)
 log_info "Starting WireGuard interface..."
 if ! sudo wg-quick up "$wg_interface"; then
