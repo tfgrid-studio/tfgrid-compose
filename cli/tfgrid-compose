@@ -631,13 +631,6 @@ case "$COMMAND" in
             REFRESH_CACHE=true
         fi
         
-        # Clear app cache if refresh requested
-        if [ "$REFRESH_CACHE" = "true" ]; then
-            log_info "Refreshing app cache..."
-            clean_app_cache "$APP_NAME"
-            echo ""
-        fi
-        
         # Check if app is already deployed or has stale state
         if is_app_deployed "$APP_NAME"; then
             # Check if deployment is healthy
@@ -645,7 +638,7 @@ case "$COMMAND" in
                 if [ "$FORCE_DEPLOY" = "true" ]; then
                     log_warning "Force deploy requested, destroying existing deployment..."
                     export_app_state_dir "$APP_NAME"
-                    # Load app for destroy operation
+                    # Load app for destroy operation (before clearing cache)
                     if ! load_app "$APP_PATH"; then
                         exit 1
                     fi
@@ -679,6 +672,13 @@ case "$COMMAND" in
                     exit 1
                 fi
             fi
+        fi
+        
+        # Clear app cache if refresh requested (after destroy so app is available)
+        if [ "$REFRESH_CACHE" = "true" ]; then
+            log_info "Refreshing app cache..."
+            clean_app_cache "$APP_NAME"
+            echo ""
         fi
         
         # Initialize deployment state for this app
