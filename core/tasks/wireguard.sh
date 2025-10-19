@@ -92,6 +92,13 @@ if [ -n "$our_ip_range" ]; then
                     log_warning "Found conflicting WireGuard interface: $iface (uses same IP range)"
                     log_info "Stopping conflicting interface: $iface"
                     sudo wg-quick down "$iface" 2>/dev/null || true
+                    
+                    # Clean up any leftover routes from this interface
+                    sudo ip route del 100.64.0.0/16 dev "$iface" 2>/dev/null || true
+                    sudo ip route del 10.1.0.0/16 dev "$iface" 2>/dev/null || true
+                    
+                    # Remove the interface completely
+                    sudo ip link del "$iface" 2>/dev/null || true
                 fi
             fi
         done
@@ -118,6 +125,11 @@ fi
 log_info "Cleaning up existing interface: $wg_interface (if any)"
 sudo wg-quick down "$wg_interface" 2>/dev/null || true
 sudo ip link del "$wg_interface" 2>/dev/null || true
+
+# Clean up any orphaned routes (routes that exist without an interface)
+# This handles cases where interface was deleted but routes remained
+sudo ip route del 100.64.0.0/16 2>/dev/null || true
+sudo ip route del 10.1.0.0/16 2>/dev/null || true
 
 # Start WireGuard (simple, like external)
 log_info "Starting WireGuard interface..."
