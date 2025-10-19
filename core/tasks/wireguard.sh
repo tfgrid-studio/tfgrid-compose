@@ -114,6 +114,11 @@ if [ -f "$STATE_DIR/wg_interface" ]; then
     sudo ip route del 10.1.0.0/16 dev "$OLD_INTERFACE" 2>/dev/null || true
 fi
 
+# Also clean up the interface we're about to use (in case of leftover from previous deployment)
+log_info "Cleaning up existing interface: $wg_interface (if any)"
+sudo wg-quick down "$wg_interface" 2>/dev/null || true
+sudo ip link del "$wg_interface" 2>/dev/null || true
+
 # Start WireGuard (simple, like external)
 log_info "Starting WireGuard interface..."
 if ! sudo wg-quick up "$wg_interface"; then
