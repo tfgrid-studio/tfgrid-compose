@@ -775,6 +775,31 @@ case "$COMMAND" in
             log_info "Using app from context: $APP_PATH"
         fi
         
+        # If it's a name (not a path), look up in registry
+        if [[ ! "$APP_PATH" =~ ^\.?/ ]] && [ ! -d "$APP_PATH" ]; then
+            APP_NAME="$APP_PATH"
+            log_info "Looking up $APP_NAME in registry..."
+            
+            # Check cache first
+            if is_app_cached "$APP_NAME"; then
+                APP_PATH="$APPS_CACHE_DIR/$APP_NAME"
+                log_success "Using app: $APP_NAME"
+            else
+                # Download from registry
+                REPO_URL=$(get_app_repo_url "$APP_NAME")
+                if [ $? -ne 0 ]; then
+                    log_error "App not found in registry: $APP_NAME"
+                    exit 1
+                fi
+                
+                APP_PATH=$(get_app "$APP_NAME" "$REPO_URL")
+                if [ $? -ne 0 ]; then
+                    exit 1
+                fi
+                log_success "Using app: $APP_NAME"
+            fi
+        fi
+        
         # Validate app path
         if ! validate_app_path "$APP_PATH"; then
             exit 1
