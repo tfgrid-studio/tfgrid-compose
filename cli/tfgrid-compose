@@ -594,6 +594,10 @@ case "$COMMAND" in
                     CUSTOM_NODE="$2"
                     shift 2
                     ;;
+                --node=*)
+                    CUSTOM_NODE="${1#--node=}"
+                    shift
+                    ;;
                 --cpu)
                     CUSTOM_CPU="$2"
                     shift 2
