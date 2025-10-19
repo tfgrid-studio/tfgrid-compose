@@ -631,6 +631,9 @@ case "$COMMAND" in
             REFRESH_CACHE=true
         fi
         
+        # Track if we destroyed a deployment (only refresh cache in that case)
+        DESTROYED_DEPLOYMENT=false
+        
         # Check if app is already deployed or has stale state
         if is_app_deployed "$APP_NAME"; then
             # Check if deployment is healthy
@@ -646,6 +649,7 @@ case "$COMMAND" in
                         log_error "Failed to destroy existing deployment"
                         exit 1
                     fi
+                    DESTROYED_DEPLOYMENT=true
                     echo ""
                 else
                     log_error "App '$APP_NAME' is already deployed"
@@ -661,6 +665,7 @@ case "$COMMAND" in
                 if [ "$FORCE_DEPLOY" = "true" ]; then
                     log_info "Force deploy requested, cleaning unhealthy state..."
                     clean_stale_state "$APP_NAME"
+                    DESTROYED_DEPLOYMENT=true
                     echo ""
                 elif ! validate_terraform_state "$APP_NAME"; then
                     log_info "Detected stale Terraform state, cleaning..."
@@ -674,8 +679,9 @@ case "$COMMAND" in
             fi
         fi
         
-        # Clear app cache if refresh requested (after destroy so app is available)
-        if [ "$REFRESH_CACHE" = "true" ]; then
+        # Clear app cache only if we destroyed a deployment OR explicit --refresh
+        # This avoids clearing cache on fresh deployments with --force
+        if [ "$REFRESH_CACHE" = "true" ] && ([ "$DESTROYED_DEPLOYMENT" = "true" ] || [ "$FORCE_DEPLOY" != "true" ]); then
             log_info "Refreshing app cache..."
             clean_app_cache "$APP_NAME"
             echo ""
