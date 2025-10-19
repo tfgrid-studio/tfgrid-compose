@@ -631,7 +631,7 @@ case "$COMMAND" in
             REFRESH_CACHE=true
         fi
         
-        # Track if we destroyed a deployment (only refresh cache in that case)
+        # Track if we destroyed a deployment (for cache refresh)
         DESTROYED_DEPLOYMENT=false
         
         # Check if app is already deployed or has stale state
@@ -679,11 +679,17 @@ case "$COMMAND" in
             fi
         fi
         
-        # Clear app cache only if we destroyed a deployment OR explicit --refresh
-        # This avoids clearing cache on fresh deployments with --force
-        if [ "$REFRESH_CACHE" = "true" ] && ([ "$DESTROYED_DEPLOYMENT" = "true" ] || [ "$FORCE_DEPLOY" != "true" ]); then
+        # Refresh app cache if requested and we destroyed something
+        # Pull latest code from repository
+        if [ "$REFRESH_CACHE" = "true" ] && [ "$DESTROYED_DEPLOYMENT" = "true" ]; then
             log_info "Refreshing app cache..."
-            clean_app_cache "$APP_NAME"
+            # Update the cached app (git pull latest)
+            update_cached_app "$APP_NAME" || true  # Don't fail if update fails, use existing cache
+            echo ""
+        elif [ "$REFRESH_CACHE" = "true" ] && [ "$FORCE_DEPLOY" != "true" ]; then
+            # Explicit --refresh without --force: update cached app
+            log_info "Refreshing app cache..."
+            update_cached_app "$APP_NAME" || true  # Don't fail if update fails, use existing cache
             echo ""
         fi
         
