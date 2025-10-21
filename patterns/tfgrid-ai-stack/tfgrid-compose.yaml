@@ -1,0 +1,332 @@
+name: tfgrid-ai-stack
+version: 0.12.0-dev
+description: AI-powered development platform with integrated Git hosting and deployment
+author: TFGrid Studio Team
+license: Apache-2.0
+
+# Pattern type and characteristics
+type: multi-vm
+complexity: advanced
+resource_intensive: true
+
+# Required features
+requires:
+  - wireguard
+  - ansible
+  - terraform
+
+# Pattern variables with defaults
+variables:
+  # Domain configuration (optional for public mode)
+  domain:
+    type: string
+    description: "Domain name for public access (leave empty for private mode)"
+    default: ""
+    required: false
+  
+  ssl_email:
+    type: string
+    description: "Email for SSL certificate (required if domain set)"
+    default: ""
+    required: false
+  
+  # VM Resource allocation
+  gateway_cpu:
+    type: integer
+    description: "Gateway VM CPU cores"
+    default: 2
+    min: 2
+    max: 8
+  
+  gateway_memory:
+    type: integer
+    description: "Gateway VM memory in MB"
+    default: 4096
+    min: 2048
+    max: 16384
+  
+  gateway_disk:
+    type: integer
+    description: "Gateway VM disk in MB"
+    default: 51200
+    min: 20480
+    max: 512000
+  
+  ai_agent_cpu:
+    type: integer
+    description: "AI Agent VM CPU cores"
+    default: 4
+    min: 2
+    max: 16
+  
+  ai_agent_memory:
+    type: integer
+    description: "AI Agent VM memory in MB"
+    default: 8192
+    min: 4096
+    max: 32768
+  
+  ai_agent_disk:
+    type: integer
+    description: "AI Agent VM disk in MB"
+    default: 102400
+    min: 51200
+    max: 1024000
+  
+  gitea_cpu:
+    type: integer
+    description: "Gitea VM CPU cores"
+    default: 2
+    min: 1
+    max: 8
+  
+  gitea_memory:
+    type: integer
+    description: "Gitea VM memory in MB"
+    default: 4096
+    min: 2048
+    max: 16384
+  
+  gitea_disk:
+    type: integer
+    description: "Gitea VM disk in MB"
+    default: 51200
+    min: 20480
+    max: 512000
+  
+  # Network configuration
+  wireguard_port:
+    type: integer
+    description: "WireGuard VPN port"
+    default: 51820
+  
+  private_network:
+    type: string
+    description: "Private network CIDR"
+    default: "10.1.1.0/24"
+  
+  # Security settings
+  api_rate_limit:
+    type: string
+    description: "API rate limit (requests per minute)"
+    default: "100r/m"
+  
+  max_concurrent_projects:
+    type: integer
+    description: "Maximum concurrent project creations"
+    default: 10
+  
+  # Backup settings
+  backup_retention_days:
+    type: integer
+    description: "Backup retention period in days"
+    default: 30
+  
+  backup_schedule:
+    type: string
+    description: "Backup cron schedule"
+    default: "0 2 * * *"
+  
+  # ThreeFold Grid settings
+  farm_id:
+    type: integer
+    description: "Preferred farm ID (0 for auto)"
+    default: 0
+  
+  node_id:
+    type: integer
+    description: "Specific node ID (0 for auto)"
+    default: 0
+
+# Infrastructure phase
+infrastructure:
+  provider: terraform
+  directory: infrastructure
+  
+  # Terraform backend configuration
+  backend:
+    type: local
+    path: .terraform/state
+  
+  # Required providers
+  providers:
+    - name: threefold
+      source: threefold/grid
+      version: "~> 1.0"
+  
+  # Outputs needed for platform phase
+  outputs:
+    - gateway_ip
+    - gateway_wireguard_ip
+    - ai_agent_wireguard_ip
+    - gitea_wireguard_ip
+    - gateway_ssh_key
+    - api_key
+    - gitea_admin_password
+
+# Platform configuration phase
+platform:
+  provider: ansible
+  directory: platform
+  
+  # Ansible configuration
+  ansible_config:
+    host_key_checking: false
+    timeout: 30
+    forks: 3
+  
+  # Playbooks to run in order
+  playbooks:
+    - name: site.yml
+      description: "Main orchestration playbook"
+  
+  # Roles included
+  roles:
+    - common
+    - gateway
+    - ai_agent
+    - gitea
+    - monitoring
+  
+  # Variables passed from infrastructure
+  variables:
+    gateway_ip: "{{ infrastructure.outputs.gateway_ip }}"
+    gateway_wireguard_ip: "{{ infrastructure.outputs.gateway_wireguard_ip }}"
+    ai_agent_wireguard_ip: "{{ infrastructure.outputs.ai_agent_wireguard_ip }}"
+    gitea_wireguard_ip: "{{ infrastructure.outputs.gitea_wireguard_ip }}"
+    domain: "{{ variables.domain }}"
+    ssl_email: "{{ variables.ssl_email }}"
+    api_rate_limit: "{{ variables.api_rate_limit }}"
+    backup_schedule: "{{ variables.backup_schedule }}"
+    backup_retention_days: "{{ variables.backup_retention_days }}"
+
+# Health checks
+health_checks:
+  - name: gateway_vm
+    type: ping
+    target: "{{ infrastructure.outputs.gateway_ip }}"
+    interval: 60
+  
+  - name: gateway_api
+    type: http
+    target: "http://{{ infrastructure.outputs.gateway_ip }}:3000/api/v1/health"
+    expected_status: 200
+    interval: 60
+  
+  - name: ai_agent
+    type: http
+    target: "http://{{ infrastructure.outputs.ai_agent_wireguard_ip }}:8080/health"
+    expected_status: 200
+    interval: 60
+  
+  - name: gitea
+    type: http
+    target: "http://{{ infrastructure.outputs.gitea_wireguard_ip }}:3000"
+    expected_status: 200
+    interval: 60
+  
+  - name: prometheus
+    type: http
+    target: "http://{{ infrastructure.outputs.gateway_ip }}:9090/-/healthy"
+    expected_status: 200
+    interval: 60
+  
+  - name: grafana
+    type: http
+    target: "http://{{ infrastructure.outputs.gateway_ip }}:3000/api/health"
+    expected_status: 200
+    interval: 60
+
+# Monitoring configuration
+monitoring:
+  prometheus:
+    enabled: true
+    port: 9090
+    scrape_interval: 15s
+    retention: 15d
+  
+  grafana:
+    enabled: true
+    port: 3000
+    admin_user: admin
+    admin_password: "{{ generated }}"
+  
+  loki:
+    enabled: true
+    port: 3100
+    retention: 7d
+
+# Backup configuration
+backup:
+  enabled: true
+  schedule: "{{ variables.backup_schedule }}"
+  retention_days: "{{ variables.backup_retention_days }}"
+  targets:
+    - name: gitea_database
+      type: postgres_dump
+      host: gitea
+    - name: project_metadata
+      type: files
+      paths:
+        - /opt/ai-agent/data
+    - name: nginx_configs
+      type: files
+      paths:
+        - /etc/nginx
+
+# CLI commands exposed
+commands:
+  create:
+    description: "Create a new project with AI"
+    usage: "tfgrid-compose create <description>"
+    script: scripts/create-project.sh
+  
+  projects:
+    description: "List all projects"
+    usage: "tfgrid-compose projects"
+    script: scripts/list-projects.sh
+  
+  monitor:
+    description: "Monitor project logs"
+    usage: "tfgrid-compose monitor <project-name>"
+    script: scripts/monitor-project.sh
+  
+  delete:
+    description: "Delete a project"
+    usage: "tfgrid-compose delete <project-name>"
+    script: scripts/delete-project.sh
+  
+  backup:
+    description: "Trigger manual backup"
+    usage: "tfgrid-compose backup"
+    script: scripts/manual-backup.sh
+  
+  restore:
+    description: "Restore from backup"
+    usage: "tfgrid-compose restore <backup-file>"
+    script: scripts/restore-backup.sh
+
+# Documentation
+documentation:
+  readme: README.md
+  architecture: ARCHITECTURE.md
+  operations: OPERATIONS.md
+  troubleshooting: docs/TROUBLESHOOTING.md
+
+# Tags for pattern discovery
+tags:
+  - ai
+  - development
+  - git
+  - automation
+  - monitoring
+  - multi-vm
+
+# Metadata
+metadata:
+  category: development
+  maturity: beta
+  support_level: community
+  estimated_cost: medium
+  deployment_time: "10 minutes"
+  complexity_level: advanced
