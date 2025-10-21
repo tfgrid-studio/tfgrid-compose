@@ -38,11 +38,23 @@ fi
 # Save original directory for log paths
 ORIG_DIR="$(pwd)"
 
+# Extract variables from state file to pass to Ansible
+APP_NAME=$(grep "^app_name:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+VM_IP=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+PRIMARY_IP=$(grep "^primary_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+MYCELIUM_IP=$(grep "^mycelium_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+
+# Build extra vars
+EXTRA_VARS="app_name=${APP_NAME}"
+[ -n "$VM_IP" ] && EXTRA_VARS="$EXTRA_VARS vm_ip=${VM_IP}"
+[ -n "$PRIMARY_IP" ] && EXTRA_VARS="$EXTRA_VARS primary_ip=${PRIMARY_IP}"
+[ -n "$MYCELIUM_IP" ] && EXTRA_VARS="$EXTRA_VARS mycelium_ip=${MYCELIUM_IP}"
+
 # Run the playbook
 cd "$STATE_DIR/ansible" || exit 1
 
 log_info "Configuring VM with Ansible..."
-ansible-playbook -i "../inventory.ini" site.yml 2>&1 | tee "../ansible.log"
+ansible-playbook -i "../inventory.ini" site.yml --extra-vars "$EXTRA_VARS" 2>&1 | tee "../ansible.log"
 ANSIBLE_EXIT_CODE=${PIPESTATUS[0]}
 
 cd "$ORIG_DIR"
