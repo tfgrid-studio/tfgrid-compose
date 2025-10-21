@@ -37,3 +37,14 @@
   delay: 10
   register: apt_install
   until: apt_install is succeeded
+
+- name: Create TFGrid environment variables
+  template:
+    src: tfgrid-env.sh.j2
+    dest: /etc/profile.d/tfgrid-env.sh
+    mode: '0644'
+  vars:
+    tfgrid_app_name: "{{ tfgrid_app_name }}"
+    tfgrid_vm_ip: "{{ tfgrid_vm_ip }}"
+    tfgrid_wireguard_ip: "{{ tfgrid_wireguard_ip }}"
+    tfgrid_mycelium_ip: "{{ tfgrid_mycelium_ip }}"
