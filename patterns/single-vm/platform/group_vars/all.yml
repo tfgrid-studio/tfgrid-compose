@@ -10,7 +10,7 @@ ai_agent_repo: https://github.com/tfgrid-studio/tfgrid-ai-agent.git
 ai_agent_path: /opt/ai-agent
 
 # TFGrid deployment information (passed to VMs)
-tfgrid_app_name: "{{ app_name | default('unknown') }}"
+tfgrid_app_name: "{{ app_name | default('tfgrid-gitea') }}"
 tfgrid_vm_ip: "{{ vm_ip | default('') }}"
 tfgrid_wireguard_ip: "{{ primary_ip | default('') if primary_ip_type == 'wireguard' else '' }}"
 tfgrid_mycelium_ip: "{{ mycelium_ip | default('') }}"
