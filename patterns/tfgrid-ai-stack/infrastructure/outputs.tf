@@ -4,7 +4,7 @@
 # Required Pattern Contract Outputs
 output "primary_ip" {
   description = "Primary IP address for connecting to the deployment"
-  value       = grid_deployment.gateway.vms[0].ygg_ip
+  value       = grid_deployment.gateway.vms[0].computedip
 }
 
 output "primary_ip_type" {
@@ -14,7 +14,7 @@ output "primary_ip_type" {
 
 output "deployment_name" {
   description = "Name of the deployment"
-  value       = var.deployment_name
+  value       = grid_deployment.gateway.name
 }
 
 output "node_ids" {
@@ -83,11 +83,11 @@ output "gitea_db_password" {
   sensitive   = true
 }
 
-# Deployment Info
-output "deployment_name" {
-  description = "Deployment name"
-  value       = var.deployment_name
-}
+# Deployment Info (duplicate - already defined above)
+# output "deployment_name" {
+#   description = "Deployment name"
+#   value       = var.deployment_name
+# }
 
 output "domain" {
   description = "Configured domain (if any)"
