@@ -156,6 +156,10 @@ infrastructure:
 
   # Outputs needed for platform phase
   outputs:
+    - primary_ip
+    - primary_ip_type
+    - deployment_name
+    - node_ids
     - gateway_ip
     - gateway_wireguard_ip
     - ai_agent_wireguard_ip
@@ -190,6 +194,10 @@ platform:
 
   # Variables passed from infrastructure
   variables:
+    primary_ip: "{{ infrastructure.outputs.primary_ip }}"
+    primary_ip_type: "{{ infrastructure.outputs.primary_ip_type }}"
+    deployment_name: "{{ infrastructure.outputs.deployment_name }}"
+    node_ids: "{{ infrastructure.outputs.node_ids }}"
     gateway_ip: "{{ infrastructure.outputs.gateway_ip }}"
     gateway_wireguard_ip: "{{ infrastructure.outputs.gateway_wireguard_ip }}"
     ai_agent_wireguard_ip: "{{ infrastructure.outputs.ai_agent_wireguard_ip }}"

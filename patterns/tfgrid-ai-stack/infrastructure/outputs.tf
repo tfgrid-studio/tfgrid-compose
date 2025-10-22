@@ -1,6 +1,31 @@
 # TFGrid AI Stack - Terraform Outputs
 # Version: 0.12.0-dev (MVP)
 
+# Required Pattern Contract Outputs
+output "primary_ip" {
+  description = "Primary IP address for connecting to the deployment"
+  value       = grid_deployment.gateway.vms[0].ygg_ip
+}
+
+output "primary_ip_type" {
+  description = "Type of primary IP"
+  value       = "wireguard"
+}
+
+output "deployment_name" {
+  description = "Name of the deployment"
+  value       = var.deployment_name
+}
+
+output "node_ids" {
+  description = "List of node IDs used in deployment"
+  value       = [
+    grid_deployment.gateway.node_id,
+    grid_deployment.ai_agent.node_id,
+    grid_deployment.gitea.node_id
+  ]
+}
+
 # Gateway VM Outputs
 output "gateway_ip" {
   description = "Gateway VM IP address (Planetary/Yggdrasil)"
