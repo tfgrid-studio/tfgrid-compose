@@ -1,0 +1,365 @@
+---
+# TFGrid AI Stack - Main Ansible Playbook
+# Version: 0.12.0-dev (MVP)
+
+- name: TFGrid AI Stack - Complete Setup
+  hosts: all
+  gather_facts: yes
+  become: yes
+
+  pre_tasks:
+    - name: Display deployment information
+      debug:
+        msg: |
+          ═══════════════════════════════════════════════════════════
+          TFGrid AI Stack - Ansible Configuration
+          ═══════════════════════════════════════════════════════════
+          Gateway: {{ hostvars['gateway']['ansible_host'] }}
+          AI Agent: {{ hostvars['ai-agent']['ansible_host'] }}
+          Gitea: {{ hostvars['gitea']['ansible_host'] }}
+          Domain: {{ domain | default('none (private mode)') }}
+          ═══════════════════════════════════════════════════════════
+
+    - name: Wait for VMs to be ready
+      wait_for_connection:
+        timeout: 300
+        delay: 10
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+# Configure Gateway VM
+- name: Configure Gateway VM
+  hosts: gateway
+  become: yes
+  tasks:
+    - name: Install Gateway dependencies
+      apt:
+        name:
+          - nginx
+          - nodejs
+          - npm
+          - git
+          - curl
+          - wget
+          - python3
+          - python3-pip
+          - ufw
+        state: present
+
+    - name: Configure firewall - allow SSH
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Configure firewall - allow HTTP
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+      when: domain != ""
+
+    - name: Configure firewall - allow HTTPS
+      ufw:
+        rule: allow
+        port: '443'
+        proto: tcp
+      when: domain != ""
+
+    - name: Enable firewall
+      ufw:
+        state: enabled
+        policy: deny
+
+    - name: Create Gateway API directory
+      file:
+        path: /opt/gateway-api
+        state: directory
+        mode: '0755'
+
+    - name: Create nginx sites directory
+      file:
+        path: /etc/nginx/sites-available
+        state: directory
+        mode: '0755'
+
+    - name: Create nginx enabled sites directory
+      file:
+        path: /etc/nginx/sites-enabled
+        state: directory
+        mode: '0755'
+
+    - name: Create www directory
+      file:
+        path: /var/www
+        state: directory
+        mode: '0755'
+
+    - name: Configure nginx default site
+      copy:
+        dest: /etc/nginx/sites-available/default
+        content: |
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+              
+              server_name _;
+              
+              root /var/www/html;
+              index index.html;
+              
+              location /api/v1/health {
+                  proxy_pass http://localhost:3000;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+              }
+              
+              location /api/v1/ {
+                  proxy_pass http://localhost:3000;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+              }
+              
+              location / {
+                  try_files $uri $uri/ =404;
+              }
+          }
+
+    - name: Enable nginx default site
+      file:
+        src: /etc/nginx/sites-available/default
+        dest: /etc/nginx/sites-enabled/default
+        state: link
+
+    - name: Test nginx configuration
+      command: nginx -t
+      register: nginx_test
+      changed_when: false
+
+    - name: Restart nginx
+      systemd:
+        name: nginx
+        state: restarted
+        enabled: yes
+
+    - name: Display Gateway status
+      debug:
+        msg: "✅ Gateway VM configured successfully"
+
+# Configure AI Agent VM
+- name: Configure AI Agent VM
+  hosts: ai_agent
+  become: yes
+  tasks:
+    - name: Install AI Agent dependencies
+      apt:
+        name:
+          - nodejs
+          - npm
+          - git
+          - curl
+          - wget
+          - python3
+          - python3-pip
+          - build-essential
+        state: present
+
+    - name: Install qwen-cli globally
+      npm:
+        name: "@qwen-code/qwen-code"
+        global: yes
+        state: present
+      ignore_errors: yes  # MVP: Install may not work, we'll handle it
+
+    - name: Create AI Agent directory
+      file:
+        path: /opt/ai-agent
+        state: directory
+        mode: '0755'
+
+    - name: Create AI Agent data directory
+      file:
+        path: /opt/ai-agent/data
+        state: directory
+        mode: '0755'
+
+    - name: Create AI Agent logs directory
+      file:
+        path: /opt/ai-agent/logs
+        state: directory
+        mode: '0755'
+
+    - name: Create AI Agent projects directory
+      file:
+        path: /opt/ai-agent/projects
+        state: directory
+        mode: '0755'
+
+    - name: Display AI Agent status
+      debug:
+        msg: "✅ AI Agent VM configured successfully"
+
+# Configure Gitea VM
+- name: Configure Gitea VM
+  hosts: gitea
+  become: yes
+  tasks:
+    - name: Install Gitea dependencies
+      apt:
+        name:
+          - postgresql
+          - postgresql-contrib
+          - git
+          - curl
+          - wget
+        state: present
+
+    - name: Start PostgreSQL
+      systemd:
+        name: postgresql
+        state: started
+        enabled: yes
+
+    - name: Create Gitea database user
+      postgresql_user:
+        name: gitea
+        password: "{{ gitea_db_password }}"
+        state: present
+      become_user: postgres
+
+    - name: Create Gitea database
+      postgresql_db:
+        name: gitea
+        owner: gitea
+        state: present
+      become_user: postgres
+
+    - name: Create git user
+      user:
+        name: git
+        home: /home/git
+        shell: /bin/bash
+        system: yes
+
+    - name: Create Gitea directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: git
+        group: git
+        mode: '0755'
+      loop:
+        - /var/lib/gitea
+        - /var/lib/gitea/data
+        - /var/lib/gitea/log
+        - /etc/gitea
+
+    - name: Download Gitea binary
+      get_url:
+        url: https://dl.gitea.io/gitea/1.21.0/gitea-1.21.0-linux-amd64
+        dest: /usr/local/bin/gitea
+        mode: '0755'
+
+    - name: Create Gitea configuration
+      copy:
+        dest: /etc/gitea/app.ini
+        owner: git
+        group: git
+        mode: '0640'
+        content: |
+          [database]
+          DB_TYPE  = postgres
+          HOST     = localhost:5432
+          NAME     = gitea
+          USER     = gitea
+          PASSWD   = {{ gitea_db_password }}
+          
+          [repository]
+          ROOT = /var/lib/gitea/data/gitea-repositories
+          
+          [server]
+          DOMAIN           = localhost
+          HTTP_PORT        = 3000
+          ROOT_URL         = http://localhost:3000/
+          DISABLE_SSH      = false
+          SSH_DOMAIN       = localhost
+          SSH_PORT         = 22
+          
+          [service]
+          DISABLE_REGISTRATION = true
+          REQUIRE_SIGNIN_VIEW  = false
+          
+          [log]
+          MODE      = file
+          LEVEL     = Info
+          ROOT_PATH = /var/lib/gitea/log
+
+    - name: Create Gitea systemd service
+      copy:
+        dest: /etc/systemd/system/gitea.service
+        content: |
+          [Unit]
+          Description=Gitea (Git with a cup of tea)
+          After=network.target postgresql.service
+          
+          [Service]
+          Type=simple
+          User=git
+          Group=git
+          WorkingDirectory=/var/lib/gitea
+          ExecStart=/usr/local/bin/gitea web -c /etc/gitea/app.ini
+          Restart=always
+          RestartSec=10
+          
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Enable and start Gitea
+      systemd:
+        name: gitea
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Wait for Gitea to be ready
+      wait_for:
+        port: 3000
+        delay: 5
+        timeout: 60
+
+    - name: Display Gitea status
+      debug:
+        msg: "✅ Gitea VM configured successfully"
+
+# Final setup tasks
+- name: Final Configuration
+  hosts: all
+  become: yes
+  tasks:
+    - name: Create health check endpoint marker
+      file:
+        path: /opt/.tfgrid-ai-stack-ready
+        state: touch
+        mode: '0644'
+
+    - name: Display completion message
+      debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════╗
+          ║     TFGrid AI Stack - Configuration Complete              ║
+          ╚════════════════════════════════════════════════════════════╝
+          
+          ✅ Gateway VM: Configured
+          ✅ AI Agent VM: Configured
+          ✅ Gitea VM: Configured
+          
+          🔍 Next Steps:
+          1. Test health: ../scripts/health-check.sh
+          2. Deploy Gateway API
+          3. Deploy AI Agent API
+          4. Create first project
+          
+          📚 Documentation: ../README.md

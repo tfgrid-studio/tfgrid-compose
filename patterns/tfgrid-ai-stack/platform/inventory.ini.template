@@ -1,0 +1,26 @@
+# TFGrid AI Stack - Ansible Inventory Template
+# Version: 0.12.0-dev (MVP)
+# 
+# This file will be populated by Terraform outputs
+# Copy this to inventory.ini and replace the IP addresses
+
+[gateway]
+gateway ansible_host=GATEWAY_IP ansible_user=root
+
+[ai_agent]
+ai-agent ansible_host=AI_AGENT_IP ansible_user=root
+
+[gitea]
+gitea ansible_host=GITEA_IP ansible_user=root
+
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+# Generated from Terraform
+gateway_api_key=GATEWAY_API_KEY
+gitea_admin_user=GITEA_ADMIN_USER
+gitea_admin_password=GITEA_ADMIN_PASSWORD
+gitea_db_password=GITEA_DB_PASSWORD
+domain=DOMAIN
+ssl_email=SSL_EMAIL

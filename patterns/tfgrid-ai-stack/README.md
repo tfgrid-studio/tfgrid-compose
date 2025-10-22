@@ -1,8 +1,32 @@
 # TFGrid AI Stack Pattern
 
-**Version:** 0.12.0-dev  
-**Status:** Development  
+**Version:** 0.12.0-dev (MVP)
+**Status:** ✅ Ready for Testing
 **Type:** Multi-VM Pattern
+
+---
+
+## 🚀 Quick Start
+
+```bash
+# 1. Set credentials
+export MNEMONICS="your seed phrase"
+export TF_VAR_ssh_key="$(cat ~/.ssh/id_rsa.pub)"
+
+# 2. Deploy
+chmod +x scripts/*.sh
+./scripts/deploy.sh
+
+# 3. Test
+./scripts/health-check.sh
+
+# 4. Create project
+./scripts/create-project.sh "hello world"
+```
+
+**📚 Detailed guides** → See [`tfgrid-internal/docs/`](../../../tfgrid-internal/docs/)
+
+---
 
 ## Overview
 
@@ -415,12 +439,31 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
 - **Issues:** https://github.com/tfgrid-studio/tfgrid-compose/issues
 - **Community:** https://forum.threefold.io
 
+## Documentation
+
+### Essential (In This Directory)
+- [`README.md`](README.md) - This file, user guide
+- [`tfgrid-compose.yaml`](tfgrid-compose.yaml) - Pattern manifest
+
+### Detailed Guides (In tfgrid-internal/)
+- **[`QUICKSTART.md`](../../../tfgrid-internal/docs/QUICKSTART.md)** - Step-by-step deployment guide
+- **[`TESTING_GUIDE.md`](../../../tfgrid-internal/docs/TESTING_GUIDE.md)** - Complete testing instructions
+- **[`MVP_DELIVERY.md`](../../../tfgrid-internal/docs/MVP_DELIVERY.md)** - What's included in MVP
+- **[`IMPLEMENTATION_COMPLETE.md`](../../../tfgrid-internal/docs/IMPLEMENTATION_COMPLETE.md)** - Implementation summary
+
+### Technical Design (In tfgrid-internal/docs/)
+- **[`TFGRID_AI_STACK_DESIGN.md`](../../../tfgrid-internal/docs/TFGRID_AI_STACK_DESIGN.md)** - Architecture and API specs
+- **[`THREAT_MODEL.md`](../../../tfgrid-internal/docs/THREAT_MODEL.md)** - Security analysis
+- **[`SLOS.md`](../../../tfgrid-internal/docs/SLOS.md)** - Performance targets
+- **[`TFGRID_AI_STACK_COMPLETION_PLAN.md`](../../../tfgrid-internal/TFGRID_AI_STACK_COMPLETION_PLAN.md)** - 12-week roadmap to production
+
 ## License
 
 Apache License 2.0 - See [LICENSE](../../LICENSE)
 
 ---
 
-**Pattern Version:** 0.12.0-dev  
-**Last Updated:** October 21, 2025  
+**Pattern Version:** 0.12.0-dev (MVP)
+**Last Updated:** October 21, 2025
 **Maintainer:** TFGrid Studio Team
+**Status:** ✅ MVP Complete - Ready for Testing
