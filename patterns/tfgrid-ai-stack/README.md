@@ -1,469 +1,146 @@
-# TFGrid AI Stack Pattern
+# TFGrid AI Stack
 
-**Version:** 0.12.0-dev (MVP)
-**Status:** ✅ Ready for Testing
-**Type:** Multi-VM Pattern
-
----
-
-## 🚀 Quick Start
-
-```bash
-# 1. Set credentials
-export MNEMONICS="your seed phrase"
-export TF_VAR_ssh_key="$(cat ~/.ssh/id_rsa.pub)"
-
-# 2. Deploy
-chmod +x scripts/*.sh
-./scripts/deploy.sh
-
-# 3. Test
-./scripts/health-check.sh
-
-# 4. Create project
-./scripts/create-project.sh "hello world"
-```
-
-**📚 Detailed guides** → See [`tfgrid-internal/docs/`](../../../tfgrid-internal/docs/)
-
----
+AI-powered development platform with integrated Git hosting and deployment.
 
 ## Overview
 
-The TFGrid AI Stack pattern enables AI-powered code generation with integrated Git hosting and automatic deployment. With a single command, you can deploy a complete development environment and create projects that are instantly live.
+This repository contains the complete TFGrid AI Stack pattern - a multi-VM deployment that provides an AI-powered development environment with integrated Git hosting. The pattern deploys three VMs connected via WireGuard VPN:
 
-## Features
-
-- 🤖 **AI Code Generation** - Generate projects with natural language descriptions
-- 📦 **Integrated Git** - Self-hosted Gitea for repository management
-- 🚀 **Auto-Deployment** - Generated code automatically deployed and live
-- 🔒 **Private/Public Modes** - Deploy privately or expose to internet
-- 📊 **Full Observability** - Prometheus, Grafana, and Loki monitoring
-- 💾 **Automated Backups** - Daily backups with disaster recovery
-- 🔐 **Security Hardened** - Firewalls, rate limiting, intrusion detection
+- **Gateway VM**: Public API gateway with nginx, monitoring (Prometheus/Grafana), and SSL termination
+- **AI Agent VM**: Project creation and management APIs with AI assistance
+- **Gitea VM**: Git repository hosting with web interface
 
 ## Quick Start
 
-### Deploy the Stack
+Deploy the complete AI development environment:
 
 ```bash
-# Private mode (default - no external access)
 tfgrid-compose up tfgrid-ai-stack
-
-# Public mode (with domain and SSL)
-tfgrid-compose up tfgrid-ai-stack --domain example.com --ssl-email admin@example.com
 ```
 
-### Create Projects
+## Features
 
-```bash
-# Generate and deploy a project
-tfgrid-compose create "portfolio website with dark mode"
-
-# Output:
-# 🤖 Generating code with AI...
-# 📁 Creating Git repository...
-# 🚀 Deploying to gateway...
-# ✅ Project created successfully!
-# 📁 Repository: https://example.com/gitea/repos/portfolio
-# 🌐 Live site: https://example.com/portfolio
-# ⏱️  Duration: 3m 24s
-```
-
-### Manage Projects
-
-```bash
-# List all projects
-tfgrid-compose projects
-
-# Monitor project logs
-tfgrid-compose monitor <project-name>
-
-# Delete a project
-tfgrid-compose delete <project-name>
-```
+- 🤖 **AI-Powered Development**: Create projects with AI assistance
+- 📦 **Integrated Git Hosting**: Built-in Gitea for version control
+- 🌐 **Public Deployment**: Automatic web deployment with SSL
+- 📊 **Monitoring**: Prometheus + Grafana dashboards
+- 🔒 **Secure Networking**: WireGuard VPN for inter-VM communication
+- ⚡ **One-Click Deployment**: Single command setup
+- 🔄 **Automated Backups**: Scheduled backups with retention policies
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────┐
-│          Internet (Optional)        │
-└────────────┬────────────────────────┘
-             │
-        ┌────▼─────┐
-        │ Gateway  │  2 CPU, 4GB RAM
-        │   VM     │  - Nginx + SSL
-        │          │  - Route API
-        │          │  - Prometheus
-        │          │  - Grafana
-        └──┬───┬───┘
-           │   │
-  WireGuard│   │Mycelium
-           │   │
-    ───────┼───┼───────
-           │   │
-   ┌───────▼───▼───────┐
-   │                   │
-┌──▼──────┐    ┌───────▼──┐
-│ AI Agent│    │  Gitea   │
-│   VM    │    │    VM    │
-│ 4CPU 8GB│    │ 2CPU 4GB │
-└─────────┘    └──────────┘
+Internet
+    ↓
+[Gateway VM] ← nginx, APIs, monitoring
+    ↓ (WireGuard VPN)
+[AI Agent VM] ← project creation, code generation
+    ↓
+[Gitea VM] ← Git repositories, web interface
 ```
 
-## Components
+## Usage
 
-### Gateway VM (2 CPU, 4GB RAM, 50GB disk)
-- **Nginx**: Reverse proxy and static file serving
-- **Route API**: Dynamic route management
-- **Prometheus**: Metrics collection
-- **Grafana**: Visualization and dashboards
-- **Loki**: Log aggregation
+### Deploy
+```bash
+tfgrid-compose up tfgrid-ai-stack
+```
 
-### AI Agent VM (4 CPU, 8GB RAM, 100GB disk)
-- **qwen-cli**: AI code generation
-- **Project API**: Workflow orchestration
-- **Project DB**: Metadata tracking
+### Create a Project
+```bash
+tfgrid-compose exec tfgrid-ai-stack create "portfolio website"
+```
 
-### Gitea VM (2 CPU, 4GB RAM, 50GB disk)
-- **Gitea**: Git server with web UI
-- **PostgreSQL**: Repository database
-- **Backups**: Automated daily backups
+### List Projects
+```bash
+tfgrid-compose exec tfgrid-ai-stack projects
+```
+
+### Access Services
+```bash
+# Get deployment URLs
+tfgrid-compose address tfgrid-ai-stack
+
+# SSH into VMs
+tfgrid-compose ssh tfgrid-ai-stack
+```
+
+### Management Commands
+```bash
+# Monitor project logs
+tfgrid-compose exec tfgrid-ai-stack monitor <project-name>
+
+# Delete a project
+tfgrid-compose exec tfgrid-ai-stack delete <project-name>
+
+# Manual backup
+tfgrid-compose exec tfgrid-ai-stack backup
+
+# Restore from backup
+tfgrid-compose exec tfgrid-ai-stack restore <backup-file>
+```
 
 ## Configuration
 
-### Pattern Variables
+The pattern supports extensive customization through variables:
 
-Edit `tfgrid-compose.yaml` or pass as flags:
+### Domain & SSL
+- `domain`: Custom domain name for public access
+- `ssl_email`: Email for SSL certificate (required if domain set)
 
-```yaml
-variables:
-  # Domain configuration (optional for public mode)
-  domain: "example.com"
-  ssl_email: "admin@example.com"
-  
-  # Resource allocation
-  gateway_cpu: 2
-  gateway_memory: 4096
-  ai_agent_cpu: 4
-  ai_agent_memory: 8192
-  gitea_cpu: 2
-  gitea_memory: 4096
-  
-  # Network configuration
-  wireguard_port: 51820
-  private_network: "10.1.1.0/24"
-  
-  # Security
-  api_rate_limit: "100r/m"
-  max_concurrent_projects: 10
-  
-  # Backup configuration
-  backup_retention_days: 30
-  backup_schedule: "0 2 * * *"  # 2 AM daily
+### Resource Allocation
+- `gateway_cpu/memory/disk`: Gateway VM resources
+- `ai_agent_cpu/memory/disk`: AI Agent VM resources
+- `gitea_cpu/memory/disk`: Gitea VM resources
+
+### Security & Limits
+- `api_rate_limit`: API rate limiting
+- `max_concurrent_projects`: Concurrent project creation limit
+
+### Backup Settings
+- `backup_retention_days`: Backup retention period
+- `backup_schedule`: Cron schedule for automated backups
+
+## Requirements
+
+- ThreeFold Grid account with sufficient TFT
+- tfgrid-compose CLI installed
+- SSH key configured
+
+## Resources
+
+- **CPU**: 8 cores total (default)
+- **Memory**: 16GB total (default)
+- **Disk**: 200GB total (default)
+- **Cost**: ~$15-20/month (varies by node pricing)
+
+## Pattern Structure
+
 ```
-
-### Deployment Modes
-
-**Private Mode (Default):**
-- No external access
-- All services on WireGuard private network
-- Access via SSH tunnel or VPN
-
-**Public Mode (with --domain):**
-- Gateway exposed to internet
-- SSL/TLS with Let's Encrypt
-- Gitea proxied through gateway
-- Rate limiting and DDoS protection
-
-## Monitoring
-
-### Access Dashboards
-
-```bash
-# Port forward Grafana
-ssh -L 3000:localhost:3000 root@gateway-ip
-
-# Open in browser
-http://localhost:3000
-
-# Default credentials (change on first login)
-Username: admin
-Password: admin
+tfgrid-ai-stack/
+├── tfgrid-compose.yaml    # Pattern definition
+├── infrastructure/        # Terraform configuration
+├── platform/             # Ansible playbooks and roles
+├── scripts/              # CLI command scripts
+├── ai-agent-api/         # AI Agent API source
+├── gateway-api/          # Gateway API source
+├── README.md             # This file
+└── LICENSE               # Apache 2.0
 ```
-
-### Available Dashboards
-1. **System Overview** - VM health, resources, uptime
-2. **API Performance** - Request rates, latency, errors
-3. **Project Metrics** - Creation rate, active projects, failures
-4. **Operational** - Backups, alerts, incident timeline
-
-### Key Metrics
-
-```promql
-# System uptime
-up{job="health-checks"}
-
-# API response time (p95)
-histogram_quantile(0.95, 
-  rate(http_request_duration_seconds_bucket[5m])
-)
-
-# Project creation success rate
-sum(rate(project_creation_success_total[5m])) /
-sum(rate(project_creation_attempts_total[5m]))
-
-# Active projects count
-count(project_status{status="active"})
-```
-
-## Backup & Recovery
-
-### Automated Backups
-
-Backups run daily at 2 AM:
-- Gitea database (PostgreSQL dump)
-- Project metadata
-- Nginx configurations
-
-Location: `/var/backups/` on each VM
-
-### Manual Backup
-
-```bash
-# SSH to Gitea VM
-ssh root@gitea-ip
-
-# Run backup
-/opt/tfgrid-ai-stack/scripts/backup-gitea.sh
-
-# Backup stored in /var/backups/gitea/
-```
-
-### Disaster Recovery
-
-```bash
-# List available backups
-ssh root@gitea-ip "ls -lh /var/backups/gitea/"
-
-# Restore from backup
-ssh root@gitea-ip "/opt/tfgrid-ai-stack/scripts/restore-gitea.sh /var/backups/gitea/gitea_backup_YYYYMMDD_HHMMSS.tar.gz"
-
-# Verify restoration
-tfgrid-compose projects  # Should list all projects
-```
-
-**Recovery Time Objective (RTO):** <1 hour  
-**Recovery Point Objective (RPO):** <24 hours
-
-## Security
-
-### Network Security
-- WireGuard VPN between VMs
-- Firewall (UFW) on all VMs
-- fail2ban for intrusion detection
-- Rate limiting on all APIs
-
-### Access Control
-- SSH key-only authentication
-- API token authentication
-- Token rotation support
-- No default passwords
-
-### Data Security
-- TLS/SSL for all external traffic
-- Encrypted WireGuard tunnel
-- Encrypted backups (optional)
-- Secure secret storage
-
-### Security Hardening
-```bash
-# Check security status
-ssh root@gateway-ip "/opt/tfgrid-ai-stack/scripts/security-check.sh"
-
-# Rotate API tokens
-ssh root@gateway-ip "/opt/tfgrid-ai-stack/scripts/rotate-tokens.sh"
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**Deployment fails:**
-```bash
-# Check Terraform logs
-cat deployment.log
-
-# Verify ThreeFold Grid capacity
-tfgrid-compose farms --available
-
-# Retry with different farm
-tfgrid-compose up tfgrid-ai-stack --farm alternative-farm
-```
-
-**Project creation fails:**
-```bash
-# Check AI Agent logs
-ssh root@ai-agent-ip "journalctl -u ai-agent -n 100"
-
-# Check Gitea connectivity
-ssh root@ai-agent-ip "curl http://gitea:3000/api/v1/version"
-
-# Check Gateway API
-ssh root@ai-agent-ip "curl http://gateway:3000/api/v1/health"
-```
-
-**Service not responding:**
-```bash
-# Check service status
-ssh root@<vm-ip> "systemctl status <service>"
-
-# Restart service
-ssh root@<vm-ip> "systemctl restart <service>"
-
-# View logs
-ssh root@<vm-ip> "journalctl -u <service> -f"
-```
-
-### Health Check
-
-```bash
-# Run comprehensive health check
-ssh root@gateway-ip "/opt/tfgrid-ai-stack/scripts/health-check.sh"
-
-# Expected output:
-# ✅ 1. VM Status: All VMs online
-# ✅ 2. Service Status: All services healthy
-# ✅ 3. Metrics Collection: 10+ targets
-# ✅ 4. Backup Status: Recent backup exists
-# ✅ 5. Disk Space: All VMs <80%
-# ✅ 6. API Response Time: <500ms
-# ✅ 7. Project Creation Test: <5 minutes
-```
-
-## Performance
-
-### Service Level Objectives (SLOs)
-
-| Metric | Target | Current |
-|--------|--------|---------|
-| Deployment time | <10 min (p95) | TBD |
-| Project creation | <5 min (p95) | TBD |
-| API response | <500ms (p95) | TBD |
-| System uptime | ≥99.5% | TBD |
-
-### Capacity
-
-- **Concurrent projects:** 10+ supported
-- **Total projects:** 100+ per deployment
-- **API throughput:** 100 requests/minute
-- **Storage:** Scales with disk size
-
-## Upgrading
-
-```bash
-# Pull latest version
-git pull origin main
-
-# Backup current state
-tfgrid-compose backup tfgrid-ai-stack
-
-# Update pattern
-tfgrid-compose up tfgrid-ai-stack --upgrade
-
-# Verify health
-tfgrid-compose health tfgrid-ai-stack
-```
-
-## API Reference
-
-### Gateway Route Management API
-
-**Base URL:** `http://gateway:3000/api/v1`
-
-**Authentication:** Bearer token in `Authorization` header
-
-**Endpoints:**
-- `POST /routes` - Create route
-- `GET /routes` - List routes
-- `DELETE /routes/{id}` - Delete route
-- `GET /health` - Health check
-
-**Example:**
-```bash
-curl -X POST http://gateway:3000/api/v1/routes \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "path": "/my-project",
-    "backend": "http://gateway/var/www/my-project",
-    "ssl": true
-  }'
-```
-
-### AI Agent Project API
-
-**Base URL:** `http://ai-agent:8080/api/v1`
-
-**Authentication:** Internal only (WireGuard network)
-
-**Endpoints:**
-- `POST /projects` - Create project
-- `GET /projects` - List projects
-- `DELETE /projects/{id}` - Delete project
 
 ## Development
 
-### Local Testing
-
-```bash
-# Deploy test stack
-tfgrid-compose up tfgrid-ai-stack --test
-
-# Run integration tests
-cd tfgrid-compose/patterns/tfgrid-ai-stack
-./scripts/test.sh
-
-# Load testing
-cd tests/load
-k6 run project-creation-load.js
-```
-
-### Contributing
-
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) for development guidelines.
-
-## Support
-
-- **Documentation:** https://docs.tfgrid.studio
-- **Issues:** https://github.com/tfgrid-studio/tfgrid-compose/issues
-- **Community:** https://forum.threefold.io
+This pattern is maintained by TFGrid Studio. The reference implementation is also available in the [tfgrid-compose patterns directory](https://github.com/tfgrid-studio/tfgrid-compose/tree/main/patterns/tfgrid-ai-stack).
 
 ## Documentation
 
-### Essential (In This Directory)
-- [`README.md`](README.md) - This file, user guide
-- [`tfgrid-compose.yaml`](tfgrid-compose.yaml) - Pattern manifest
+- [Pattern Documentation](https://docs.tfgrid.studio/patterns/tfgrid-ai-stack)
+- [API Reference](https://docs.tfgrid.studio/patterns/tfgrid-ai-stack/api)
+- [Troubleshooting](https://docs.tfgrid.studio/patterns/tfgrid-ai-stack/troubleshooting)
 
-### Detailed Guides (In tfgrid-internal/)
-- **[`QUICKSTART.md`](../../../tfgrid-internal/docs/QUICKSTART.md)** - Step-by-step deployment guide
-- **[`TESTING_GUIDE.md`](../../../tfgrid-internal/docs/TESTING_GUIDE.md)** - Complete testing instructions
-- **[`MVP_DELIVERY.md`](../../../tfgrid-internal/docs/MVP_DELIVERY.md)** - What's included in MVP
-- **[`IMPLEMENTATION_COMPLETE.md`](../../../tfgrid-internal/docs/IMPLEMENTATION_COMPLETE.md)** - Implementation summary
+## Support
 
-### Technical Design (In tfgrid-internal/docs/)
-- **[`TFGRID_AI_STACK_DESIGN.md`](../../../tfgrid-internal/docs/TFGRID_AI_STACK_DESIGN.md)** - Architecture and API specs
-- **[`THREAT_MODEL.md`](../../../tfgrid-internal/docs/THREAT_MODEL.md)** - Security analysis
-- **[`SLOS.md`](../../../tfgrid-internal/docs/SLOS.md)** - Performance targets
-- **[`TFGRID_AI_STACK_COMPLETION_PLAN.md`](../../../tfgrid-internal/TFGRID_AI_STACK_COMPLETION_PLAN.md)** - 12-week roadmap to production
-
-## License
-
-Apache License 2.0 - See [LICENSE](../../LICENSE)
-
----
-
-**Pattern Version:** 0.12.0-dev (MVP)
-**Last Updated:** October 21, 2025
-**Maintainer:** TFGrid Studio Team
-**Status:** ✅ MVP Complete - Ready for Testing
+This is an official TFGrid Studio application. For support:
+- Documentation: https://docs.tfgrid.studio
+- Issues: https://github.com/tfgrid-studio/tfgrid-compose/issues
