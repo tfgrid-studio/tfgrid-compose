@@ -455,24 +455,51 @@ run_app_hooks() {
     
     # Default: Bash hook scripts (Option A: Bash deployment)
     log_info "Using bash hook scripts deployment"
+
+    # Add verbose flag support
+    local verbose_flag=""
+    if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
+        verbose_flag="-v"
+        log_info "Verbose mode enabled - hook output will be shown in real-time"
+    fi
     
     # Hook 1: setup.sh
     log_info "Running setup hook..."
-    if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        root@$vm_ip "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" > "$STATE_DIR/hook-setup.log" 2>&1; then
-        log_error "Setup hook failed. Check: $STATE_DIR/hook-setup.log"
-        cat "$STATE_DIR/hook-setup.log"
-        return 1
+    if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
+        # Verbose mode: Show output in real-time
+        if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" 2>&1 | tee "$STATE_DIR/hook-setup.log"; then
+            log_error "Setup hook failed. Check: $STATE_DIR/hook-setup.log"
+            return 1
+        fi
+    else
+        # Normal mode: Buffer output to log file only
+        if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" > "$STATE_DIR/hook-setup.log" 2>&1; then
+            log_error "Setup hook failed. Check: $STATE_DIR/hook-setup.log"
+            cat "$STATE_DIR/hook-setup.log"
+            return 1
+        fi
     fi
     log_success "Setup complete"
     
     # Hook 2: configure.sh
     log_info "Running configure hook..."
-    if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" > "$STATE_DIR/hook-configure.log" 2>&1; then
-        log_error "Configure hook failed. Check: $STATE_DIR/hook-configure.log"
-        cat "$STATE_DIR/hook-configure.log"
-        return 1
+    if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
+        # Verbose mode: Show output in real-time
+        if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" 2>&1 | tee "$STATE_DIR/hook-configure.log"; then
+            log_error "Configure hook failed. Check: $STATE_DIR/hook-configure.log"
+            return 1
+        fi
+    else
+        # Normal mode: Buffer output to log file only
+        if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" > "$STATE_DIR/hook-configure.log" 2>&1; then
+            log_error "Configure hook failed. Check: $STATE_DIR/hook-configure.log"
+            cat "$STATE_DIR/hook-configure.log"
+            return 1
+        fi
     fi
     log_success "Configuration complete"
     
@@ -482,13 +509,25 @@ run_app_hooks() {
     
     # Hook 3: healthcheck.sh
     log_info "Running healthcheck..."
-    if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        root@$vm_ip "cd /tmp/app-deployment && chmod +x healthcheck.sh && ./healthcheck.sh" > "$STATE_DIR/hook-healthcheck.log" 2>&1; then
-        log_warning "Health check had issues. Check: $STATE_DIR/hook-healthcheck.log"
-        cat "$STATE_DIR/hook-healthcheck.log"
-        # Don't fail on healthcheck issues
+    if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
+        # Verbose mode: Show output in real-time
+        if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "cd /tmp/app-deployment && chmod +x healthcheck.sh && ./healthcheck.sh" 2>&1 | tee "$STATE_DIR/hook-healthcheck.log"; then
+            log_warning "Health check had issues. Check: $STATE_DIR/hook-healthcheck.log"
+            # Don't fail on healthcheck issues
+        else
+            log_success "Health check passed"
+        fi
     else
-        log_success "Health check passed"
+        # Normal mode: Buffer output to log file only
+        if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "cd /tmp/app-deployment && chmod +x healthcheck.sh && ./healthcheck.sh" > "$STATE_DIR/hook-healthcheck.log" 2>&1; then
+            log_warning "Health check had issues. Check: $STATE_DIR/hook-healthcheck.log"
+            cat "$STATE_DIR/hook-healthcheck.log"
+            # Don't fail on healthcheck issues
+        else
+            log_success "Health check passed"
+        fi
     fi
     
     return 0

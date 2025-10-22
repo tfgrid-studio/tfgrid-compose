@@ -627,6 +627,10 @@ case "$COMMAND" in
                     CUSTOM_NETWORK="$2"
                     shift 2
                     ;;
+                --verbose|-v)
+                    export TFGRID_VERBOSE=1
+                    shift
+                    ;;
                 *)
                     log_warning "Unknown flag: $1"
                     shift
