@@ -250,6 +250,10 @@ EOF
     log_info "App: $APP_NAME v$APP_VERSION"
     log_info "Pattern: $PATTERN_NAME v$PATTERN_VERSION"
     echo ""
+
+    # Display deployment URLs if available
+    display_deployment_urls
+
     log_info "Next steps:"
     echo "  • Check status: tfgrid-compose status $APP_NAME"
     echo "  • View logs: tfgrid-compose logs $APP_NAME"
@@ -690,6 +694,64 @@ destroy_deployment() {
     return 0
 }
 
+# Display deployment URLs after successful deployment
+display_deployment_urls() {
+    # Get deployment information
+    local primary_ip=$(state_get "primary_ip")
+    local primary_ip_type=$(state_get "primary_ip_type")
+    local mycelium_ip=$(state_get "mycelium_ip")
+
+    # Check if app has custom launch command
+    local launch_cmd=$(yaml_get "$APP_MANIFEST" "commands.launch.script" 2>/dev/null)
+
+    if [ -n "$launch_cmd" ]; then
+        log_info "🌐 Access your application:"
+        echo "  • Launch in browser: tfgrid-compose launch $APP_NAME"
+        return 0
+    fi
+
+    # Default URL display for common patterns
+    case "$APP_NAME" in
+        tfgrid-ai-stack)
+            log_info "🌐 Access your services:"
+            if [ "$primary_ip_type" = "wireguard" ] && [ -n "$primary_ip" ]; then
+                echo "  • Gitea (Git hosting): http://$primary_ip/git/"
+                echo "  • AI Agent API: http://$primary_ip/api/"
+            fi
+            if [ -n "$mycelium_ip" ]; then
+                echo "  • Gitea (Mycelium): http://[$mycelium_ip]/git/"
+                echo "  • AI Agent API (Mycelium): http://[$mycelium_ip]/api/"
+            fi
+            echo "  • Launch in browser: tfgrid-compose launch $APP_NAME"
+            ;;
+        tfgrid-gitea)
+            log_info "🌐 Access Gitea:"
+            if [ "$primary_ip_type" = "wireguard" ] && [ -n "$primary_ip" ]; then
+                echo "  • Web interface: http://$primary_ip:3000/"
+            fi
+            if [ -n "$mycelium_ip" ]; then
+                echo "  • Web interface (Mycelium): http://[$mycelium_ip]:3000/"
+            fi
+            echo "  • Launch in browser: tfgrid-compose launch $APP_NAME"
+            ;;
+        tfgrid-ai-agent)
+            log_info "🌐 AI Agent deployed:"
+            if [ "$primary_ip_type" = "wireguard" ] && [ -n "$primary_ip" ]; then
+                echo "  • SSH access: tfgrid-compose ssh $APP_NAME"
+            fi
+            ;;
+        *)
+            # Generic display for other apps
+            if [ "$primary_ip_type" = "wireguard" ] && [ -n "$primary_ip" ]; then
+                log_info "🌐 Deployment accessible at: $primary_ip"
+            fi
+            if [ -n "$mycelium_ip" ]; then
+                log_info "🌐 Mycelium access: [$mycelium_ip]"
+            fi
+            ;;
+    esac
+}
+
 # Export functions
 export -f cleanup_on_error
 export -f deploy_app
@@ -698,3 +760,4 @@ export -f deploy_app_source
 export -f run_app_hooks
 export -f verify_deployment
 export -f destroy_deployment
+export -f display_deployment_urls
