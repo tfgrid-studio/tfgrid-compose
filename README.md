@@ -75,6 +75,11 @@ All 3 core deployment patterns are production-ready!
 - [x] **Gateway pattern** - Production web apps with public IPv4, SSL, load balancing
 - [x] **K3s pattern** - Kubernetes clusters for cloud-native apps
 
+### Featured Applications
+- [x] **tfgrid-ai-stack** - Complete AI development environment with automatic Git hosting
+- [x] **tfgrid-ai-agent** - Standalone AI coding assistant
+- [x] **tfgrid-gitea** - Self-hosted Git service
+
 ### Coming Soon 🚧
 - [ ] Automated test suite
 - [ ] Shell completion (bash/zsh/fish)
