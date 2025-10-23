@@ -485,23 +485,40 @@ run_app_hooks() {
     
     # Hook 2: configure.sh
     log_info "Running configure hook..."
+
+    # Check if configure hook is optional for this app
+    local configure_optional=$(yaml_get "$APP_MANIFEST" "hook_config.configure.optional" 2>/dev/null || echo "false")
+
     if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
         # Verbose mode: Show output in real-time
         if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
             root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" 2>&1 | tee "$STATE_DIR/hook-configure.log"; then
-            log_error "Configure hook failed. Check: $STATE_DIR/hook-configure.log"
-            return 1
+            if [ "$configure_optional" = "true" ]; then
+                log_warning "Configure hook failed (optional). Check: $STATE_DIR/hook-configure.log"
+            else
+                log_error "Configure hook failed. Check: $STATE_DIR/hook-configure.log"
+                return 1
+            fi
         fi
     else
         # Normal mode: Buffer output to log file only
         if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
             root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" > "$STATE_DIR/hook-configure.log" 2>&1; then
-            log_error "Configure hook failed. Check: $STATE_DIR/hook-configure.log"
-            cat "$STATE_DIR/hook-configure.log"
-            return 1
+            if [ "$configure_optional" = "true" ]; then
+                log_warning "Configure hook failed (optional). Check: $STATE_DIR/hook-configure.log"
+            else
+                log_error "Configure hook failed. Check: $STATE_DIR/hook-configure.log"
+                cat "$STATE_DIR/hook-configure.log"
+                return 1
+            fi
         fi
     fi
-    log_success "Configuration complete"
+
+    if [ "$configure_optional" = "true" ]; then
+        log_success "Configuration complete (optional hook)"
+    else
+        log_success "Configuration complete"
+    fi
     
     # Give service a moment to start
     log_info "Waiting for service to start..."
