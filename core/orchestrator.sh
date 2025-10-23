@@ -252,7 +252,7 @@ EOF
     echo ""
 
     # Display deployment URLs if available
-    display_deployment_urls
+    display_deployment_urls || true
 
     log_info "Next steps:"
     echo "  • Check status: tfgrid-compose status $APP_NAME"
@@ -696,7 +696,7 @@ destroy_deployment() {
 
 # Display deployment URLs after successful deployment
 display_deployment_urls() {
-    # Get deployment information
+    # Get deployment information from state file
     local primary_ip=$(state_get "primary_ip")
     local primary_ip_type=$(state_get "primary_ip_type")
     local mycelium_ip=$(state_get "mycelium_ip")
