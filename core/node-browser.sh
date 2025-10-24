@@ -318,6 +318,11 @@ show_favorites() {
     echo ""
     echo "⭐ Favorite Nodes"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    printf "%-6s %-20s %-15s %-6s %-6s %-6s %-6s %-8s %-10s\n" "ID" "Farm" "Location" "CPU" "RAM" "Disk" "IPv4" "Load" "Uptime"
+    echo "────────────────────────────────────────────────────────────────────────────────"
+    echo "ID: Node ID, Farm: Farm Name, Location: City/Country, CPU: Total Cores"
+    echo "RAM: Total GB, Disk: Total TB, IPv4: IPv4 Available, Load: CPU Usage %, Uptime: Days"
+    echo "────────────────────────────────────────────────────────────────────────────────"
 
     local count=0
     while IFS= read -r node_id; do
@@ -335,6 +340,7 @@ show_favorites() {
     done <<< "$favorites"
 
     if [ $count -eq 0 ]; then
+        echo ""
         log_info "No favorite nodes are currently online"
     fi
 }
