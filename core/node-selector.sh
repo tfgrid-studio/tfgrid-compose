@@ -55,10 +55,24 @@ apply_node_filters() {
     local max_disk="${cli_max_disk:-$MAX_DISK_USAGE}"
     local min_uptime="${cli_min_uptime:-$MIN_UPTIME_DAYS}"
 
-    # Convert comma-separated strings to arrays
-    IFS=',' read -ra blacklist_nodes_array <<< "$blacklist_nodes"
-    IFS=',' read -ra blacklist_farms_array <<< "$blacklist_farms"
-    IFS=',' read -ra whitelist_farms_array <<< "$whitelist_farms"
+    # Convert comma-separated strings to arrays (filter out empty values)
+    IFS=',' read -ra temp_nodes <<< "$blacklist_nodes"
+    blacklist_nodes_array=()
+    for node in "${temp_nodes[@]}"; do
+        [[ -n "$node" ]] && blacklist_nodes_array+=("$node")
+    done
+
+    IFS=',' read -ra temp_farms <<< "$blacklist_farms"
+    blacklist_farms_array=()
+    for farm in "${temp_farms[@]}"; do
+        [[ -n "$farm" ]] && blacklist_farms_array+=("$farm")
+    done
+
+    IFS=',' read -ra temp_whitelist <<< "$whitelist_farms"
+    whitelist_farms_array=()
+    for farm in "${temp_whitelist[@]}"; do
+        [[ -n "$farm" ]] && whitelist_farms_array+=("$farm")
+    done
 
     # Apply filters using jq
     local filtered_nodes=$(echo "$nodes_json" | jq -r '
@@ -117,7 +131,7 @@ select_best_node() {
 
     log_info "Querying ThreeFold Grid for available nodes..."
     log_info "Requirements: ${cpu} CPU, ${mem_mb}MB RAM, ${disk_gb}GB disk"
-    echo ""
+    echo "" >&2
 
     # Load configuration
     load_node_filter_config
@@ -132,18 +146,18 @@ select_best_node() {
 
     if [ $? -ne 0 ]; then
         log_error "Failed to query GridProxy API"
-        echo ""
-        echo "Please check your internet connection and try again."
+        echo "" >&2
+        echo "Please check your internet connection and try again." >&2
         return 1
     fi
 
     # Parse response with jq
     if ! command -v jq &> /dev/null; then
         log_error "jq is required but not installed"
-        echo ""
-        echo "Install jq:"
-        echo "  Ubuntu/Debian: sudo apt install jq"
-        echo "  MacOS: brew install jq"
+        echo "" >&2
+        echo "Install jq:" >&2
+        echo "  Ubuntu/Debian: sudo apt install jq" >&2
+        echo "  MacOS: brew install jq" >&2
         return 1
     fi
 
@@ -152,11 +166,11 @@ select_best_node() {
 
     if [ "$node_count" -eq 0 ]; then
         log_error "No nodes found matching requirements"
-        echo ""
-        echo "Try:"
-        echo "  - Reducing resource requirements"
-        echo "  - Checking node availability: https://dashboard.grid.tf"
-        echo "  - Specifying a node manually: --node <id>"
+        echo "" >&2
+        echo "Try:" >&2
+        echo "  - Reducing resource requirements" >&2
+        echo "  - Checking node availability: https://dashboard.grid.tf" >&2
+        echo "  - Specifying a node manually: --node <id>" >&2
         return 1
     fi
 
@@ -168,16 +182,16 @@ select_best_node() {
 
     if [ "$filtered_count" -eq 0 ]; then
         log_error "No nodes found after applying filters"
-        echo ""
-        echo "Try:"
-        echo "  - Adjusting filter criteria"
-        echo "  - Checking filter configuration: ~/.config/tfgrid-compose/config.yaml"
-        echo "  - Using --node to specify manually"
+        echo "" >&2
+        echo "Try:" >&2
+        echo "  - Adjusting filter criteria" >&2
+        echo "  - Checking filter configuration: ~/.config/tfgrid-compose/config.yaml" >&2
+        echo "  - Using --node to specify manually" >&2
         return 1
     fi
 
     log_success "Found $filtered_count nodes after filtering"
-    echo ""
+    echo "" >&2
 
     # Filter and select best node (highest uptime from filtered list)
     local selected_node=$(echo "$filtered_nodes" | jq -r '
@@ -200,7 +214,7 @@ select_best_node() {
     log_info "Location: $country ($city)"
     log_info "Farm: $farm"
     log_info "Uptime: $uptime_days days"
-    echo ""
+    echo "" >&2
 
     echo "$node_id"
 }
@@ -224,15 +238,15 @@ verify_node_exists() {
         local country=$(echo "$node" | jq -r '.[0].country // "Unknown"')
         local farm=$(echo "$node" | jq -r '.[0].farmName // "Unknown"')
         log_success "Node $node_id is online ($country, $farm)"
-        echo ""
+        echo "" >&2
         return 0
     else
         log_error "Node $node_id is not available (status: $status)"
-        echo ""
-        echo "Try:"
-        echo "  - Choose a different node"
-        echo "  - Browse available nodes: https://dashboard.grid.tf"
-        echo "  - Use auto-selection (remove --node flag)"
+        echo "" >&2
+        echo "Try:" >&2
+        echo "  - Choose a different node" >&2
+        echo "  - Browse available nodes: https://dashboard.grid.tf" >&2
+        echo "  - Use auto-selection (remove --node flag)" >&2
         return 1
     fi
 }
