@@ -19,6 +19,7 @@ source "$DEPLOYER_ROOT/core/deployment-state.sh"
 source "$DEPLOYER_ROOT/core/login.sh"
 source "$DEPLOYER_ROOT/core/gitconfig.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
+source "$DEPLOYER_ROOT/core/node-browser.sh"
 source "$DEPLOYER_ROOT/core/update-git-config.sh"
 
 # Version (read from VERSION file)
@@ -2039,6 +2040,11 @@ EOF
                 exit 0
                 ;;
         esac
+        ;;
+
+    nodes)
+        # Interactive node browser
+        nodes_command "$@"
         ;;
 
     update-git-config)
