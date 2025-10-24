@@ -416,9 +416,19 @@ nodes_command() {
             echo ""
             ;;
         "")
-            # Always start interactive browser directly (simplified)
-            interactive_browser "$@"
-            return $?
+            # Check if we have a TTY for interactive mode
+            if [ -t 0 ]; then
+                # Running interactively, start browser
+                interactive_browser "$@"
+                return $?
+            else
+                # Non-interactive mode - show error
+                log_error "Interactive node browser requires a terminal (TTY)"
+                log_info "Run 'tfgrid-compose nodes favorites' to list favorite nodes"
+                log_info "Run 'tfgrid-compose nodes show <id>' to view node details"
+                log_info "Run 'tfgrid-compose nodes favorite add <id>' to add favorites"
+                return 1
+            fi
 
             case $choice in
                 1)
