@@ -416,26 +416,9 @@ nodes_command() {
             echo ""
             ;;
         "")
-            # Interactive mode - check if running in terminal
-            if [ -t 0 ] && [ -t 1 ]; then
-                # Interactive mode - show menu for better UX
-                echo ""
-                echo "🔍 ThreeFold Node Browser"
-                echo ""
-                echo "What would you like to do?"
-                echo "  1) Browse all available nodes"
-                echo "  2) Show my favorite nodes"
-                echo "  3) Show details for a specific node"
-                echo "  4) Manage favorites"
-                echo "  5) Exit"
-                echo ""
-                read -p "Enter choice [1-5]: " choice
-            else
-                # Non-interactive mode - directly start browser
-                log_info "Running in non-interactive mode, starting browser..."
-                interactive_browser "$@"
-                return $?
-            fi
+            # Always start interactive browser directly (simplified)
+            interactive_browser "$@"
+            return $?
 
             case $choice in
                 1)
