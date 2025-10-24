@@ -63,6 +63,9 @@ show_table_header() {
     echo ""
     printf "%-6s %-20s %-15s %-6s %-6s %-6s %-6s %-8s %-10s\n" "ID" "Farm" "Location" "CPU" "RAM" "Disk" "IPv4" "Load" "Uptime"
     echo "────────────────────────────────────────────────────────────────────────────────"
+    echo "ID: Node ID, Farm: Farm Name, Location: City/Country, CPU: Total Cores"
+    echo "RAM: Total GB, Disk: Total TB, IPv4: IPv4 Available, Load: CPU Usage %, Uptime: Days"
+    echo "────────────────────────────────────────────────────────────────────────────────"
 }
 
 # Display single node in table format
