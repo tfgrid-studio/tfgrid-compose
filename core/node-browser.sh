@@ -416,9 +416,9 @@ nodes_command() {
             echo ""
             ;;
         "")
-            # Interactive mode - check if we should show menu or go straight to browser
+            # Interactive mode - check if running in terminal
             if [ -t 0 ] && [ -t 1 ]; then
-                # Interactive terminal - show menu first
+                # Interactive mode - show menu for better UX
                 echo ""
                 echo "🔍 ThreeFold Node Browser"
                 echo ""
@@ -430,91 +430,93 @@ nodes_command() {
                 echo "  5) Exit"
                 echo ""
                 read -p "Enter choice [1-5]: " choice
-
-                case $choice in
-                    1)
-                        echo ""
-                        interactive_browser "$@"
-                        ;;
-                    2)
-                        echo ""
-                        show_favorites
-                        ;;
-                    3)
-                        echo ""
-                        read -p "Enter node ID: " node_id
-                        if [ -z "$node_id" ]; then
-                            log_error "No node ID provided"
-                            exit 1
-                        fi
-                        echo ""
-                        log_info "Fetching details for node $node_id..."
-                        local node_info=$(curl -s "${GRIDPROXY_URL}/nodes?node_id=${node_id}")
-
-                        if [ $? -ne 0 ] || [ -z "$node_info" ]; then
-                            log_error "Failed to fetch node information"
-                            exit 1
-                        fi
-
-                        local node=$(echo "$node_info" | jq -r '.[0]')
-                        if [ "$node" = "null" ] || [ -z "$node" ]; then
-                            log_error "Node $node_id not found"
-                            exit 1
-                        fi
-
-                        show_node_details "$node"
-                        ;;
-                    4)
-                        echo ""
-                        echo "Favorite Management:"
-                        echo "  1) Add a node to favorites"
-                        echo "  2) Remove a node from favorites"
-                        echo "  3) List all favorites"
-                        echo ""
-                        read -p "Enter choice [1-3]: " fav_choice
-
-                        case $fav_choice in
-                            1)
-                                echo ""
-                                read -p "Enter node ID to add: " node_id
-                                if [ -z "$node_id" ]; then
-                                    log_error "No node ID provided"
-                                    exit 1
-                                fi
-                                add_favorite "$node_id"
-                                ;;
-                            2)
-                                echo ""
-                                read -p "Enter node ID to remove: " node_id
-                                if [ -z "$node_id" ]; then
-                                    log_error "No node ID provided"
-                                    exit 1
-                                fi
-                                remove_favorite "$node_id"
-                                ;;
-                            3)
-                                echo ""
-                                show_favorites
-                                ;;
-                            *)
-                                log_error "Invalid choice"
-                                exit 1
-                                ;;
-                        esac
-                        ;;
-                    5)
-                        echo ""
-                        log_info "Goodbye!"
-                        ;;
-                    *)
-                        log_error "Invalid choice"
-                        exit 1
-                        ;;
-                esac
             else
-                # Non-interactive (piped/scripted) - go straight to browser
+                # Non-interactive mode - directly start browser
+                log_info "Running in non-interactive mode, starting browser..."
                 interactive_browser "$@"
+                return $?
             fi
+
+            case $choice in
+                1)
+                    echo ""
+                    interactive_browser "$@"
+                    ;;
+                2)
+                    echo ""
+                    show_favorites
+                    ;;
+                3)
+                    echo ""
+                    read -p "Enter node ID: " node_id
+                    if [ -z "$node_id" ]; then
+                        log_error "No node ID provided"
+                        exit 1
+                    fi
+                    echo ""
+                    log_info "Fetching details for node $node_id..."
+                    local node_info=$(curl -s "${GRIDPROXY_URL}/nodes?node_id=${node_id}")
+
+                    if [ $? -ne 0 ] || [ -z "$node_info" ]; then
+                        log_error "Failed to fetch node information"
+                        exit 1
+                    fi
+
+                    local node=$(echo "$node_info" | jq -r '.[0]')
+                    if [ "$node" = "null" ] || [ -z "$node" ]; then
+                        log_error "Node $node_id not found"
+                        exit 1
+                    fi
+
+                    show_node_details "$node"
+                    ;;
+                4)
+                    echo ""
+                    echo "Favorite Management:"
+                    echo "  1) Add a node to favorites"
+                    echo "  2) Remove a node from favorites"
+                    echo "  3) List all favorites"
+                    echo ""
+                    read -p "Enter choice [1-3]: " fav_choice
+
+                    case $fav_choice in
+                        1)
+                            echo ""
+                            read -p "Enter node ID to add: " node_id
+                            if [ -z "$node_id" ]; then
+                                log_error "No node ID provided"
+                                exit 1
+                            fi
+                            add_favorite "$node_id"
+                            ;;
+                        2)
+                            echo ""
+                            read -p "Enter node ID to remove: " node_id
+                            if [ -z "$node_id" ]; then
+                                log_error "No node ID provided"
+                                exit 1
+                            fi
+                            remove_favorite "$node_id"
+                            ;;
+                        3)
+                            echo ""
+                            show_favorites
+                            ;;
+                        *)
+                            log_error "Invalid choice"
+                            exit 1
+                            ;;
+                    esac
+                    ;;
+                5)
+                    echo ""
+                    log_info "Goodbye!"
+                    ;;
+                *)
+                    log_error "Invalid choice"
+                    exit 1
+                    ;;
+            esac
             ;;
         *)
             log_error "Unknown subcommand: $subcommand"
