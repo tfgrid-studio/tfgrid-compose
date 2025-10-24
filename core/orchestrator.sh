@@ -102,7 +102,7 @@ deploy_app() {
             log_info "Resources: $DEPLOY_CPU CPU, ${DEPLOY_MEM}MB RAM, ${DEPLOY_DISK}GB disk"
             log_info "Auto-selecting best available node..."
             echo ""
-            DEPLOY_NODE=$(select_best_node "$DEPLOY_CPU" "$DEPLOY_MEM" "$DEPLOY_DISK" "$DEPLOY_NETWORK")
+            DEPLOY_NODE=$(select_best_node "$DEPLOY_CPU" "$DEPLOY_MEM" "$DEPLOY_DISK" "$DEPLOY_NETWORK" "$CUSTOM_BLACKLIST_NODES" "$CUSTOM_BLACKLIST_FARMS" "$CUSTOM_WHITELIST_FARMS" "$CUSTOM_MAX_CPU_USAGE" "$CUSTOM_MAX_DISK_USAGE" "$CUSTOM_MIN_UPTIME_DAYS")
             # Clean any whitespace/newlines from node ID
             DEPLOY_NODE=$(echo "$DEPLOY_NODE" | tr -d '[:space:]')
             if [ -z "$DEPLOY_NODE" ] || [ "$DEPLOY_NODE" = "null" ]; then

@@ -576,6 +576,12 @@ case "$COMMAND" in
         CUSTOM_MEM=""
         CUSTOM_DISK=""
         CUSTOM_NETWORK=""
+        CUSTOM_BLACKLIST_NODES=""
+        CUSTOM_BLACKLIST_FARMS=""
+        CUSTOM_WHITELIST_FARMS=""
+        CUSTOM_MAX_CPU_USAGE=""
+        CUSTOM_MAX_DISK_USAGE=""
+        CUSTOM_MIN_UPTIME_DAYS=""
         
         while [[ $# -gt 0 ]]; do
             case $1 in
@@ -604,29 +610,77 @@ case "$COMMAND" in
                     shift
                     ;;
                 --node)
-                    CUSTOM_NODE="$2"
-                    shift 2
-                    ;;
-                --node=*)
-                    CUSTOM_NODE="${1#--node=}"
-                    shift
-                    ;;
-                --cpu)
-                    CUSTOM_CPU="$2"
-                    shift 2
-                    ;;
-                --mem|--memory)
-                    CUSTOM_MEM="$2"
-                    shift 2
-                    ;;
-                --disk)
-                    CUSTOM_DISK="$2"
-                    shift 2
-                    ;;
-                --network)
-                    CUSTOM_NETWORK="$2"
-                    shift 2
-                    ;;
+                            CUSTOM_NODE="$2"
+                            shift 2
+                            ;;
+                        --node=*)
+                            CUSTOM_NODE="${1#--node=}"
+                            shift
+                            ;;
+                        --cpu)
+                            CUSTOM_CPU="$2"
+                            shift 2
+                            ;;
+                        --mem|--memory)
+                            CUSTOM_MEM="$2"
+                            shift 2
+                            ;;
+                        --disk)
+                            CUSTOM_DISK="$2"
+                            shift 2
+                            ;;
+                        --network)
+                            CUSTOM_NETWORK="$2"
+                            shift 2
+                            ;;
+                        --blacklist-node)
+                            CUSTOM_BLACKLIST_NODES="$2"
+                            shift 2
+                            ;;
+                        --blacklist-node=*)
+                            CUSTOM_BLACKLIST_NODES="${1#--blacklist-node=}"
+                            shift
+                            ;;
+                        --blacklist-farm)
+                            CUSTOM_BLACKLIST_FARMS="$2"
+                            shift 2
+                            ;;
+                        --blacklist-farm=*)
+                            CUSTOM_BLACKLIST_FARMS="${1#--blacklist-farm=}"
+                            shift
+                            ;;
+                        --whitelist-farm)
+                            CUSTOM_WHITELIST_FARMS="$2"
+                            shift 2
+                            ;;
+                        --whitelist-farm=*)
+                            CUSTOM_WHITELIST_FARMS="${1#--whitelist-farm=}"
+                            shift
+                            ;;
+                        --max-cpu-usage)
+                            CUSTOM_MAX_CPU_USAGE="$2"
+                            shift 2
+                            ;;
+                        --max-cpu-usage=*)
+                            CUSTOM_MAX_CPU_USAGE="${1#--max-cpu-usage=}"
+                            shift
+                            ;;
+                        --max-disk-usage)
+                            CUSTOM_MAX_DISK_USAGE="$2"
+                            shift 2
+                            ;;
+                        --max-disk-usage=*)
+                            CUSTOM_MAX_DISK_USAGE="${1#--max-disk-usage=}"
+                            shift
+                            ;;
+                        --min-uptime-days)
+                            CUSTOM_MIN_UPTIME_DAYS="$2"
+                            shift 2
+                            ;;
+                        --min-uptime-days=*)
+                            CUSTOM_MIN_UPTIME_DAYS="${1#--min-uptime-days=}"
+                            shift
+                            ;;
                 --verbose|-v)
                     export TFGRID_VERBOSE=1
                     shift
@@ -645,6 +699,12 @@ case "$COMMAND" in
         export CUSTOM_MEM
         export CUSTOM_DISK
         export CUSTOM_NETWORK
+        export CUSTOM_BLACKLIST_NODES
+        export CUSTOM_BLACKLIST_FARMS
+        export CUSTOM_WHITELIST_FARMS
+        export CUSTOM_MAX_CPU_USAGE
+        export CUSTOM_MAX_DISK_USAGE
+        export CUSTOM_MIN_UPTIME_DAYS
         
         # Handle cache refresh logic
         # --force implies --refresh unless --no-refresh is specified
@@ -1444,7 +1504,42 @@ EOF
 
     config)
         # Config command
-        cmd_config "$@"
+        case "$1" in
+            init)
+                # Initialize configuration
+                init_config
+                ;;
+            show|"")
+                # Show current configuration
+                show_config
+                ;;
+            set)
+                # Set configuration value
+                if [ -z "$2" ] || [ -z "$3" ]; then
+                    log_error "Usage: tfgrid-compose config set <key> <value>"
+                    exit 1
+                fi
+                config_set "$2" "$3"
+                ;;
+            get)
+                # Get configuration value
+                if [ -z "$2" ]; then
+                    log_error "Usage: tfgrid-compose config get <key>"
+                    exit 1
+                fi
+                VALUE=$(config_get "$2")
+                if [ -n "$VALUE" ]; then
+                    echo "$VALUE"
+                else
+                    log_info "Configuration key '$2' not found"
+                fi
+                ;;
+            *)
+                log_error "Unknown config subcommand: $1"
+                log_info "Available: init, show, set, get"
+                exit 1
+                ;;
+        esac
         ;;
 
     docs)
