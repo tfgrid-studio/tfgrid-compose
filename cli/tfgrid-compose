@@ -1567,17 +1567,37 @@ EOF
                         2)
                             # Interactive get
                             echo ""
-                            read -p "Enter key name to get: " key_name
-                            if [ -z "$key_name" ]; then
+                            echo "Available configuration keys:"
+                            echo "  1) blacklist_nodes"
+                            echo "  2) blacklist_farms"
+                            echo "  3) whitelist_farms"
+                            echo "  4) max_cpu_usage"
+                            echo "  5) max_disk_usage"
+                            echo "  6) min_uptime_days"
+                            echo ""
+                            read -p "Enter key name or number [1-6]: " key_input
+                            if [ -z "$key_input" ]; then
                                 log_error "No key provided"
                                 exit 1
                             fi
+
+                            # Convert number to key name
+                            case "$key_input" in
+                                1) key_name="blacklist_nodes" ;;
+                                2) key_name="blacklist_farms" ;;
+                                3) key_name="whitelist_farms" ;;
+                                4) key_name="max_cpu_usage" ;;
+                                5) key_name="max_disk_usage" ;;
+                                6) key_name="min_uptime_days" ;;
+                                *) key_name="$key_input" ;;
+                            esac
+
                             VALUE=$(config_get "$key_name")
                             if [ -n "$VALUE" ]; then
                                 echo ""
                                 log_success "Configuration '$key_name' = $VALUE"
                             else
-                                log_info "Configuration key '$key_name' not found"
+                                log_info "Configuration key '$key_name' not found (value not set)"
                             fi
                             ;;
                         3)
