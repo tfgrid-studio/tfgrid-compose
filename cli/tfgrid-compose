@@ -1581,9 +1581,16 @@ EOF
                             fi
                             ;;
                         3)
-                            # Initialize
+                            # Initialize/reset
                             echo ""
-                            init_config
+                            read -p "This will reset all configuration to defaults. Continue? (y/N): " confirm
+                            if [[ $confirm =~ ^[Yy]$ ]]; then
+                                # Remove existing config and reinitialize
+                                rm -f "$HOME/.config/tfgrid-compose/config.yaml"
+                                init_config
+                            else
+                                echo "Cancelled."
+                            fi
                             ;;
                         4)
                             # Show detailed
