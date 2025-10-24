@@ -1533,18 +1533,30 @@ EOF
                             # Interactive set
                             echo ""
                             echo "Available configuration keys:"
-                            echo "  • blacklist_nodes     - Comma-separated list of nodes to avoid"
-                            echo "  • blacklist_farms     - Comma-separated list of farms to avoid"
-                            echo "  • whitelist_farms     - Comma-separated list of preferred farms"
-                            echo "  • max_cpu_usage       - Maximum CPU usage percentage (0-100)"
-                            echo "  • max_disk_usage      - Maximum disk usage percentage (0-100)"
-                            echo "  • min_uptime_days     - Minimum uptime in days"
+                            echo "  1) blacklist_nodes     - Comma-separated list of nodes to avoid"
+                            echo "  2) blacklist_farms     - Comma-separated list of farms to avoid"
+                            echo "  3) whitelist_farms     - Comma-separated list of preferred farms"
+                            echo "  4) max_cpu_usage       - Maximum CPU usage percentage (0-100)"
+                            echo "  5) max_disk_usage      - Maximum disk usage percentage (0-100)"
+                            echo "  6) min_uptime_days     - Minimum uptime in days"
                             echo ""
-                            read -p "Enter key name: " key_name
-                            if [ -z "$key_name" ]; then
+                            read -p "Enter key name or number [1-6]: " key_input
+                            if [ -z "$key_input" ]; then
                                 log_error "No key provided"
                                 exit 1
                             fi
+
+                            # Convert number to key name
+                            case "$key_input" in
+                                1) key_name="blacklist_nodes" ;;
+                                2) key_name="blacklist_farms" ;;
+                                3) key_name="whitelist_farms" ;;
+                                4) key_name="max_cpu_usage" ;;
+                                5) key_name="max_disk_usage" ;;
+                                6) key_name="min_uptime_days" ;;
+                                *) key_name="$key_input" ;;
+                            esac
+
                             read -p "Enter value for '$key_name': " key_value
                             if [ -z "$key_value" ]; then
                                 log_error "No value provided"
