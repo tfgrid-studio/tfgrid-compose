@@ -1510,8 +1510,88 @@ EOF
                 init_config
                 ;;
             show|"")
-                # Show current configuration
-                show_config
+                # Show current configuration or interactive mode
+                if [ -z "$1" ]; then
+                    # Interactive mode when no subcommand
+                    echo ""
+                    echo "📋 TFGrid Compose Configuration"
+                    echo ""
+                    echo "Current configuration:"
+                    show_config
+                    echo ""
+                    echo "What would you like to do?"
+                    echo "  1) Set a configuration value"
+                    echo "  2) Get a configuration value"
+                    echo "  3) Initialize/reset configuration"
+                    echo "  4) Show current configuration (detailed)"
+                    echo "  5) Exit"
+                    echo ""
+                    read -p "Enter choice [1-5]: " choice
+
+                    case $choice in
+                        1)
+                            # Interactive set
+                            echo ""
+                            echo "Available configuration keys:"
+                            echo "  • blacklist_nodes     - Comma-separated list of nodes to avoid"
+                            echo "  • blacklist_farms     - Comma-separated list of farms to avoid"
+                            echo "  • whitelist_farms     - Comma-separated list of preferred farms"
+                            echo "  • max_cpu_usage       - Maximum CPU usage percentage (0-100)"
+                            echo "  • max_disk_usage      - Maximum disk usage percentage (0-100)"
+                            echo "  • min_uptime_days     - Minimum uptime in days"
+                            echo ""
+                            read -p "Enter key name: " key_name
+                            if [ -z "$key_name" ]; then
+                                log_error "No key provided"
+                                exit 1
+                            fi
+                            read -p "Enter value for '$key_name': " key_value
+                            if [ -z "$key_value" ]; then
+                                log_error "No value provided"
+                                exit 1
+                            fi
+                            config_set "$key_name" "$key_value"
+                            ;;
+                        2)
+                            # Interactive get
+                            echo ""
+                            read -p "Enter key name to get: " key_name
+                            if [ -z "$key_name" ]; then
+                                log_error "No key provided"
+                                exit 1
+                            fi
+                            VALUE=$(config_get "$key_name")
+                            if [ -n "$VALUE" ]; then
+                                echo ""
+                                log_success "Configuration '$key_name' = $VALUE"
+                            else
+                                log_info "Configuration key '$key_name' not found"
+                            fi
+                            ;;
+                        3)
+                            # Initialize
+                            echo ""
+                            init_config
+                            ;;
+                        4)
+                            # Show detailed
+                            echo ""
+                            show_config
+                            ;;
+                        5)
+                            # Exit
+                            echo ""
+                            log_info "Goodbye!"
+                            ;;
+                        *)
+                            log_error "Invalid choice"
+                            exit 1
+                            ;;
+                    esac
+                else
+                    # Show current configuration
+                    show_config
+                fi
                 ;;
             set)
                 # Set configuration value
