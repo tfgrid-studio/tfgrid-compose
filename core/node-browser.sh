@@ -447,6 +447,12 @@ show_favorites() {
         node_id=$(echo "$node_id" | xargs)
         [ -z "$node_id" ] && continue
 
+        # Validate node_id is numeric
+        if ! [[ "$node_id" =~ ^[0-9]+$ ]]; then
+            log_info "Skipping invalid node ID: $node_id"
+            continue
+        fi
+
         # Try to get node info
         local node_info=$(curl -s "${GRIDPROXY_URL}/nodes?node_id=${node_id}")
         if [ $? -eq 0 ] && [ -n "$node_info" ]; then
