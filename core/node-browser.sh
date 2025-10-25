@@ -227,7 +227,7 @@ interactive_browser() {
                 echo "Page $((current_page + 1)) of $total_pages (nodes $((start_idx + 1))-$end_idx of $node_count)"
                 echo "Node $((start_idx + current_index + 1)) of $node_count selected"
                 echo ""
-                echo "Navigation: ↑/↓ page arrows, j/k node within page"
+                echo "Navigation: ↑/↓ page arrows, PageUp/PageDown (5 pages)"
                 echo "Actions: Enter=details, /=jump to node, f=favorite, d=deploy, q=quit"
                 echo ""
                 read -rsn1 key
@@ -263,17 +263,6 @@ interactive_browser() {
                                 current_index=0
                                 ;;
                         esac
-                        ;;
-                    "k"|"K")  # k - Previous node within page
-                        if [ $current_index -gt 0 ]; then
-                            current_index=$((current_index - 1))
-                        fi
-                        ;;
-                    "j"|"J")  # j - Next node within page
-                        local max_index_on_page=$((end_idx - start_idx - 1))
-                        if [ $current_index -lt $max_index_on_page ]; then
-                            current_index=$((current_index + 1))
-                        fi
                         ;;
                     "")  # Enter
                         view_mode="details"
@@ -539,7 +528,7 @@ nodes_command() {
             echo ""
             echo "Interactive browser with improved navigation:"
             echo "  • ↑/↓ arrows: Navigate between pages (50 nodes per page)"
-            echo "  • j/k keys: Navigate within current page"
+            echo "  • PageUp/PageDown: Jump 5 pages at a time"
             echo "  • / key: Jump to specific node by typing ID"
             echo "  • f: Toggle favorite, d: Deploy, Enter: Details, q: Quit"
             echo ""
