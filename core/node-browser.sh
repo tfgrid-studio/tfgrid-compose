@@ -490,9 +490,11 @@ show_favorites() {
     done
 
     # Show offline nodes
-    for node_id in "${offline_nodes[@]}"; do
+    for ((i=0; i<${#offline_nodes[@]}; i++)); do
+        node_id="${offline_nodes[$i]}"
         printf "%-8s %-20s %-15s %-6s %-6s %-6s %-6s %-8s %-10s\n" \
             "${node_id}🔴" "(offline)" "" "" "" "" "" "" ""
+        echo ""  # Add newline after each node row
         ((total_count++))
     done
 
