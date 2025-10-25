@@ -197,6 +197,9 @@ interactive_browser() {
     while true; do
         case "$view_mode" in
             "list")
+                # Clear screen for clean display
+                clear
+                
                 # Show table view
                 show_table_header
 
@@ -225,21 +228,29 @@ interactive_browser() {
 
                 case "$key" in
                     $'\x1b')  # Escape sequence
-                        read -rsn2 -t 0.1 key2
+                        read -rsn2 -t 0.3 key2  # Longer timeout for arrow keys
                         case "$key2" in
                             "[A")  # Up arrow
-                                [ $current_index -gt 0 ] && ((current_index--))
+                                if [ $current_index -gt 0 ]; then
+                                    current_index=$((current_index - 1))
+                                fi
                                 ;;
                             "[B")  # Down arrow
-                                [ $current_index -lt $((node_count - 1)) ] && ((current_index++))
+                                if [ $current_index -lt $((node_count - 1)) ]; then
+                                    current_index=$((current_index + 1))
+                                fi
                                 ;;
                             "[5")  # Page Up
                                 current_index=$((current_index - 10))
-                                [ $current_index -lt 0 ] && current_index=0
+                                if [ $current_index -lt 0 ]; then
+                                    current_index=0
+                                fi
                                 ;;
                             "[6")  # Page Down
                                 current_index=$((current_index + 10))
-                                [ $current_index -ge $node_count ] && current_index=$((node_count - 1))
+                                if [ $current_index -ge $node_count ]; then
+                                    current_index=$((node_count - 1))
+                                fi
                                 ;;
                         esac
                         ;;
@@ -271,6 +282,9 @@ interactive_browser() {
                 ;;
 
             "details")
+                # Clear screen for clean display
+                clear
+                
                 # Show detailed view
                 show_node_details "${node_array[$current_index]}"
 
