@@ -439,84 +439,62 @@ show_favorites() {
     printf "%-8s %-20s %-15s %-6s %-6s %-6s %-6s %-8s %-10s\n" "ID" "Farm" "Location" "CPU" "RAM" "Disk" "IPv4" "Load" "Uptime"
     echo "────────────────────────────────────────────────────────────────────────────────"
 
-    # Convert favorites to array
-    local favorites_array=()
+    # Temporary file to store all node data
+    local tmp_online=$(mktemp)
+    local tmp_offline=$(mktemp)
+    trap "rm -f $tmp_online $tmp_offline" EXIT
+
+    # Fetch each favorite node and store in temp files
     while IFS= read -r node_id; do
         node_id=$(echo "$node_id" | xargs)
         [ -z "$node_id" ] && continue
-        if [[ "$node_id" =~ ^[0-9]+$ ]]; then
-            favorites_array+=("$node_id")
+
+        # Validate node_id is numeric
+        if ! [[ "$node_id" =~ ^[0-9]+$ ]]; then
+            continue
+        fi
+
+        # Fetch node info
+        local node_info=$(curl -s "${GRIDPROXY_URL}/nodes?node_id=${node_id}")
+        if [ $? -eq 0 ] && [ -n "$node_info" ] && [ "$node_info" != "null" ] && [ "$node_info" != "[]" ]; then
+            local node=$(echo "$node_info" | jq -r '.[0]')
+            if [ "$node" != "null" ] && [ -n "$node" ]; then
+                # Check if node is online
+                local status=$(echo "$node" | jq -r '.status // "unknown"')
+                if [ "$status" = "up" ]; then
+                    # Store full node JSON for online nodes
+                    echo "$node" >> "$tmp_online"
+                else
+                    # Store just ID for offline nodes
+                    echo "$node_id" >> "$tmp_offline"
+                fi
+            else
+                echo "$node_id" >> "$tmp_offline"
+            fi
+        else
+            echo "$node_id" >> "$tmp_offline"
         fi
     done <<< "$favorites"
 
-    # Check if we have valid favorites
-    if [ ${#favorites_array[@]} -eq 0 ]; then
-        log_info "No valid favorite nodes found"
-        return
-    fi
-
-    # Convert to JSON for jq
-    local favorites_json="$(printf '%s\n' "${favorites_array[@]}" | jq -R . | jq -s .)"
-
-    # Fetch ALL nodes in one API call
-    # GridProxy API supports multiple node_id filters
-    local node_ids_param=$(IFS='&node_id='; echo "${favorites_array[*]}")
-    local all_nodes=$(curl -s "${GRIDPROXY_URL}/nodes?node_id=${node_ids_param}")
-
-    # Handle API failure
-    if [ -z "$all_nodes" ] || [ "$all_nodes" = "null" ]; then
-        log_error "Failed to fetch favorite nodes from GridProxy"
-        log_info "Showing favorites list only:"
-        for node_id in "${favorites_array[@]}"; do
-            echo "  Node $node_id (status unknown)"
-        done
-        return 1
-    fi
-
-    # Process with jq to separate online/offline and sort
-    local processed=$(echo "$all_nodes" | jq -r --argjson favorites "$favorites_json" '
-        # Create lookup of fetched nodes
-        . as $fetched |
-        
-        # Separate into online and offline, sort online by uptime
-        ($fetched | map(select(.status == "up")) | sort_by(.uptime) | reverse) as $online |
-        
-        # Find offline nodes (in favorites but not fetched or not "up")
-        ($favorites | map(. | tostring)) as $fav_ids |
-        ($fetched | map(.nodeId | tostring)) as $fetched_ids |
-        ($fav_ids - $fetched_ids) as $offline_ids |
-        ($fetched | map(select(.status != "up") | .nodeId | tostring)) as $down_ids |
-        ($offline_ids + $down_ids | unique) as $all_offline |
-        
-        {
-            online: $online,
-            offline: $all_offline
-        }
-    ')
-
-    # Display online nodes
-    local online_nodes=$(echo "$processed" | jq -c '.online[]' 2>/dev/null)
+    # Display online nodes sorted by uptime (highest first)
     local online_count=0
-    
-    if [ -n "$online_nodes" ]; then
-        while IFS= read -r node; do
-            [ -z "$node" ] && continue
+    if [ -s "$tmp_online" ]; then
+        # Sort by uptime and display
+        jq -s 'sort_by(.uptime) | reverse | .[]' "$tmp_online" | while IFS= read -r node; do
             show_node_row "$node"
-            ((online_count++))
-        done <<< "$online_nodes"
+        done
+        online_count=$(wc -l < "$tmp_online")
     fi
 
     # Display offline nodes
-    local offline_nodes=$(echo "$processed" | jq -r '.offline[]' 2>/dev/null)
     local offline_count=0
-    
-    if [ -n "$offline_nodes" ]; then
+    if [ -s "$tmp_offline" ]; then
         while IFS= read -r node_id; do
             [ -z "$node_id" ] && continue
             printf "%-8s %-20s %-15s %-6s %-6s %-6s %-6s %-8s %-10s\n" \
                 "${node_id}🔴" "(offline)" "" "" "" "" "" "" ""
-            ((offline_count++))
-        done <<< "$offline_nodes"
+        done < "$tmp_offline"
+        offline_count=$(wc -l < "$tmp_offline")
     fi
 
     echo ""
@@ -524,6 +502,9 @@ show_favorites() {
     if [ $online_count -gt 0 ]; then
         echo "Online: ${online_count}  Offline: ${offline_count}"
     fi
+
+    # Cleanup
+    rm -f "$tmp_online" "$tmp_offline"
     echo ""
     echo "Legend: ID=Node ID, Farm=Farm Name, Location=City/Country, CPU=Total Cores"
     echo "        RAM=Total GB, Disk=Total TB, IPv4=IPv4 Available, Load=CPU Usage %, Uptime=Days"
