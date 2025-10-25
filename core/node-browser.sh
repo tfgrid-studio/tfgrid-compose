@@ -479,11 +479,15 @@ show_favorites() {
     # Display online nodes sorted by uptime (highest first)
     local online_count=0
     if [ -s "$tmp_online" ]; then
-        # Sort by uptime and display
-        jq -s 'sort_by(.uptime) | reverse | .[]' "$tmp_online" | while IFS= read -r node; do
-            show_node_row "$node"
-        done
+        # Sort by uptime and get count
+        local sorted_nodes=$(jq -sc 'sort_by(.uptime) | reverse | .[]' "$tmp_online")
         online_count=$(wc -l < "$tmp_online")
+        
+        # Display each node
+        while IFS= read -r node; do
+            [ -z "$node" ] && continue
+            show_node_row "$node"
+        done <<< "$sorted_nodes"
     fi
 
     # Display offline nodes
