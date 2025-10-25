@@ -192,7 +192,7 @@ interactive_browser() {
     done < <(echo "$nodes" | jq -c '.[]')
 
     # Page-based navigation variables
-    local nodes_per_page=50
+    local nodes_per_page=20
     local total_pages=$(( (node_count + nodes_per_page - 1) / nodes_per_page ))
     local current_page=0
     local current_index=0  # Selected node within current page
@@ -527,7 +527,7 @@ nodes_command() {
             echo "🔍 ThreeFold Node Browser"
             echo ""
             echo "Interactive browser with improved navigation:"
-            echo "  • ↑/↓ arrows: Navigate between pages (50 nodes per page)"
+            echo "  • ↑/↓ arrows: Navigate between pages (20 nodes per page)"
             echo "  • PageUp/PageDown: Jump 5 pages at a time"
             echo "  • / key: Jump to specific node by typing ID"
             echo "  • f: Toggle favorite, d: Deploy, Enter: Details, q: Quit"
