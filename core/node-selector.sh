@@ -74,11 +74,6 @@ apply_node_filters() {
         [[ -n "$farm" ]] && whitelist_farms_array+=("$farm")
     done
 
-    # Debug: Log array contents and JSON conversion
-    echo "DEBUG: blacklist_nodes_array=${blacklist_nodes_array[*]}" >&2
-    echo "DEBUG: blacklist_farms_array=${blacklist_farms_array[*]}" >&2
-    echo "DEBUG: whitelist_farms_array=${whitelist_farms_array[*]}" >&2
-
     # Convert arrays to JSON for jq (handle empty arrays properly)
     local blacklist_nodes_json
     local blacklist_farms_json
@@ -101,11 +96,6 @@ apply_node_filters() {
     else
         whitelist_farms_json="$(printf '%s\n' "${whitelist_farms_array[@]}" | jq -R . | jq -s .)"
     fi
-
-    # Debug: Log JSON conversion results
-    echo "DEBUG: blacklist_nodes_json=$blacklist_nodes_json" >&2
-    echo "DEBUG: blacklist_farms_json=$blacklist_farms_json" >&2
-    echo "DEBUG: whitelist_farms_json=$whitelist_farms_json" >&2
 
     # Apply filters using jq
     local filtered_nodes=$(echo "$nodes_json" | jq -r '

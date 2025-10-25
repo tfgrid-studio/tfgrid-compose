@@ -346,7 +346,7 @@ show_favorites() {
 # Main nodes command handler
 nodes_command() {
     local subcommand="$1"
-    shift
+    shift || true  # Don't fail if no arguments to shift
 
     case "$subcommand" in
         "favorites"|"fav")
