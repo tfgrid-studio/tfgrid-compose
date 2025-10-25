@@ -461,7 +461,7 @@ show_favorites() {
                 # Check if node is online (has status "up")
                 local status=$(echo "$node" | jq -r '.status // "unknown"')
                 if [ "$status" = "up" ]; then
-                    online_nodes+=("$node_id")
+                    online_nodes+=("$node")
                 else
                     offline_nodes+=("$node_id")
                 fi
@@ -478,14 +478,9 @@ show_favorites() {
     # Show online nodes first
     local total_count=0
     for ((i=0; i<${#online_nodes[@]}; i++)); do
-        node_id="${online_nodes[$i]}"
-        # Refetch node info for display
-        local node_info=$(curl -s "${GRIDPROXY_URL}/nodes?node_id=${node_id}")
-        local node=$(echo "$node_info" | jq -r '.[0]')
-        if [ "$node" != "null" ] && [ -n "$node" ]; then
-            show_node_row "$node"
-            echo ""  # Add newline after each node row
-        fi
+        local node="${online_nodes[$i]}"
+        show_node_row "$node"
+        echo ""  # Add newline after each node row
         ((total_count++))
     done
 
