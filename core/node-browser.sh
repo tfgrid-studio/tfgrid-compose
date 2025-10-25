@@ -70,6 +70,7 @@ show_table_header() {
 # Display single node in table format
 show_node_row() {
     local node="$1"
+    local status_indicator="${2:-}"
     local is_fav=""
 
     local node_id=$(echo "$node" | jq -r '.nodeId')
@@ -95,7 +96,7 @@ show_node_row() {
     fi
 
     printf "%-6s %-20s %-15s %-6s %-6s %-6s %-6s %-8s %-10s\n" \
-        "${node_id}${is_fav}" "$farm" "$location" "$total_cpu" "${total_ram_gb}G" "${total_disk_tb}T" "$ipv4" "${cpu_load}%" "${uptime_days}d"
+        "${node_id}${is_fav}${status_indicator}" "$farm" "$location" "$total_cpu" "${total_ram_gb}G" "${total_disk_tb}T" "$ipv4" "${cpu_load}%" "${uptime_days}d"
 }
 
 # Show detailed node information
@@ -439,13 +440,11 @@ show_favorites() {
     printf "%-8s %-20s %-15s %-6s %-6s %-6s %-6s %-8s %-10s\n" "ID" "Farm" "Location" "CPU" "RAM" "Disk" "IPv4" "Load" "Uptime"
     echo "────────────────────────────────────────────────────────────────────────────────"
 
-    # Temporary file to store all node data
-    local tmp_online=$(mktemp)
-    local tmp_offline=$(mktemp)
-    trap "rm -f $tmp_online $tmp_offline" EXIT
+    local online_nodes=()
+    local offline_nodes=()
 
-    # Fetch each favorite node and store in temp files
     while IFS= read -r node_id; do
+        # Trim whitespace from node_id
         node_id=$(echo "$node_id" | xargs)
         [ -z "$node_id" ] && continue
 
@@ -454,65 +453,57 @@ show_favorites() {
             continue
         fi
 
-        # Fetch node info
+        # Try to get node info
         local node_info=$(curl -s "${GRIDPROXY_URL}/nodes?node_id=${node_id}")
         if [ $? -eq 0 ] && [ -n "$node_info" ] && [ "$node_info" != "null" ] && [ "$node_info" != "[]" ]; then
             local node=$(echo "$node_info" | jq -r '.[0]')
             if [ "$node" != "null" ] && [ -n "$node" ]; then
-                # Check if node is online
+                # Check if node is online (has status "up")
                 local status=$(echo "$node" | jq -r '.status // "unknown"')
                 if [ "$status" = "up" ]; then
-                    # Store full node JSON for online nodes
-                    echo "$node" >> "$tmp_online"
+                    online_nodes+=("$node")
                 else
-                    # Store just ID for offline nodes
-                    echo "$node_id" >> "$tmp_offline"
+                    offline_nodes+=("$node")
                 fi
             else
-                echo "$node_id" >> "$tmp_offline"
+                # Node not found in API - create minimal JSON
+                offline_nodes+=("{\"nodeId\":$node_id,\"farmName\":\"Unknown\",\"status\":\"offline\"}")
             fi
         else
-            echo "$node_id" >> "$tmp_offline"
+            # API call failed - create minimal JSON
+            offline_nodes+=("{\"nodeId\":$node_id,\"farmName\":\"Unknown\",\"status\":\"offline\"}")
         fi
     done <<< "$favorites"
 
-    # Display online nodes sorted by uptime (highest first)
-    local online_count=0
-    if [ -s "$tmp_online" ]; then
-        # Sort by uptime and get count
-        local sorted_nodes=$(jq -sc 'sort_by(.uptime) | reverse | .[]' "$tmp_online")
-        online_count=$(wc -l < "$tmp_online")
-        
-        # Display each node
-        while IFS= read -r node; do
-            [ -z "$node" ] && continue
-            show_node_row "$node"
-        done <<< "$sorted_nodes"
+    # Show online nodes first (sorted by uptime if possible)
+    local total_count=0
+    if [ ${#online_nodes[@]} -gt 0 ]; then
+        # Convert to json array, sort by uptime descending, convert back
+        local sorted_online=$(printf '%s\n' "${online_nodes[@]}" | jq -s 'sort_by(.uptime) | reverse')
+        local count=$(echo "$sorted_online" | jq 'length')
+        for ((i=0; i<count; i++)); do
+            local node=$(echo "$sorted_online" | jq -c ".[$i]")
+            show_node_row "$node" "🟢"
+            ((total_count++))
+        done
     fi
 
-    # Display offline nodes
-    local offline_count=0
-    if [ -s "$tmp_offline" ]; then
-        while IFS= read -r node_id; do
-            [ -z "$node_id" ] && continue
-            printf "%-8s %-20s %-15s %-6s %-6s %-6s %-6s %-8s %-10s\n" \
-                "${node_id}🔴" "(offline)" "" "" "" "" "" "" ""
-        done < "$tmp_offline"
-        offline_count=$(wc -l < "$tmp_offline")
-    fi
+    # Show offline nodes with red indicator
+    for ((i=0; i<${#offline_nodes[@]}; i++)); do
+        local node="${offline_nodes[$i]}"
+        show_node_row "$node" "🔴"
+        ((total_count++))
+    done
 
     echo ""
-    echo "Total favorites: $((online_count + offline_count))"
-    if [ $online_count -gt 0 ]; then
-        echo "Online: ${online_count}  Offline: ${offline_count}"
+    echo "Total favorites: $total_count"
+    if [ ${#online_nodes[@]} -gt 0 ]; then
+        echo "Online: ${#online_nodes[@]}  Offline: ${#offline_nodes[@]}"
     fi
-
-    # Cleanup
-    rm -f "$tmp_online" "$tmp_offline"
     echo ""
     echo "Legend: ID=Node ID, Farm=Farm Name, Location=City/Country, CPU=Total Cores"
     echo "        RAM=Total GB, Disk=Total TB, IPv4=IPv4 Available, Load=CPU Usage %, Uptime=Days"
-    echo "        🔴 = Offline node"
+    echo "        🟢 = Online node | 🔴 = Offline node | ★ = Favorite"
 }
 
 # Main nodes command handler
