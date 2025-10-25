@@ -191,26 +191,32 @@ interactive_browser() {
         node_array+=("$node")
     done < <(echo "$nodes" | jq -c '.[]')
 
-    local current_index=0
-    local view_mode="list"  # list or details
+    # Page-based navigation variables
+    local nodes_per_page=50
+    local total_pages=$(( (node_count + nodes_per_page - 1) / nodes_per_page ))
+    local current_page=0
+    local current_index=0  # Selected node within current page
+    local view_mode="list"  # list or details or input
+    local input_mode=""     # For typing node IDs
 
     while true; do
         case "$view_mode" in
             "list")
                 # Clear screen for clean display
                 clear
-                
+
                 # Show table view
                 show_table_header
 
-                # Show current page (10 nodes)
-                local start_idx=$((current_index / 10 * 10))
-                local end_idx=$((start_idx + 10))
+                # Calculate page boundaries
+                local start_idx=$((current_page * nodes_per_page))
+                local end_idx=$((start_idx + nodes_per_page))
                 [ $end_idx -gt $node_count ] && end_idx=$node_count
 
+                # Show nodes for current page
                 for ((i=start_idx; i<end_idx; i++)); do
                     local marker=""
-                    if [ $i -eq $current_index ]; then
+                    if [ $i -eq $((start_idx + current_index)) ]; then
                         marker="→"
                     fi
                     echo -n "$marker"
@@ -218,11 +224,11 @@ interactive_browser() {
                 done
 
                 echo ""
-                echo "Page $((start_idx/10 + 1)) of $(((node_count + 9) / 10))"
-                echo "Node $((current_index + 1)) of $node_count selected"
+                echo "Page $((current_page + 1)) of $total_pages (nodes $((start_idx + 1))-$end_idx of $node_count)"
+                echo "Node $((start_idx + current_index + 1)) of $node_count selected"
                 echo ""
-                echo "Navigation: ↑/↓ arrows, PageUp/PageDown"
-                echo "Actions: Enter=details, f=favorite, d=deploy, q=quit"
+                echo "Navigation: ↑/↓ page arrows, j/k node within page"
+                echo "Actions: Enter=details, /=jump to node, f=favorite, d=deploy, q=quit"
                 echo ""
                 read -rsn1 key
 
@@ -230,35 +236,55 @@ interactive_browser() {
                     $'\x1b')  # Escape sequence
                         read -rsn2 -t 0.3 key2  # Longer timeout for arrow keys
                         case "$key2" in
-                            "[A")  # Up arrow
-                                if [ $current_index -gt 0 ]; then
-                                    current_index=$((current_index - 1))
+                            "[A")  # Up arrow - Previous page
+                                if [ $current_page -gt 0 ]; then
+                                    current_page=$((current_page - 1))
+                                    current_index=0  # Reset to first node on page
                                 fi
                                 ;;
-                            "[B")  # Down arrow
-                                if [ $current_index -lt $((node_count - 1)) ]; then
-                                    current_index=$((current_index + 1))
+                            "[B")  # Down arrow - Next page
+                                if [ $current_page -lt $((total_pages - 1)) ]; then
+                                    current_page=$((current_page + 1))
+                                    current_index=0  # Reset to first node on page
                                 fi
                                 ;;
-                            "[5")  # Page Up
-                                current_index=$((current_index - 10))
-                                if [ $current_index -lt 0 ]; then
-                                    current_index=0
+                            "[5")  # Page Up - Jump 5 pages back
+                                current_page=$((current_page - 5))
+                                if [ $current_page -lt 0 ]; then
+                                    current_page=0
                                 fi
+                                current_index=0
                                 ;;
-                            "[6")  # Page Down
-                                current_index=$((current_index + 10))
-                                if [ $current_index -ge $node_count ]; then
-                                    current_index=$((node_count - 1))
+                            "[6")  # Page Down - Jump 5 pages forward
+                                current_page=$((current_page + 5))
+                                if [ $current_page -ge $total_pages ]; then
+                                    current_page=$((total_pages - 1))
                                 fi
+                                current_index=0
                                 ;;
                         esac
+                        ;;
+                    "k"|"K")  # k - Previous node within page
+                        if [ $current_index -gt 0 ]; then
+                            current_index=$((current_index - 1))
+                        fi
+                        ;;
+                    "j"|"J")  # j - Next node within page
+                        local max_index_on_page=$((end_idx - start_idx - 1))
+                        if [ $current_index -lt $max_index_on_page ]; then
+                            current_index=$((current_index + 1))
+                        fi
                         ;;
                     "")  # Enter
                         view_mode="details"
                         ;;
+                    "/")
+                        view_mode="input"
+                        input_mode=""
+                        ;;
                     "f"|"F")
-                        local node_id=$(echo "${node_array[$current_index]}" | jq -r '.nodeId')
+                        local selected_idx=$((start_idx + current_index))
+                        local node_id=$(echo "${node_array[$selected_idx]}" | jq -r '.nodeId')
                         if is_favorite "$node_id"; then
                             remove_favorite "$node_id"
                         else
@@ -266,7 +292,8 @@ interactive_browser() {
                         fi
                         ;;
                     "d"|"D")
-                        local node_id=$(echo "${node_array[$current_index]}" | jq -r '.nodeId')
+                        local selected_idx=$((start_idx + current_index))
+                        local node_id=$(echo "${node_array[$selected_idx]}" | jq -r '.nodeId')
                         echo ""
                         log_info "To deploy to node $node_id, run:"
                         echo "tfgrid-compose up <app> --node=$node_id"
@@ -284,14 +311,16 @@ interactive_browser() {
             "details")
                 # Clear screen for clean display
                 clear
-                
+
                 # Show detailed view
-                show_node_details "${node_array[$current_index]}"
+                local selected_idx=$((current_page * nodes_per_page + current_index))
+                show_node_details "${node_array[$selected_idx]}"
 
                 read -rsn1 key
                 case "$key" in
                     "f"|"F")
-                        local node_id=$(echo "${node_array[$current_index]}" | jq -r '.nodeId')
+                        local selected_idx=$((current_page * nodes_per_page + current_index))
+                        local node_id=$(echo "${node_array[$selected_idx]}" | jq -r '.nodeId')
                         if is_favorite "$node_id"; then
                             remove_favorite "$node_id"
                         else
@@ -299,7 +328,8 @@ interactive_browser() {
                         fi
                         ;;
                     "d"|"D")
-                        local node_id=$(echo "${node_array[$current_index]}" | jq -r '.nodeId')
+                        local selected_idx=$((current_page * nodes_per_page + current_index))
+                        local node_id=$(echo "${node_array[$selected_idx]}" | jq -r '.nodeId')
                         echo ""
                         log_info "To deploy to node $node_id, run:"
                         echo "tfgrid-compose up <app> --node=$node_id"
@@ -308,6 +338,92 @@ interactive_browser() {
                         ;;
                     "q"|"Q"|""|$'\x1b')
                         view_mode="list"
+                        ;;
+                esac
+                ;;
+
+            "input")
+                # Clear screen for clean display
+                clear
+
+                echo ""
+                echo "🔍 Jump to Node"
+                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                echo ""
+                echo "Type a node ID number and press Enter to jump to that node."
+                echo "Type part of a node ID to filter the list."
+                echo "Press Escape or 'q' to cancel."
+                echo ""
+                echo -n "Node ID: $input_mode"
+
+                # Read input character by character
+                read -rsn1 key
+                case "$key" in
+                    $'\x1b'|q|Q)  # Escape or q to cancel
+                        view_mode="list"
+                        ;;
+                    $'\x7f'|'\b')  # Backspace
+                        input_mode="${input_mode%?}"
+                        ;;
+                    "")  # Enter - process input
+                        if [ -n "$input_mode" ]; then
+                            # Try to find node by exact ID first
+                            local found_index=-1
+                            for ((i=0; i<node_count; i++)); do
+                                local node_id=$(echo "${node_array[$i]}" | jq -r '.nodeId')
+                                if [ "$node_id" = "$input_mode" ]; then
+                                    found_index=$i
+                                    break
+                                fi
+                            done
+
+                            if [ $found_index -ge 0 ]; then
+                                # Found exact match - jump to that node
+                                current_page=$((found_index / nodes_per_page))
+                                current_index=$((found_index % nodes_per_page))
+                                view_mode="list"
+                            else
+                                # No exact match - filter by partial match
+                                local filtered_nodes=()
+                                for ((i=0; i<node_count; i++)); do
+                                    local node_id=$(echo "${node_array[$i]}" | jq -r '.nodeId')
+                                    if [[ "$node_id" == *"$input_mode"* ]]; then
+                                        filtered_nodes+=("$i")  # Store original index
+                                    fi
+                                done
+
+                                if [ ${#filtered_nodes[@]} -eq 1 ]; then
+                                    # Single match - jump to it
+                                    local target_index=${filtered_nodes[0]}
+                                    current_page=$((target_index / nodes_per_page))
+                                    current_index=$((target_index % nodes_per_page))
+                                    view_mode="list"
+                                elif [ ${#filtered_nodes[@]} -gt 1 ]; then
+                                    # Multiple matches - show first one
+                                    local target_index=${filtered_nodes[0]}
+                                    current_page=$((target_index / nodes_per_page))
+                                    current_index=$((target_index % nodes_per_page))
+                                    view_mode="list"
+                                    echo ""
+                                    log_info "Found ${#filtered_nodes[@]} nodes matching '$input_mode', showing first match"
+                                    sleep 1
+                                else
+                                    # No matches
+                                    echo ""
+                                    log_error "No nodes found matching '$input_mode'"
+                                    sleep 1
+                                    view_mode="list"
+                                fi
+                            fi
+                        else
+                            view_mode="list"
+                        fi
+                        ;;
+                    *)  # Regular character
+                        # Only allow numbers for node IDs
+                        if [[ "$key" =~ ^[0-9]$ ]]; then
+                            input_mode="$input_mode$key"
+                        fi
                         ;;
                 esac
                 ;;
@@ -420,6 +536,12 @@ nodes_command() {
         "help"|"-h"|"--help")
             echo ""
             echo "🔍 ThreeFold Node Browser"
+            echo ""
+            echo "Interactive browser with improved navigation:"
+            echo "  • ↑/↓ arrows: Navigate between pages (50 nodes per page)"
+            echo "  • j/k keys: Navigate within current page"
+            echo "  • / key: Jump to specific node by typing ID"
+            echo "  • f: Toggle favorite, d: Deploy, Enter: Details, q: Quit"
             echo ""
             echo "Usage:"
             echo "  tfgrid-compose nodes                    Interactive browser"
