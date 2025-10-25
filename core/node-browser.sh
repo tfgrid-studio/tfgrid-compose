@@ -461,30 +461,34 @@ show_favorites() {
                 # Check if node is online (has status "up")
                 local status=$(echo "$node" | jq -r '.status // "unknown"')
                 if [ "$status" = "up" ]; then
-                    online_nodes+=("$node")
+                    online_nodes+=("$node_id")
                 else
-                    offline_nodes+=("$node")
+                    offline_nodes+=("$node_id")
                 fi
             else
                 # Node not found in API - consider offline
-                offline_nodes+=("{\"nodeId\":\"$node_id\",\"status\":\"offline\"}")
+                offline_nodes+=("$node_id")
             fi
         else
             # API call failed - consider offline
-            offline_nodes+=("{\"nodeId\":\"$node_id\",\"status\":\"offline\"}")
+            offline_nodes+=("$node_id")
         fi
     done <<< "$favorites"
 
     # Show online nodes first
     local total_count=0
-    for node in "${online_nodes[@]}"; do
-        show_node_row "$node"
+    for node_id in "${online_nodes[@]}"; do
+        # Refetch node info for display
+        local node_info=$(curl -s "${GRIDPROXY_URL}/nodes?node_id=${node_id}")
+        local node=$(echo "$node_info" | jq -r '.[0]')
+        if [ "$node" != "null" ] && [ -n "$node" ]; then
+            show_node_row "$node"
+        fi
         ((total_count++))
     done
 
     # Show offline nodes
-    for node in "${offline_nodes[@]}"; do
-        local node_id=$(echo "$node" | jq -r '.nodeId')
+    for node_id in "${offline_nodes[@]}"; do
         printf "%-8s %-20s %-15s %-6s %-6s %-6s %-6s %-8s %-10s\n" \
             "${node_id}🔴" "(offline)" "" "" "" "" "" "" ""
         ((total_count++))
