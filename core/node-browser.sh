@@ -20,6 +20,8 @@ ensure_favorites_file() {
 # Add node to favorites
 add_favorite() {
     local node_id="$1"
+    # Trim whitespace from node_id
+    node_id=$(echo "$node_id" | xargs)
     ensure_favorites_file
 
     if grep -q "^${node_id}$" "$FAVORITES_FILE"; then
@@ -441,6 +443,8 @@ show_favorites() {
     local offline_nodes=()
 
     while IFS= read -r node_id; do
+        # Trim whitespace from node_id
+        node_id=$(echo "$node_id" | xargs)
         [ -z "$node_id" ] && continue
 
         # Try to get node info
@@ -457,11 +461,11 @@ show_favorites() {
                 fi
             else
                 # Node not found in API - consider offline
-                offline_nodes+=("{\"nodeId\":$node_id,\"status\":\"offline\"}")
+                offline_nodes+=("{\"nodeId\":\"$node_id\",\"status\":\"offline\"}")
             fi
         else
             # API call failed - consider offline
-            offline_nodes+=("{\"nodeId\":$node_id,\"status\":\"offline\"}")
+            offline_nodes+=("{\"nodeId\":\"$node_id\",\"status\":\"offline\"}")
         fi
     done <<< "$favorites"
 
