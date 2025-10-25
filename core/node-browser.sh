@@ -483,6 +483,7 @@ show_favorites() {
         local node=$(echo "$node_info" | jq -r '.[0]')
         if [ "$node" != "null" ] && [ -n "$node" ]; then
             show_node_row "$node"
+            echo ""  # Add newline after each node row
         fi
         ((total_count++))
     done
