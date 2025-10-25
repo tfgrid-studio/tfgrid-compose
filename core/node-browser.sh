@@ -477,7 +477,8 @@ show_favorites() {
 
     # Show online nodes first
     local total_count=0
-    for node_id in "${online_nodes[@]}"; do
+    for ((i=0; i<${#online_nodes[@]}; i++)); do
+        node_id="${online_nodes[$i]}"
         # Refetch node info for display
         local node_info=$(curl -s "${GRIDPROXY_URL}/nodes?node_id=${node_id}")
         local node=$(echo "$node_info" | jq -r '.[0]')
