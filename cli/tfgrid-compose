@@ -2131,8 +2131,23 @@ EOF
                         ;;
                 esac
 
-                # Download URL (placeholder - needs to be updated with actual release URL)
-                SDK_URL="https://github.com/threefoldtech/tfgrid-sdk-go/releases/latest/download/tfgrid-sdk-go-${PLATFORM}-${ARCH}.tar.gz"
+                # Get latest release version
+                log_info "Checking for latest tfgrid-sdk-go release..."
+                LATEST_RELEASE_URL="https://api.github.com/repos/threefoldtech/tfgrid-sdk-go/releases/latest"
+
+                if command_exists curl; then
+                    LATEST_VERSION=$(curl -s "$LATEST_RELEASE_URL" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' 2>/dev/null)
+                elif command_exists wget; then
+                    LATEST_VERSION=$(wget -q -O - "$LATEST_RELEASE_URL" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' 2>/dev/null)
+                fi
+
+                if [ -z "$LATEST_VERSION" ]; then
+                    log_warning "Could not determine latest version, using fallback URL"
+                    SDK_URL="https://github.com/threefoldtech/tfgrid-sdk-go/releases/download/v0.17.0/tfgrid-sdk-go_${PLATFORM}_${ARCH}.tar.gz"
+                else
+                    log_info "Latest version: $LATEST_VERSION"
+                    SDK_URL="https://github.com/threefoldtech/tfgrid-sdk-go/releases/download/${LATEST_VERSION}/tfgrid-sdk-go_${PLATFORM}_${ARCH}.tar.gz"
+                fi
 
                 TMP_DIR="$HOME/.local/share/tfgrid-compose/tmp"
                 TMP_FILE="$TMP_DIR/tfgrid-sdk-go.tar.gz"
