@@ -362,13 +362,14 @@ get_twin_id() {
         return 1
     fi
 
-    # For testing/development: derive twin ID from mnemonic using tfgrid-sdk-go
+    # For testing/development: derive twin ID from mnemonic using tfcmd
     # In production, this would be the proper implementation
-    if check_tfgrid_sdk_binary; then
-        log_info "Deriving twin ID from mnemonic using tfgrid-sdk-go..."
+    if [ -f "$HOME/.local/share/tfgrid-compose/bin/tfcmd" ]; then
+        log_info "Deriving twin ID from mnemonic using tfcmd..."
 
-        # Use tfgrid-sdk-go to get twin ID from mnemonic
-        local cmd="$TFGRID_SDK_BINARY get-twin-id --mnemonic \"$TFGRID_MNEMONIC\" --network main"
+        # Use tfcmd to get twin ID from mnemonic
+        # Note: tfcmd might need different parameters, this is a placeholder
+        local cmd="$HOME/.local/share/tfgrid-compose/bin/tfcmd get twin-id --mnemonic \"$TFGRID_MNEMONIC\""
         local derived_twin_id
 
         if [ "${TFGRID_VERBOSE:-}" = "1" ]; then
@@ -381,18 +382,18 @@ get_twin_id() {
         fi
 
         if [ $exit_code -eq 0 ] && [ -n "$derived_twin_id" ]; then
-            # Clean the output
-            derived_twin_id=$(echo "$derived_twin_id" | tr -d '[:space:]')
+            # Clean the output and extract twin ID
+            derived_twin_id=$(echo "$derived_twin_id" | grep -o '"twin_id":[[:space:]]*[0-9]*' | grep -o '[0-9]*' | head -1)
 
             # Validate it's numeric
             if [[ "$derived_twin_id" =~ ^[0-9]+$ ]]; then
                 log_success "Derived twin ID: $derived_twin_id"
                 test_twin_id="$derived_twin_id"
             else
-                log_warning "Invalid twin ID format from tfgrid-sdk-go, falling back to hash method"
+                log_warning "Invalid twin ID format from tfcmd, falling back to hash method"
             fi
         else
-            log_warning "Failed to derive twin ID from tfgrid-sdk-go, falling back to hash method"
+            log_warning "Failed to derive twin ID from tfcmd, falling back to hash method"
         fi
     fi
 
