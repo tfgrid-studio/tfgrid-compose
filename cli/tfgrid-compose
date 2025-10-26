@@ -21,6 +21,7 @@ source "$DEPLOYER_ROOT/core/gitconfig.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
 source "$DEPLOYER_ROOT/core/node-browser.sh"
 source "$DEPLOYER_ROOT/core/update-git-config.sh"
+source "$DEPLOYER_ROOT/core/contract-manager.sh"
 
 # Version (read from VERSION file)
 VERSION=$(cat "$DEPLOYER_ROOT/VERSION" 2>/dev/null || echo "unknown")
@@ -2060,6 +2061,321 @@ EOF
     help|--help|-h|"")
         # Help command
         show_help
+        ;;
+    contracts)
+        # Contract management subcommands
+        SUBCOMMAND="${1:-list}"
+        shift || true
+
+        case "$SUBCOMMAND" in
+            list)
+                # List contracts
+                log_info "TFGrid Compose v$VERSION - Contract List"
+                echo ""
+
+                # Get twin ID from credentials
+                if ! load_credentials; then
+                    log_error "Failed to load credentials"
+                    log_info "Run 'tfgrid-compose login' to configure credentials"
+                    exit 1
+                fi
+
+                if [ -z "$TFGRID_MNEMONIC" ]; then
+                    log_error "ThreeFold mnemonic not configured"
+                    log_info "Run 'tfgrid-compose login' to configure credentials"
+                    exit 1
+                fi
+
+                # Get twin ID (placeholder - needs implementation)
+                TWIN_ID=$(get_twin_id)
+                if [ -z "$TWIN_ID" ]; then
+                    log_error "Unable to determine twin ID from mnemonic"
+                    log_info "This feature requires a valid ThreeFold account"
+                    exit 1
+                fi
+
+                # Parse options
+                NETWORK="main"
+                FORMAT="table"
+                FILTER_TYPE=""
+                FILTER_STATE=""
+                LIMIT=50
+
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        --network=*)
+                            NETWORK="${1#--network=}"
+                            ;;
+                        --format=*)
+                            FORMAT="${1#--format=}"
+                            ;;
+                        --type=*)
+                            FILTER_TYPE="${1#--type=}"
+                            ;;
+                        --state=*)
+                            FILTER_STATE="${1#--state=}"
+                            ;;
+                        --limit=*)
+                            LIMIT="${1#--limit=}"
+                            ;;
+                        *)
+                            log_error "Unknown option: $1"
+                            echo ""
+                            echo "Usage: tfgrid-compose contracts list [options]"
+                            echo ""
+                            echo "Options:"
+                            echo "  --network=NW    Network (main/test/dev) [default: main]"
+                            echo "  --format= FMT   Output format (table/json/csv) [default: table]"
+                            echo "  --type=TYPE     Filter by contract type (VM/Network/Rent)"
+                            echo "  --state=STATE   Filter by contract state (active/grace/deleted)"
+                            echo "  --limit=N       Maximum contracts to show [default: 50]"
+                            exit 1
+                            ;;
+                    esac
+                    shift
+                done
+
+                # Validate network
+                if ! validate_network "$NETWORK"; then
+                    exit 1
+                fi
+
+                # Fetch contracts
+                CONTRACTS_JSON=$(contracts_list_gridproxy "$TWIN_ID" "$NETWORK" "$LIMIT")
+                if [ $? -ne 0 ]; then
+                    log_error "Failed to fetch contracts"
+                    exit 1
+                fi
+
+                # Apply filters and sorting
+                FILTERED_JSON=$(contracts_filter_and_sort "$CONTRACTS_JSON" "$FILTER_TYPE" "$FILTER_STATE")
+                if [ $? -ne 0 ]; then
+                    log_error "Failed to filter contracts"
+                    exit 1
+                fi
+
+                # Format and display
+                format_contract_output "$FILTERED_JSON" "$FORMAT"
+                ;;
+
+            show)
+                # Show contract details
+                CONTRACT_ID="$1"
+
+                if [ -z "$CONTRACT_ID" ]; then
+                    log_error "Contract ID required"
+                    echo ""
+                    echo "Usage: tfgrid-compose contracts show <contract-id>"
+                    exit 1
+                fi
+
+                if ! validate_contract_id "$CONTRACT_ID"; then
+                    exit 1
+                fi
+
+                log_info "Fetching contract details for ID: $CONTRACT_ID"
+
+                # Fetch contract details
+                CONTRACT_JSON=$(contracts_get_details "$CONTRACT_ID")
+                if [ $? -ne 0 ]; then
+                    log_error "Failed to fetch contract details"
+                    exit 1
+                fi
+
+                # Display formatted details
+                echo "$CONTRACT_JSON" | jq . 2>/dev/null || echo "$CONTRACT_JSON"
+                ;;
+
+            delete)
+                # Delete/cancel contracts
+                if [ $# -eq 0 ]; then
+                    log_error "Contract ID(s) required"
+                    echo ""
+                    echo "Usage: tfgrid-compose contracts delete <contract-id> [contract-id ...]"
+                    echo "       tfgrid-compose contracts delete --all"
+                    exit 1
+                fi
+
+                # Parse options
+                NETWORK="main"
+                FORCE=false
+
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        --network=*)
+                            NETWORK="${1#--network=}"
+                            ;;
+                        --force)
+                            FORCE=true
+                            ;;
+                        --all)
+                            # Batch cancel all contracts - not implemented yet
+                            log_error "Batch cancel all not implemented yet"
+                            exit 1
+                            ;;
+                        -*)
+                            log_error "Unknown option: $1"
+                            exit 1
+                            ;;
+                        *)
+                            break
+                            ;;
+                    esac
+                    shift
+                done
+
+                # Validate network
+                if ! validate_network "$NETWORK"; then
+                    exit 1
+                fi
+
+                # Validate contract IDs
+                CONTRACT_IDS=()
+                for id in "$@"; do
+                    if ! validate_contract_id "$id"; then
+                        exit 1
+                    fi
+                    CONTRACT_IDS+=("$id")
+                done
+
+                if [ ${#CONTRACT_IDS[@]} -eq 0 ]; then
+                    log_error "No valid contract IDs provided"
+                    exit 1
+                fi
+
+                # Confirmation unless forced
+                if [ "$FORCE" != true ]; then
+                    echo "⚠️  This will cancel the following contracts:"
+                    for id in "${CONTRACT_IDS[@]}"; do
+                        echo "   - Contract ID: $id"
+                    done
+                    echo ""
+                    read -p "Are you sure? (y/N): " -n 1 -r
+                    echo ""
+                    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                        log_info "Operation cancelled"
+                        exit 0
+                    fi
+                fi
+
+                # Perform cancellation
+                if [ ${#CONTRACT_IDS[@]} -eq 1 ]; then
+                    # Single contract
+                    if contracts_cancel_single "${CONTRACT_IDS[0]}" "$NETWORK"; then
+                        log_success "Contract ${CONTRACT_IDS[0]} cancelled successfully"
+                    else
+                        log_error "Failed to cancel contract ${CONTRACT_IDS[0]}"
+                        exit 1
+                    fi
+                else
+                    # Batch cancellation
+                    CONTRACT_LIST=$(printf '%s\n' "${CONTRACT_IDS[@]}" | tr '\n' ' ')
+                    if contracts_cancel_batch "$CONTRACT_LIST" "$NETWORK"; then
+                        log_success "${#CONTRACT_IDS[@]} contracts cancelled successfully"
+                    else
+                        log_error "Failed to cancel contracts"
+                        exit 1
+                    fi
+                fi
+                ;;
+
+            prune)
+                # Clean up orphaned contracts
+                log_info "TFGrid Compose v$VERSION - Contract Prune"
+                echo ""
+
+                # Parse options
+                NETWORK="main"
+                FORCE=false
+
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        --network=*)
+                            NETWORK="${1#--network=}"
+                            ;;
+                        --force)
+                            FORCE=true
+                            ;;
+                        *)
+                            log_error "Unknown option: $1"
+                            exit 1
+                            ;;
+                    esac
+                    shift
+                done
+
+                # Validate network
+                if ! validate_network "$NETWORK"; then
+                    exit 1
+                fi
+
+                log_info "Scanning for orphaned contracts on $NETWORK network..."
+
+                # This would need implementation to compare local state vs grid contracts
+                log_warning "Orphaned contract cleanup not fully implemented yet"
+                log_info "This feature will be available in a future update"
+                ;;
+
+            sync)
+                # Synchronize local state with grid
+                log_info "TFGrid Compose v$VERSION - Contract Sync"
+                echo ""
+
+                # Parse options
+                NETWORK="main"
+
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        --network=*)
+                            NETWORK="${1#--network=}"
+                            ;;
+                        *)
+                            log_error "Unknown option: $1"
+                            exit 1
+                            ;;
+                    esac
+                    shift
+                done
+
+                # Validate network
+                if ! validate_network "$NETWORK"; then
+                    exit 1
+                fi
+
+                # Get current app for state sync
+                CURRENT_APP=$(get_current_app)
+                if [ -z "$CURRENT_APP" ]; then
+                    log_error "No app selected for state synchronization"
+                    log_info "Select an app with: tfgrid-compose select <app>"
+                    exit 1
+                fi
+
+                log_info "Synchronizing contract state for app: $CURRENT_APP"
+
+                if contracts_sync_state "$CURRENT_APP"; then
+                    log_success "Contract state synchronized"
+                else
+                    log_error "Failed to synchronize contract state"
+                    exit 1
+                fi
+                ;;
+
+            *)
+                log_error "Unknown contracts subcommand: $SUBCOMMAND"
+                echo ""
+                echo "Available subcommands:"
+                echo "  list     List all contracts with filtering/sorting"
+                echo "  show     Show detailed contract information"
+                echo "  delete   Delete/cancel contracts (single or batch)"
+                echo "  prune    Clean up orphaned contracts"
+                echo "  sync     Synchronize local state with grid"
+                echo ""
+                echo "Usage: tfgrid-compose contracts <subcommand> [options]"
+                exit 1
+                ;;
+        esac
+
+        exit 0
         ;;
 
     *)

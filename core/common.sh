@@ -265,6 +265,7 @@ show_help() {
     echo -e "  ${GREEN}status${NC} [app]          Check application status"
     echo -e "  ${GREEN}ssh${NC} [app]             SSH into the deployment"
     echo -e "  ${GREEN}address${NC} [app]         Show deployment addresses"
+echo -e "  ${GREEN}contracts${NC} <subcommand> Contract management (list/show/delete/prune/sync)"
     echo -e "  ${GREEN}update-git-config${NC} <app> Update git config on existing VM"
     echo ""
     echo -e "${CYAN}Node Browser Commands:${NC}"
