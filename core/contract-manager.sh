@@ -162,7 +162,7 @@ check_tfgrid_sdk_binary() {
     return 0
 }
 
-# Cancel single contract using tfgrid-sdk-go
+# Cancel single contract using tfcmd
 contracts_cancel_single() {
     local contract_id="$1"
     local network="${2:-main}"
@@ -172,19 +172,14 @@ contracts_cancel_single() {
         return 1
     fi
 
-    if ! check_tfgrid_sdk_binary; then
+    # Ensure tfcmd is available and logged in
+    if ! command_exists tfcmd; then
+        log_error "tfcmd not available"
         return 1
     fi
 
-    # Load credentials
-    if ! load_credentials; then
-        log_error "Failed to load credentials"
-        return 1
-    fi
-
-    if [ -z "$TFGRID_MNEMONIC" ]; then
-        log_error "ThreeFold mnemonic not configured"
-        log_info "Run 'tfgrid-compose login' to configure credentials"
+    if ! tfcmd login status >/dev/null 2>&1; then
+        log_error "tfcmd not logged in. Run 'tfgrid-compose login' first"
         return 1
     fi
 
@@ -196,24 +191,24 @@ contracts_cancel_single() {
 
     log_info "Cancelling contract $contract_id on $network network"
 
-    # Call tfgrid-sdk-go binary
-    # Note: This assumes tfgrid-sdk-go has a CLI interface for contract cancellation
-    # The exact command format may need adjustment based on the actual binary interface
-    local cmd="$TFGRID_SDK_BINARY cancel-contract --contract-id $contract_id --mnemonic \"$TFGRID_MNEMONIC\" --network $network"
-
+    # Use tfcmd to cancel contract
     if [ "${TFGRID_VERBOSE:-}" = "1" ]; then
-        log_info "Executing: $cmd"
-        eval "$cmd"
-        return $?
-    else
-        eval "$cmd" >/dev/null 2>&1
-        local exit_code=$?
-        if [ $exit_code -eq 0 ]; then
+        log_info "Executing: tfcmd contract cancel $contract_id"
+        if tfcmd contract cancel "$contract_id"; then
             log_success "Contract $contract_id cancelled successfully"
+            return 0
         else
             log_error "Failed to cancel contract $contract_id"
+            return 1
         fi
-        return $exit_code
+    else
+        if tfcmd contract cancel "$contract_id" >/dev/null 2>&1; then
+            log_success "Contract $contract_id cancelled successfully"
+            return 0
+        else
+            log_error "Failed to cancel contract $contract_id"
+            return 1
+        fi
     fi
 }
 
@@ -227,42 +222,46 @@ contracts_cancel_batch() {
         return 1
     fi
 
-    if ! check_tfgrid_sdk_binary; then
+    # Ensure tfcmd is available and logged in
+    if ! command_exists tfcmd; then
+        log_error "tfcmd not available"
         return 1
     fi
 
-    # Load credentials
-    if ! load_credentials; then
-        log_error "Failed to load credentials"
-        return 1
-    fi
-
-    if [ -z "$TFGRID_MNEMONIC" ]; then
-        log_error "ThreeFold mnemonic not configured"
+    if ! tfcmd login status >/dev/null 2>&1; then
+        log_error "tfcmd not logged in. Run 'tfgrid-compose login' first"
         return 1
     fi
 
     local contract_count=$(echo "$contract_ids" | wc -w | tr -d ' ')
     log_info "Batch cancelling $contract_count contracts on $network network"
 
-    # Convert space-separated to comma-separated for the binary
-    local contract_list=$(echo "$contract_ids" | tr ' ' ',')
+    local failed_count=0
+    local success_count=0
 
-    local cmd="$TFGRID_SDK_BINARY batch-cancel-contracts --contract-ids $contract_list --mnemonic \"$TFGRID_MNEMONIC\" --network $network"
-
-    if [ "${TFGRID_VERBOSE:-}" = "1" ]; then
-        log_info "Executing: $cmd"
-        eval "$cmd"
-        return $?
-    else
-        eval "$cmd" >/dev/null 2>&1
-        local exit_code=$?
-        if [ $exit_code -eq 0 ]; then
-            log_success "Successfully cancelled $contract_count contracts"
-        else
-            log_error "Failed to cancel contracts"
+    # Cancel each contract individually (tfcmd doesn't have batch cancel)
+    for contract_id in $contract_ids; do
+        if [ "${TFGRID_VERBOSE:-}" = "1" ]; then
+            log_info "Cancelling contract $contract_id..."
         fi
-        return $exit_code
+
+        if tfcmd contract cancel "$contract_id" >/dev/null 2>&1; then
+            ((success_count++))
+            if [ "${TFGRID_VERBOSE:-}" = "1" ]; then
+                log_success "Contract $contract_id cancelled"
+            fi
+        else
+            ((failed_count++))
+            log_error "Failed to cancel contract $contract_id"
+        fi
+    done
+
+    if [ $failed_count -eq 0 ]; then
+        log_success "Successfully cancelled $success_count contracts"
+        return 0
+    else
+        log_warning "Cancelled $success_count contracts, $failed_count failed"
+        return 1
     fi
 }
 
@@ -347,10 +346,6 @@ get_twin_id() {
         fi
     fi
 
-    # For now, return a placeholder twin ID for testing
-    # In production, this would derive from mnemonic using tfgrid-sdk-go
-    # But since the binary isn't available, we'll use a test approach
-
     # Load credentials to ensure we have a mnemonic
     if ! load_credentials; then
         log_error "Failed to load credentials for twin ID derivation"
@@ -362,63 +357,37 @@ get_twin_id() {
         return 1
     fi
 
-    # For testing/development: derive twin ID from mnemonic using tfcmd
-    # In production, this would be the proper implementation
-    if [ -f "$HOME/.local/share/tfgrid-compose/bin/tfcmd" ]; then
-        log_info "Deriving twin ID from mnemonic using tfcmd..."
+    # Use tfcmd to get twin ID (requires login first)
+    if command_exists tfcmd; then
+        log_info "Deriving twin ID from tfcmd..."
 
-        # Use tfcmd to get twin ID from mnemonic
-        # Note: tfcmd might need different parameters, this is a placeholder
-        local cmd="$HOME/.local/share/tfgrid-compose/bin/tfcmd get twin-id --mnemonic \"$TFGRID_MNEMONIC\""
-        local derived_twin_id
-
-        if [ "${TFGRID_VERBOSE:-}" = "1" ]; then
-            log_info "Executing: $cmd"
-            derived_twin_id=$(eval "$cmd" 2>&1)
-            local exit_code=$?
-        else
-            derived_twin_id=$(eval "$cmd" 2>/dev/null)
-            local exit_code=$?
+        # Ensure tfcmd is logged in
+        if ! tfcmd login status >/dev/null 2>&1; then
+            log_error "tfcmd not logged in. Run 'tfgrid-compose login' first"
+            return 1
         fi
 
-        if [ $exit_code -eq 0 ] && [ -n "$derived_twin_id" ]; then
-            # Clean the output and extract twin ID
-            derived_twin_id=$(echo "$derived_twin_id" | grep -o '"twin_id":[[:space:]]*[0-9]*' | grep -o '[0-9]*' | head -1)
+        # Get twin ID from tfcmd
+        local twin_id
+        twin_id=$(tfcmd twin get 2>/dev/null | grep -o '"id":[[:space:]]*[0-9]*' | grep -o '[0-9]*' | head -1)
 
-            # Validate it's numeric
-            if [[ "$derived_twin_id" =~ ^[0-9]+$ ]]; then
-                log_success "Derived twin ID: $derived_twin_id"
-                test_twin_id="$derived_twin_id"
-            else
-                log_warning "Invalid twin ID format from tfcmd, falling back to hash method"
+        if [ -n "$twin_id" ] && [[ "$twin_id" =~ ^[0-9]+$ ]]; then
+            log_success "Derived twin ID: $twin_id"
+            export TFGRID_TWIN_ID="$twin_id"
+
+            # Cache in credentials file
+            if [ -f "$CREDENTIALS_FILE" ]; then
+                sed -i '/^twin_id:/d' "$CREDENTIALS_FILE"
+                echo "twin_id: \"$twin_id\"" >> "$CREDENTIALS_FILE"
             fi
-        else
-            log_warning "Failed to derive twin ID from tfcmd, falling back to hash method"
+
+            echo "$twin_id"
+            return 0
         fi
     fi
 
-    # Fallback: derive a deterministic twin ID from mnemonic hash
-    if [ -z "$test_twin_id" ]; then
-        local mnemonic_hash
-        mnemonic_hash=$(echo "$TFGRID_MNEMONIC" | sha256sum | cut -d' ' -f1 | cut -c1-8)
-        test_twin_id=$((16#${mnemonic_hash:0:6}))
-        log_warning "Using fallback twin ID derivation (not secure for production)"
-    fi
-
-    log_info "Twin ID: $test_twin_id"
-
-    # Cache the twin ID
-    export TFGRID_TWIN_ID="$test_twin_id"
-
-    # Add to credentials file for future use
-    if [ -f "$CREDENTIALS_FILE" ]; then
-        # Remove old twin_id line if exists
-        sed -i '/^twin_id:/d' "$CREDENTIALS_FILE"
-        # Add new twin_id
-        echo "twin_id: \"$test_twin_id\"" >> "$CREDENTIALS_FILE"
-    fi
-
-    echo "$test_twin_id"
+    log_error "Failed to derive twin ID from tfcmd"
+    return 1
 }
 
 # Format contract data for display
@@ -493,11 +462,150 @@ validate_network() {
     esac
 }
 
+# CLI wrapper functions for contracts subcommand
+contracts_cli_list() {
+    local filter_type=""
+    local filter_state=""
+    local format="table"
+
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --type)
+                filter_type="$2"
+                shift 2
+                ;;
+            --state)
+                filter_state="$2"
+                shift 2
+                ;;
+            --format)
+                format="$2"
+                shift 2
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                return 1
+                ;;
+        esac
+    done
+
+    # Get twin ID
+    local twin_id
+    twin_id=$(get_twin_id)
+    if [ -z "$twin_id" ]; then
+        return 1
+    fi
+
+    # Get contracts
+    local contracts_json
+    contracts_json=$(contracts_list_gridproxy "$twin_id")
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
+    # Apply filters and format
+    local filtered_json
+    filtered_json=$(contracts_filter_and_sort "$contracts_json" "$filter_type" "$filter_state")
+
+    format_contract_output "$filtered_json" "$format"
+}
+
+contracts_cli_show() {
+    local contract_id="$1"
+
+    if [ -z "$contract_id" ]; then
+        log_error "Contract ID required"
+        return 1
+    fi
+
+    if ! validate_contract_id "$contract_id"; then
+        return 1
+    fi
+
+    local contract_json
+    contract_json=$(contracts_get_details "$contract_id")
+    if [ $? -ne 0 ]; then
+        return 1
+    fi
+
+    # Pretty print the contract details
+    if command_exists jq; then
+        echo "$contract_json" | jq '.'
+    else
+        echo "$contract_json"
+    fi
+}
+
+contracts_cli_delete() {
+    local contract_ids=("$@")
+
+    if [ ${#contract_ids[@]} -eq 0 ]; then
+        log_error "No contract IDs specified"
+        return 1
+    fi
+
+    # Validate contract IDs
+    for id in "${contract_ids[@]}"; do
+        if ! validate_contract_id "$id"; then
+            return 1
+        fi
+    done
+
+    if [ ${#contract_ids[@]} -eq 1 ]; then
+        contracts_cancel_single "${contract_ids[0]}"
+    else
+        contracts_cancel_batch "${contract_ids[*]}"
+    fi
+}
+
+contracts_cli_prune() {
+    log_info "Contract pruning not yet implemented"
+    log_info "This would identify and clean up orphaned contracts"
+    return 0
+}
+
+contracts_cli_sync() {
+    log_info "Contract synchronization not yet implemented"
+    log_info "This would sync local state with grid contracts"
+    return 0
+}
+
+contracts_cli_help() {
+    echo "TFGrid Compose - Contract Management"
+    echo ""
+    echo "USAGE:"
+    echo "  tfgrid-compose contracts <subcommand> [options]"
+    echo ""
+    echo "SUBCOMMANDS:"
+    echo "  list     List contracts with optional filtering"
+    echo "  show     Show detailed information for a specific contract"
+    echo "  delete   Cancel one or more contracts"
+    echo "  prune    Remove orphaned contracts (not implemented)"
+    echo "  sync     Synchronize local state with grid (not implemented)"
+    echo ""
+    echo "OPTIONS:"
+    echo "  --type <type>     Filter by contract type (node, name)"
+    echo "  --state <state>   Filter by contract state (active, grace, deleted)"
+    echo "  --format <fmt>    Output format (table, json, csv)"
+    echo ""
+    echo "EXAMPLES:"
+    echo "  tfgrid-compose contracts list"
+    echo "  tfgrid-compose contracts list --state active"
+    echo "  tfgrid-compose contracts show 12345"
+    echo "  tfgrid-compose contracts delete 12345"
+    echo "  tfgrid-compose contracts delete 12345 12346 12347"
+}
+
 # Export functions for use in other scripts
 export -f contracts_list_gridproxy
 export -f contracts_get_details
 export -f contracts_filter_and_sort
 export -f contracts_cancel_single
+export -f contracts_cli_list
+export -f contracts_cli_show
+export -f contracts_cli_delete
+export -f contracts_cli_help
 export -f contracts_cancel_batch
 export -f contracts_sync_state
 export -f contracts_find_orphaned
