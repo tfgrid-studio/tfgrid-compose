@@ -362,14 +362,49 @@ get_twin_id() {
         return 1
     fi
 
-    # For testing/development: derive a deterministic twin ID from mnemonic hash
-    # This is NOT secure for production - in production we'd use tfgrid-sdk-go
-    local mnemonic_hash
-    mnemonic_hash=$(echo "$TFGRID_MNEMONIC" | sha256sum | cut -d' ' -f1 | cut -c1-8)
-    local test_twin_id=$((16#${mnemonic_hash:0:6}))
+    # For testing/development: derive twin ID from mnemonic using tfgrid-sdk-go
+    # In production, this would be the proper implementation
+    if check_tfgrid_sdk_binary; then
+        log_info "Deriving twin ID from mnemonic using tfgrid-sdk-go..."
 
-    log_warning "Using test twin ID derivation (not secure for production)"
-    log_info "Test twin ID: $test_twin_id (derived from mnemonic hash)"
+        # Use tfgrid-sdk-go to get twin ID from mnemonic
+        local cmd="$TFGRID_SDK_BINARY get-twin-id --mnemonic \"$TFGRID_MNEMONIC\" --network main"
+        local derived_twin_id
+
+        if [ "${TFGRID_VERBOSE:-}" = "1" ]; then
+            log_info "Executing: $cmd"
+            derived_twin_id=$(eval "$cmd" 2>&1)
+            local exit_code=$?
+        else
+            derived_twin_id=$(eval "$cmd" 2>/dev/null)
+            local exit_code=$?
+        fi
+
+        if [ $exit_code -eq 0 ] && [ -n "$derived_twin_id" ]; then
+            # Clean the output
+            derived_twin_id=$(echo "$derived_twin_id" | tr -d '[:space:]')
+
+            # Validate it's numeric
+            if [[ "$derived_twin_id" =~ ^[0-9]+$ ]]; then
+                log_success "Derived twin ID: $derived_twin_id"
+                test_twin_id="$derived_twin_id"
+            else
+                log_warning "Invalid twin ID format from tfgrid-sdk-go, falling back to hash method"
+            fi
+        else
+            log_warning "Failed to derive twin ID from tfgrid-sdk-go, falling back to hash method"
+        fi
+    fi
+
+    # Fallback: derive a deterministic twin ID from mnemonic hash
+    if [ -z "$test_twin_id" ]; then
+        local mnemonic_hash
+        mnemonic_hash=$(echo "$TFGRID_MNEMONIC" | sha256sum | cut -d' ' -f1 | cut -c1-8)
+        test_twin_id=$((16#${mnemonic_hash:0:6}))
+        log_warning "Using fallback twin ID derivation (not secure for production)"
+    fi
+
+    log_info "Twin ID: $test_twin_id"
 
     # Cache the twin ID
     export TFGRID_TWIN_ID="$test_twin_id"
