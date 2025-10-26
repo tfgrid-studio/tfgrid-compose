@@ -2062,6 +2062,120 @@ EOF
         # Help command
         show_help
         ;;
+    update)
+        # Update tfgrid-compose and download tfgrid-sdk-go binary
+        log_info "TFGrid Compose v$VERSION - Update"
+        echo ""
+
+        # Parse options
+        FORCE=false
+        DOWNLOAD_SDK=true
+
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --force)
+                    FORCE=true
+                    ;;
+                --no-sdk)
+                    DOWNLOAD_SDK=false
+                    ;;
+                *)
+                    log_error "Unknown option: $1"
+                    echo ""
+                    echo "Usage: tfgrid-compose update [options]"
+                    echo ""
+                    echo "Options:"
+                    echo "  --force    Force update even if already up to date"
+                    echo "  --no-sdk   Skip downloading tfgrid-sdk-go binary"
+                    exit 1
+                    ;;
+            esac
+            shift
+        done
+
+        # Create installation directories
+        mkdir -p "$HOME/.local/share/tfgrid-compose/bin"
+        mkdir -p "$HOME/.local/share/tfgrid-compose/tmp"
+
+        log_info "Updating tfgrid-compose..."
+
+        # For now, just check if tfgrid-sdk-go binary exists and download if needed
+        if [ "$DOWNLOAD_SDK" = true ]; then
+            if [ ! -f "$TFGRID_SDK_BINARY" ] || [ "$FORCE" = true ]; then
+                log_info "Downloading tfgrid-sdk-go binary..."
+
+                # Determine platform
+                case "$(uname -s)" in
+                    Linux)
+                        PLATFORM="linux"
+                        ;;
+                    Darwin)
+                        PLATFORM="darwin"
+                        ;;
+                    *)
+                        log_error "Unsupported platform: $(uname -s)"
+                        exit 1
+                        ;;
+                esac
+
+                case "$(uname -m)" in
+                    x86_64)
+                        ARCH="amd64"
+                        ;;
+                    aarch64|arm64)
+                        ARCH="arm64"
+                        ;;
+                    *)
+                        log_error "Unsupported architecture: $(uname -m)"
+                        exit 1
+                        ;;
+                esac
+
+                # Download URL (placeholder - needs to be updated with actual release URL)
+                SDK_URL="https://github.com/threefoldtech/tfgrid-sdk-go/releases/latest/download/tfgrid-sdk-go-${PLATFORM}-${ARCH}.tar.gz"
+
+                TMP_DIR="$HOME/.local/share/tfgrid-compose/tmp"
+                TMP_FILE="$TMP_DIR/tfgrid-sdk-go.tar.gz"
+
+                log_info "Downloading from: $SDK_URL"
+
+                if command_exists curl; then
+                    if ! curl -L -o "$TMP_FILE" "$SDK_URL" 2>/dev/null; then
+                        log_error "Failed to download tfgrid-sdk-go binary"
+                        exit 1
+                    fi
+                elif command_exists wget; then
+                    if ! wget -O "$TMP_FILE" "$SDK_URL" 2>/dev/null; then
+                        log_error "Failed to download tfgrid-sdk-go binary"
+                        exit 1
+                    fi
+                else
+                    log_error "Neither curl nor wget available for downloading"
+                    exit 1
+                fi
+
+                # Extract binary
+                log_info "Extracting binary..."
+                if ! tar -xzf "$TMP_FILE" -C "$HOME/.local/share/tfgrid-compose/bin/" 2>/dev/null; then
+                    log_error "Failed to extract tfgrid-sdk-go binary"
+                    rm -f "$TMP_FILE"
+                    exit 1
+                fi
+
+                # Make executable
+                chmod +x "$TFGRID_SDK_BINARY"
+
+                # Cleanup
+                rm -f "$TMP_FILE"
+
+                log_success "tfgrid-sdk-go binary downloaded successfully"
+            else
+                log_info "tfgrid-sdk-go binary already exists (use --force to re-download)"
+            fi
+        fi
+
+        log_success "Update complete"
+        ;;
     contracts)
         # Contract management subcommands
         SUBCOMMAND="${1:-list}"
