@@ -2191,110 +2191,280 @@ EOF
 
         log_success "Update complete"
         ;;
-    contracts)
-        # Contract management subcommands
-        SUBCOMMAND="${1:-list}"
+    tfcmd-install)
+        # Install tfcmd from GitHub releases
+        log_info "TFGrid Compose v$VERSION - Install tfcmd"
+        echo ""
+
+        echo "📥 Installing tfcmd from GitHub releases..."
+        echo ""
+
+        # Check for required tools
+        if ! command -v curl >/dev/null 2>&1; then
+            log_error "curl is required. Please install curl first."
+            exit 1
+        fi
+
+        # Detect architecture (for logging only)
+        ARCH=$(uname -m)
+        case "$ARCH" in
+            x86_64)
+                echo "Architecture: amd64"
+                ;;
+            aarch64|arm64)
+                echo "Architecture: arm64"
+                ;;
+            *)
+                log_warning "Unsupported architecture: $ARCH, will try to find any available binary"
+                ;;
+        esac
+
+        # Try to get latest release version, fallback to known version
+        LATEST_RELEASE_URL="https://api.github.com/repos/threefoldtech/tfgrid-sdk-go/releases/latest"
+        echo "Fetching latest release info..."
+        
+        LATEST_VERSION=$(curl -s "$LATEST_RELEASE_URL" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' 2>/dev/null)
+        
+        if [ -z "$LATEST_VERSION" ]; then
+            log_warning "Could not fetch latest release, using fallback version"
+            LATEST_VERSION="v0.17.0"  # Known working version as fallback
+        fi
+
+        echo "Latest version: $LATEST_VERSION"
+        echo ""
+
+        # Download the correct tarball containing tfcmd
+        LATEST_VERSION="v0.17.0"  # Use known working version
+        DOWNLOAD_URL="https://github.com/threefoldtech/tfgrid-sdk-go/releases/download/${LATEST_VERSION}/tfgrid-sdk-go_Linux_x86_64.tar.gz"
+        
+        echo "Downloading from: tfgrid-sdk-go_Linux_x86_64.tar.gz"
+
+        # Download and extract the tarball
+        TMP_DIR="$HOME/.local/share/tfgrid-compose/tmp"
+        mkdir -p "$TMP_DIR"
+        TMP_FILE="$TMP_DIR/tfgrid-sdk-go.tar.gz"
+        
+        echo "Downloading tarball..."
+        if curl -L -o "$TMP_FILE" "$DOWNLOAD_URL" 2>/dev/null && [ -s "$TMP_FILE" ]; then
+            echo "Extracting tfcmd binary..."
+            cd "$TMP_DIR"
+            
+            # Extract the tarball
+            if tar -xzf "$TMP_FILE" 2>/dev/null; then
+                # Look for tfcmd binary in extracted files
+                TFCMD_BIN=$(find . -name "tfcmd" -type f 2>/dev/null | head -1)
+                if [ -n "$TFCMD_BIN" ] && [ -f "$TFCMD_BIN" ]; then
+                    TMP_FILE="$TFCMD_BIN"
+                    echo "✅ Extracted tfcmd binary"
+                else
+                    echo "Available files in tarball:"
+                    tar -tzf "$TMP_FILE" | head -10
+                    log_error "Could not find tfcmd binary in tarball"
+                    exit 1
+                fi
+            else
+                log_error "Failed to extract tarball"
+                exit 1
+            fi
+        else
+            log_error "Failed to download tarball"
+            exit 1
+        fi
+
+        # Validate and install the binary
+        chmod +x "$TMP_FILE"
+        
+        # Check if the binary is actually executable
+        if ! "$TMP_FILE" --version >/dev/null 2>&1 && ! "$TMP_FILE" --help >/dev/null 2>&1; then
+            # Try to see what type of file it is
+            FILE_TYPE=$(file "$TMP_FILE" 2>/dev/null)
+            echo ""
+            log_warning "Downloaded file may not be a valid tfcmd binary"
+            echo "File type: $FILE_TYPE"
+            echo ""
+            echo "This might be a corrupt download or wrong file format."
+            echo "Please try again or download manually from:"
+            echo "  https://github.com/threefoldtech/tfgrid-sdk-go/releases"
+            exit 1
+        fi
+        
+        if [ "$EUID" -eq 0 ]; then
+            # Running as root, install directly to system location
+            mv "$TMP_FILE" /usr/local/bin/tfcmd
+            echo ""
+            log_success "✅ tfcmd installed successfully!"
+            echo ""
+            echo "Installed at: /usr/local/bin/tfcmd"
+            echo ""
+            echo "Ready to use! Run:"
+            echo "  tfgrid-compose tfcmd-login"
+        else
+            # Not root, install to user-local bin directory
+            LOCAL_BIN="$HOME/.local/bin"
+            mkdir -p "$LOCAL_BIN"
+            mv "$TMP_FILE" "$LOCAL_BIN/tfcmd"
+            
+            # Check if already in PATH and add to session if needed
+            if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
+                echo ""
+                log_info "Adding $LOCAL_BIN to PATH for this session..."
+                export PATH="$LOCAL_BIN:$PATH"
+                echo ""
+                echo "To make this permanent, add this line to your ~/.bashrc or ~/.zshrc:"
+                echo "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+                echo ""
+            else
+                echo ""
+                log_info "$LOCAL_BIN already in PATH"
+            fi
+            
+            echo ""
+            log_success "✅ tfcmd installed successfully!"
+            echo ""
+            echo "Installed at: $LOCAL_BIN/tfcmd"
+            echo ""
+            echo "Ready to use! Run:"
+            echo "  tfgrid-compose tfcmd-login"
+        fi
+        
+        echo ""
+        echo "Next steps:"
+        echo "  tfgrid-compose tfcmd-login"
+        echo "  tfgrid-compose contracts list"
+        ;;
+    tfcmd-login)
+        # Login to tfcmd using tfgrid-compose credentials
+        log_info "TFGrid Compose v$VERSION - tfcmd Login"
+        echo ""
+
+        # Find tfcmd (check PATH first, then common locations)
+        TFCMD_PATH=""
+        
+        # Try to find tfcmd in PATH
+        if command -v tfcmd >/dev/null 2>&1; then
+            TFCMD_PATH=$(command -v tfcmd)
+            echo "Using tfcmd from PATH: $TFCMD_PATH"
+        else
+            # Check common installation locations
+            LOCAL_BIN="$HOME/.local/bin/tfcmd"
+            SYSTEM_BIN="/usr/local/bin/tfcmd"
+            
+            if [ -f "$LOCAL_BIN" ] && [ -x "$LOCAL_BIN" ]; then
+                TFCMD_PATH="$LOCAL_BIN"
+                echo "Using tfcmd from: $TFCMD_PATH (not in PATH)"
+            elif [ -f "$SYSTEM_BIN" ] && [ -x "$SYSTEM_BIN" ]; then
+                TFCMD_PATH="$SYSTEM_BIN"
+                echo "Using tfcmd from: $TFCMD_PATH (not in PATH)"
+            else
+                echo ""
+                log_error "tfcmd not found in PATH or common locations"
+                echo ""
+                echo "Common installation locations:"
+                echo "  ~/.local/bin/tfcmd (user installation)"
+                echo "  /usr/local/bin/tfcmd (system installation)"
+                echo ""
+                log_info "Install tfcmd with: tfgrid-compose tfcmd-install"
+                exit 1
+            fi
+        fi
+
+        # Load tfgrid-compose credentials
+        if [ ! -f "$HOME/.config/tfgrid-compose/credentials.yaml" ]; then
+            log_error "No credentials found"
+            log_info "Login to tfgrid-compose first: tfgrid-compose login"
+            exit 1
+        fi
+
+        # Get mnemonic from credentials
+        MNEMONIC=$(grep "mnemonic:" "$HOME/.config/tfgrid-compose/credentials.yaml" | sed 's/.*mnemonic: "\(.*\)"/\1/' 2>/dev/null)
+        
+        if [ -z "$MNEMONIC" ]; then
+            log_error "Mnemonic not found in credentials"
+            log_info "Re-login to tfgrid-compose: tfgrid-compose login"
+            exit 1
+        fi
+
+        echo "Logging into tfcmd with your tfgrid-compose credentials..."
+        echo ""
+
+        # Login to tfcmd with default network
+        # tfcmd expects: mnemonic via stdin, then network selection interactively
+        echo "$MNEMONIC" | "$TFCMD_PATH" login --network main >/dev/null 2>&1
+        
+        if [ $? -eq 0 ]; then
+            echo ""
+            log_success "✅ Successfully logged into tfcmd!"
+            echo ""
+            echo "You can now use contract commands:"
+            echo "  tfgrid-compose contracts list"
+            echo "  tfgrid-compose contracts delete <contract-id>"
+        else
+            echo ""
+            log_error "Failed to login to tfcmd"
+            echo ""
+            echo "Please try manual login:"
+            echo "  $TFCMD_PATH login"
+            echo ""
+            echo "Or check your credentials:"
+            echo "  tfgrid-compose login"
+            exit 1
+        fi
+        ;;
+    get)
+        # Direct tfcmd wrapper - get resources
+        RESOURCE="${1:-}"
         shift || true
 
-        case "$SUBCOMMAND" in
-            list)
-                # List contracts
+        case "$RESOURCE" in
+            contracts)
+                # List contracts using tfcmd
                 log_info "TFGrid Compose v$VERSION - Contract List"
                 echo ""
 
-                # Get twin ID from credentials
-                if ! load_credentials; then
-                    log_error "Failed to load credentials"
-                    log_info "Run 'tfgrid-compose login' to configure credentials"
-                    exit 1
-                fi
-
-                if [ -z "$TFGRID_MNEMONIC" ]; then
-                    log_error "ThreeFold mnemonic not configured"
-                    log_info "Run 'tfgrid-compose login' to configure credentials"
-                    exit 1
-                fi
-
-                # Get twin ID (placeholder - needs implementation)
-                TWIN_ID=$(get_twin_id)
-                if [ -z "$TWIN_ID" ]; then
-                    log_error "Unable to determine twin ID from mnemonic"
-                    log_info "This feature requires a valid ThreeFold account"
-                    exit 1
-                fi
-
-                # Parse options
-                NETWORK="main"
+                # Parse options (simplified)
                 FORMAT="table"
-                FILTER_TYPE=""
-                FILTER_STATE=""
-                LIMIT=50
 
                 while [[ $# -gt 0 ]]; do
                     case "$1" in
-                        --network=*)
-                            NETWORK="${1#--network=}"
-                            ;;
                         --format=*)
                             FORMAT="${1#--format=}"
-                            ;;
-                        --type=*)
-                            FILTER_TYPE="${1#--type=}"
-                            ;;
-                        --state=*)
-                            FILTER_STATE="${1#--state=}"
-                            ;;
-                        --limit=*)
-                            LIMIT="${1#--limit=}"
                             ;;
                         *)
                             log_error "Unknown option: $1"
                             echo ""
-                            echo "Usage: tfgrid-compose contracts list [options]"
+                            echo "Usage: tfgrid-compose get contracts [--format FORMAT]"
                             echo ""
                             echo "Options:"
-                            echo "  --network=NW    Network (main/test/dev) [default: main]"
-                            echo "  --format= FMT   Output format (table/json/csv) [default: table]"
-                            echo "  --type=TYPE     Filter by contract type (VM/Network/Rent)"
-                            echo "  --state=STATE   Filter by contract state (active/grace/deleted)"
-                            echo "  --limit=N       Maximum contracts to show [default: 50]"
+                            echo "  --format=FORMAT   Output format: table, json, csv [default: table]"
                             exit 1
                             ;;
                     esac
                     shift
                 done
 
-                # Validate network
-                if ! validate_network "$NETWORK"; then
+                # Ensure tfcmd is ready and get contracts
+                if ! ensure_tfcmd_login; then
                     exit 1
                 fi
 
-                # Fetch contracts
-                CONTRACTS_JSON=$(contracts_list_gridproxy "$TWIN_ID" "$NETWORK" "$LIMIT")
+                # Get contracts using tfcmd
+                CONTRACTS_JSON=$(contracts_list_tfcmd)
                 if [ $? -ne 0 ]; then
                     log_error "Failed to fetch contracts"
                     exit 1
                 fi
 
-                # Apply filters and sorting
-                FILTERED_JSON=$(contracts_filter_and_sort "$CONTRACTS_JSON" "$FILTER_TYPE" "$FILTER_STATE")
-                if [ $? -ne 0 ]; then
-                    log_error "Failed to filter contracts"
-                    exit 1
-                fi
-
-                # Format and display
-                format_contract_output "$FILTERED_JSON" "$FORMAT"
+                # Format and display (let tfcmd handle formatting)
+                format_contract_output "$CONTRACTS_JSON" "$FORMAT"
                 ;;
-
-            show)
-                # Show contract details
+            contract)
+                # Show single contract details
                 CONTRACT_ID="$1"
 
                 if [ -z "$CONTRACT_ID" ]; then
                     log_error "Contract ID required"
                     echo ""
-                    echo "Usage: tfgrid-compose contracts show <contract-id>"
+                    echo "Usage: tfgrid-compose get contract <contract-id>"
                     exit 1
                 fi
 
@@ -2304,200 +2474,262 @@ EOF
 
                 log_info "Fetching contract details for ID: $CONTRACT_ID"
 
-                # Fetch contract details
-                CONTRACT_JSON=$(contracts_get_details "$CONTRACT_ID")
+                # Get contract details using tfcmd
+                if ! ensure_tfcmd_login; then
+                    exit 1
+                fi
+
+                CONTRACT_JSON=$(contracts_get_details_tfcmd "$CONTRACT_ID")
                 if [ $? -ne 0 ]; then
                     log_error "Failed to fetch contract details"
                     exit 1
                 fi
 
                 # Display formatted details
-                echo "$CONTRACT_JSON" | jq . 2>/dev/null || echo "$CONTRACT_JSON"
+                echo "$CONTRACT_JSON"
                 ;;
+            *)
+                log_error "Unknown resource: $RESOURCE"
+                echo ""
+                echo "Available resources:"
+                echo "  contracts     List all contracts"
+                echo "  contract      Show contract details"
+                echo ""
+                echo "Usage: tfgrid-compose get <resource> [options]"
+                exit 1
+                ;;
+        esac
 
-            delete)
-                # Delete/cancel contracts
+        exit 0
+        ;;
+    delete)
+        # Direct tfcmd wrapper - delete resources
+        RESOURCE="${1:-}"
+        shift || true
+
+        case "$RESOURCE" in
+            contracts)
+                # Delete/cancel contracts using tfcmd
                 if [ $# -eq 0 ]; then
                     log_error "Contract ID(s) required"
                     echo ""
-                    echo "Usage: tfgrid-compose contracts delete <contract-id> [contract-id ...]"
-                    echo "       tfgrid-compose contracts delete --all"
+                    echo "Usage: tfgrid-compose delete contracts <contract-id> [contract-id ...]"
+                    echo "       tfgrid-compose delete contracts --all"
                     exit 1
                 fi
 
-                # Parse options
-                NETWORK="main"
+                # Parse options (simplified)
                 FORCE=false
+                IS_ALL=false
+                CONTRACT_IDS=()
 
                 while [[ $# -gt 0 ]]; do
                     case "$1" in
-                        --network=*)
-                            NETWORK="${1#--network=}"
-                            ;;
-                        --force)
+                        --force|-f)
                             FORCE=true
+                            shift
                             ;;
                         --all)
-                            # Batch cancel all contracts - not implemented yet
-                            log_error "Batch cancel all not implemented yet"
-                            exit 1
+                            IS_ALL=true
+                            shift
                             ;;
                         -*)
                             log_error "Unknown option: $1"
                             exit 1
                             ;;
                         *)
-                            break
+                            # Collect contract IDs
+                            CONTRACT_IDS+=("$1")
+                            shift
                             ;;
                     esac
-                    shift
                 done
 
-                # Validate network
-                if ! validate_network "$NETWORK"; then
+                # Validate arguments
+                if [ "$IS_ALL" = true ] && [ ${#CONTRACT_IDS[@]} -gt 0 ]; then
+                    log_error "Cannot use --all with specific contract IDs"
                     exit 1
                 fi
 
-                # Validate contract IDs
-                CONTRACT_IDS=()
-                for id in "$@"; do
-                    if ! validate_contract_id "$id"; then
-                        exit 1
-                    fi
-                    CONTRACT_IDS+=("$id")
-                done
-
-                if [ ${#CONTRACT_IDS[@]} -eq 0 ]; then
-                    log_error "No valid contract IDs provided"
+                if [ "$IS_ALL" = false ] && [ ${#CONTRACT_IDS[@]} -eq 0 ]; then
+                    echo ""
+                    echo "Usage: tfgrid-compose delete contracts [options] <contract-id> [<contract-id> ...]"
+                    echo "       tfgrid-compose delete contracts --all"
+                    echo ""
+                    echo "Options:"
+                    echo "  --force, -f       Skip confirmation prompt"
+                    echo "  --all             Cancel all contracts"
                     exit 1
                 fi
 
-                # Confirmation unless forced
+                # Ensure tfcmd is ready
+                if ! ensure_tfcmd_login; then
+                    exit 1
+                fi
+
+                # Confirm cancellation unless forced
                 if [ "$FORCE" != true ]; then
-                    echo "⚠️  This will cancel the following contracts:"
-                    for id in "${CONTRACT_IDS[@]}"; do
-                        echo "   - Contract ID: $id"
-                    done
-                    echo ""
-                    read -p "Are you sure? (y/N): " -n 1 -r
-                    echo ""
-                    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                        log_info "Operation cancelled"
+                    if [ "$IS_ALL" = true ]; then
+                        echo ""
+                        echo "⚠️  WARNING: This will cancel ALL contracts!"
+                        echo ""
+                        echo "This action cannot be undone."
+                        echo ""
+                        echo -n "Are you sure you want to cancel ALL contracts? (yes/no): "
+                        read -r confirm
+                        
+                        if [ "$confirm" != "yes" ]; then
+                            echo "Cancelled"
+                            exit 1
+                        fi
+                    else
+                        echo ""
+                        echo "⚠️  This will cancel the following contracts:"
+                        for id in "${CONTRACT_IDS[@]}"; do
+                            echo "  - $id"
+                        done
+                        echo ""
+                        echo "This action cannot be undone."
+                        echo ""
+                        echo -n "Are you sure? (yes/no): "
+                        read -r confirm
+                        
+                        if [ "$confirm" != "yes" ]; then
+                            echo "Cancelled"
+                            exit 1
+                        fi
+                    fi
+                fi
+
+                # Perform cancellation using tfcmd
+                if [ "$IS_ALL" = true ]; then
+                    if contracts_cancel_batch_tfcmd "--all"; then
                         exit 0
-                    fi
-                fi
-
-                # Perform cancellation
-                if [ ${#CONTRACT_IDS[@]} -eq 1 ]; then
-                    # Single contract
-                    if contracts_cancel_single "${CONTRACT_IDS[0]}" "$NETWORK"; then
-                        log_success "Contract ${CONTRACT_IDS[0]} cancelled successfully"
                     else
-                        log_error "Failed to cancel contract ${CONTRACT_IDS[0]}"
                         exit 1
                     fi
                 else
-                    # Batch cancellation
-                    CONTRACT_LIST=$(printf '%s\n' "${CONTRACT_IDS[@]}" | tr '\n' ' ')
-                    if contracts_cancel_batch "$CONTRACT_LIST" "$NETWORK"; then
-                        log_success "${#CONTRACT_IDS[@]} contracts cancelled successfully"
+                    # Validate all contract IDs first
+                    for id in "${CONTRACT_IDS[@]}"; do
+                        if ! validate_contract_id "$id"; then
+                            exit 1
+                        fi
+                    done
+                    
+                    local ids_string=$(printf '%s\n' "${CONTRACT_IDS[@]}" | tr '\n' ' ')
+                    if contracts_cancel_batch_tfcmd "$ids_string"; then
+                        exit 0
                     else
-                        log_error "Failed to cancel contracts"
                         exit 1
                     fi
                 fi
                 ;;
+            contract)
+                # Delete single contract
+                CONTRACT_ID="$1"
 
-            prune)
-                # Clean up orphaned contracts
-                log_info "TFGrid Compose v$VERSION - Contract Prune"
-                echo ""
+                if [ -z "$CONTRACT_ID" ]; then
+                    log_error "Contract ID required"
+                    echo ""
+                    echo "Usage: tfgrid-compose delete contract <contract-id> [--force]"
+                    exit 1
+                fi
+
+                if ! validate_contract_id "$CONTRACT_ID"; then
+                    exit 1
+                fi
 
                 # Parse options
-                NETWORK="main"
                 FORCE=false
-
                 while [[ $# -gt 0 ]]; do
                     case "$1" in
-                        --network=*)
-                            NETWORK="${1#--network=}"
-                            ;;
-                        --force)
+                        --force|-f)
                             FORCE=true
+                            shift
                             ;;
                         *)
                             log_error "Unknown option: $1"
                             exit 1
                             ;;
                     esac
-                    shift
                 done
 
-                # Validate network
-                if ! validate_network "$NETWORK"; then
+                # Ensure tfcmd is ready
+                if ! ensure_tfcmd_login; then
                     exit 1
                 fi
 
-                log_info "Scanning for orphaned contracts on $NETWORK network..."
-
-                # This would need implementation to compare local state vs grid contracts
-                log_warning "Orphaned contract cleanup not fully implemented yet"
-                log_info "This feature will be available in a future update"
-                ;;
-
-            sync)
-                # Synchronize local state with grid
-                log_info "TFGrid Compose v$VERSION - Contract Sync"
-                echo ""
-
-                # Parse options
-                NETWORK="main"
-
-                while [[ $# -gt 0 ]]; do
-                    case "$1" in
-                        --network=*)
-                            NETWORK="${1#--network=}"
-                            ;;
-                        *)
-                            log_error "Unknown option: $1"
-                            exit 1
-                            ;;
-                    esac
-                    shift
-                done
-
-                # Validate network
-                if ! validate_network "$NETWORK"; then
-                    exit 1
+                # Confirm deletion unless forced
+                if [ "$FORCE" != true ]; then
+                    echo ""
+                    echo "⚠️  This will cancel contract $CONTRACT_ID"
+                    echo "This action cannot be undone."
+                    echo ""
+                    echo -n "Are you sure? (yes/no): "
+                    read -r confirm
+                    
+                    if [ "$confirm" != "yes" ]; then
+                        echo "Cancelled"
+                        exit 1
+                    fi
                 fi
 
-                # Get current app for state sync
-                CURRENT_APP=$(get_current_app)
-                if [ -z "$CURRENT_APP" ]; then
-                    log_error "No app selected for state synchronization"
-                    log_info "Select an app with: tfgrid-compose select <app>"
-                    exit 1
-                fi
-
-                log_info "Synchronizing contract state for app: $CURRENT_APP"
-
-                if contracts_sync_state "$CURRENT_APP"; then
-                    log_success "Contract state synchronized"
+                # Delete single contract
+                if contracts_cancel_single_tfcmd "$CONTRACT_ID"; then
+                    exit 0
                 else
-                    log_error "Failed to synchronize contract state"
                     exit 1
                 fi
                 ;;
+            *)
+                log_error "Unknown resource: $RESOURCE"
+                echo ""
+                echo "Available resources:"
+                echo "  contracts     Delete contracts (single or batch)"
+                echo "  contract      Delete single contract"
+                echo ""
+                echo "Usage: tfgrid-compose delete <resource> [options] <id...>"
+                exit 1
+                ;;
+        esac
 
+        exit 0
+        ;;
+    contracts)
+        # Simple tfcmd wrapper for contract management
+        SUBCOMMAND="${1:-list}"
+        shift || true
+
+        case "$SUBCOMMAND" in
+            list)
+                # List contracts using simple wrapper
+                contracts_list
+                ;;
+            show)
+                # Show contract details (not implemented in simple wrapper)
+                echo "Contract details not implemented in simple wrapper"
+                echo "Use: tfcmd get contract <contract-id>"
+                exit 1
+                ;;
+            delete)
+                # Delete single contract using simple wrapper
+                CONTRACT_ID="$1"
+                
+                if [ -z "$CONTRACT_ID" ]; then
+                    echo ""
+                    echo "Usage: tfgrid-compose contracts delete <contract-id>"
+                    exit 1
+                fi
+                
+                contracts_delete "$CONTRACT_ID"
+                ;;
             *)
                 log_error "Unknown contracts subcommand: $SUBCOMMAND"
                 echo ""
                 echo "Available subcommands:"
-                echo "  list     List all contracts with filtering/sorting"
-                echo "  show     Show detailed contract information"
-                echo "  delete   Delete/cancel contracts (single or batch)"
-                echo "  prune    Clean up orphaned contracts"
-                echo "  sync     Synchronize local state with grid"
+                echo "  list     List all contracts"
+                echo "  show     Show contract details (use tfcmd directly)"
+                echo "  delete   Delete single contract"
                 echo ""
                 echo "Usage: tfgrid-compose contracts <subcommand> [options]"
                 exit 1
