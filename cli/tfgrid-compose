@@ -2332,84 +2332,7 @@ EOF
         echo "  tfgrid-compose tfcmd-login"
         echo "  tfgrid-compose contracts list"
         ;;
-    tfcmd-login)
-        # Login to tfcmd using tfgrid-compose credentials
-        log_info "TFGrid Compose v$VERSION - tfcmd Login"
-        echo ""
-
-        # Find tfcmd (check PATH first, then common locations)
-        TFCMD_PATH=""
-        
-        # Try to find tfcmd in PATH
-        if command -v tfcmd >/dev/null 2>&1; then
-            TFCMD_PATH=$(command -v tfcmd)
-            echo "Using tfcmd from PATH: $TFCMD_PATH"
-        else
-            # Check common installation locations
-            LOCAL_BIN="$HOME/.local/bin/tfcmd"
-            SYSTEM_BIN="/usr/local/bin/tfcmd"
-            
-            if [ -f "$LOCAL_BIN" ] && [ -x "$LOCAL_BIN" ]; then
-                TFCMD_PATH="$LOCAL_BIN"
-                echo "Using tfcmd from: $TFCMD_PATH (not in PATH)"
-            elif [ -f "$SYSTEM_BIN" ] && [ -x "$SYSTEM_BIN" ]; then
-                TFCMD_PATH="$SYSTEM_BIN"
-                echo "Using tfcmd from: $TFCMD_PATH (not in PATH)"
-            else
-                echo ""
-                log_error "tfcmd not found in PATH or common locations"
-                echo ""
-                echo "Common installation locations:"
-                echo "  ~/.local/bin/tfcmd (user installation)"
-                echo "  /usr/local/bin/tfcmd (system installation)"
-                echo ""
-                log_info "Install tfcmd with: tfgrid-compose tfcmd-install"
-                exit 1
-            fi
-        fi
-
-        # Load tfgrid-compose credentials
-        if [ ! -f "$HOME/.config/tfgrid-compose/credentials.yaml" ]; then
-            log_error "No credentials found"
-            log_info "Login to tfgrid-compose first: tfgrid-compose login"
-            exit 1
-        fi
-
-        # Get mnemonic from credentials
-        MNEMONIC=$(grep "mnemonic:" "$HOME/.config/tfgrid-compose/credentials.yaml" | sed 's/.*mnemonic: "\(.*\)"/\1/' 2>/dev/null)
-        
-        if [ -z "$MNEMONIC" ]; then
-            log_error "Mnemonic not found in credentials"
-            log_info "Re-login to tfgrid-compose: tfgrid-compose login"
-            exit 1
-        fi
-
-        echo "Logging into tfcmd with your tfgrid-compose credentials..."
-        echo ""
-
-        # Login to tfcmd with default network
-        # tfcmd expects: mnemonic via stdin, then network selection interactively
-        echo "$MNEMONIC" | "$TFCMD_PATH" login --network main >/dev/null 2>&1
-        
-        if [ $? -eq 0 ]; then
-            echo ""
-            log_success "✅ Successfully logged into tfcmd!"
-            echo ""
-            echo "You can now use contract commands:"
-            echo "  tfgrid-compose contracts list"
-            echo "  tfgrid-compose contracts delete <contract-id>"
-        else
-            echo ""
-            log_error "Failed to login to tfcmd"
-            echo ""
-            echo "Please try manual login:"
-            echo "  $TFCMD_PATH login"
-            echo ""
-            echo "Or check your credentials:"
-            echo "  tfgrid-compose login"
-            exit 1
-        fi
-        ;;
+    
     get)
         # Direct tfcmd wrapper - get resources
         RESOURCE="${1:-}"
@@ -2727,9 +2650,14 @@ EOF
                 log_error "Unknown contracts subcommand: $SUBCOMMAND"
                 echo ""
                 echo "Available subcommands:"
-                echo "  list     List all contracts"
-                echo "  show     Show contract details (use tfcmd directly)"
-                echo "  delete   Delete single contract"
+                echo "  list     List all contracts (via tfcmd)"
+                echo "  show     Show contract details (coming soon)"
+                echo "  delete   Delete single contract (wraps tfcmd cancel)"
+                echo ""
+                echo "First time setup:"
+                echo "  1. tfgrid-compose tfcmd-install    # Install tfcmd"
+                echo "  2. tfgrid-compose login            # Set up credentials"
+                echo "  3. tfgrid-compose contracts list   # View contracts"
                 echo ""
                 echo "Usage: tfgrid-compose contracts <subcommand> [options]"
                 exit 1

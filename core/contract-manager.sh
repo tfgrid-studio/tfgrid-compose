@@ -13,13 +13,22 @@ check_tfcmd_installed() {
     return 0
 }
 
-# Check if tfcmd is logged in
-check_tfcmd_logged_in() {
-    if ! check_tfcmd_installed; then
+# Load tfgrid-compose credentials
+load_tfgrid_credentials() {
+    # Load tfgrid-compose credentials
+    if ! source "$SCRIPT_DIR/login.sh" 2>/dev/null; then
+        log_error "Could not load login.sh"
         return 1
     fi
     
-    if ! tfcmd login status >/dev/null 2>&1; then
+    if ! load_credentials; then
+        log_error "Failed to load credentials"
+        return 1
+    fi
+    
+    if [ -z "$TFGRID_MNEMONIC" ]; then
+        log_error "ThreeFold mnemonic not configured"
+        log_info "Run 'tfgrid-compose login' to configure credentials"
         return 1
     fi
     
@@ -36,14 +45,13 @@ contracts_list() {
         return 1
     fi
     
-    if ! check_tfcmd_logged_in; then
-        log_error "tfcmd not logged in"
-        log_info "Login to tfcmd with: tfgrid-compose tfcmd-login"
+    # Load credentials and use mnemonic directly
+    if ! load_tfgrid_credentials; then
         return 1
     fi
     
-    # Call tfcmd to get contracts
-    if ! tfcmd get contracts; then
+    # Call tfcmd to get contracts using mnemonic
+    if ! echo "$TFGRID_MNEMONIC" | tfcmd get contracts; then
         log_error "Failed to fetch contracts via tfcmd"
         return 1
     fi
@@ -70,14 +78,13 @@ contracts_delete() {
         return 1
     fi
     
-    if ! check_tfcmd_logged_in; then
-        log_error "tfcmd not logged in"
-        log_info "Login to tfcmd with: tfgrid-compose tfcmd-login"
+    # Load credentials and use mnemonic directly
+    if ! load_tfgrid_credentials; then
         return 1
     fi
     
-    # Call tfcmd to delete contract
-    if ! tfcmd delete contracts "$contract_id"; then
+    # Call tfcmd to delete contract using mnemonic
+    if ! echo "$TFGRID_MNEMONIC" | tfcmd cancel contracts "$contract_id"; then
         log_error "Failed to delete contract $contract_id via tfcmd"
         return 1
     fi
