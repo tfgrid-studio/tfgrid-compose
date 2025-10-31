@@ -22,6 +22,7 @@ source "$DEPLOYER_ROOT/core/config.sh"
 source "$DEPLOYER_ROOT/core/node-browser.sh"
 source "$DEPLOYER_ROOT/core/update-git-config.sh"
 source "$DEPLOYER_ROOT/core/contract-manager.sh"
+source "$DEPLOYER_ROOT/core/preferences.sh"
 
 # Version (read from VERSION file)
 VERSION=$(cat "$DEPLOYER_ROOT/VERSION" 2>/dev/null || echo "unknown")
@@ -832,6 +833,9 @@ case "$COMMAND" in
         fi
         
         echo ""
+        
+        # Load preferences for deployment (before validation)
+        export_for_deployment
         
         # Validate network prerequisites based on manifest config
         main_network=$(yaml_get "$APP_MANIFEST" "network.main")
@@ -2665,6 +2669,33 @@ EOF
         esac
 
         exit 0
+        ;;
+        
+    whitelist|wl)
+        # Whitelist command - manage preferred nodes/farms
+        log_info "TFGrid Compose v$VERSION - Whitelist Management"
+        echo ""
+        
+        cmd_whitelist "$@"
+        exit $?
+        ;;
+        
+    blacklist|bl)
+        # Blacklist command - manage nodes/farms to avoid
+        log_info "TFGrid Compose v$VERSION - Blacklist Management"
+        echo ""
+        
+        cmd_blacklist "$@"
+        exit $?
+        ;;
+        
+    preferences|pref)
+        # Preferences command - manage general preferences
+        log_info "TFGrid Compose v$VERSION - Preferences Management"
+        echo ""
+        
+        cmd_preferences "$@"
+        exit $?
         ;;
 
     *)
