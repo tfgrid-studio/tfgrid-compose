@@ -69,38 +69,59 @@ yaml_get_value() {
         return
     fi
     
-    # Handle nested YAML structure with simpler parsing
+    # Use a simpler approach with basic string manipulation
     case "$section" in
         "whitelist.nodes")
-            local nodes=$(grep -A 2 "^whitelist:" "$file" | grep "nodes:" | sed 's/.*nodes: *\[//' | sed 's/\].*//' | tr -d ' ')
-            echo "${nodes//,/ }"
+            # Extract everything between [ and ] for nodes in whitelist
+            local line=$(grep -A 2 "^whitelist:" "$file" | grep "nodes:")
+            if [ -n "$line" ]; then
+                # Remove "  nodes: [" from start and "]" from end, replace commas with spaces
+                echo "$line" | sed 's/^  nodes: *\[//' | sed 's/\].*$//' | sed 's/,/ /g' | sed 's/^ *//' | sed 's/ *$//'
+            fi
             ;;
         "whitelist.farms")
-            local farms=$(grep -A 2 "^whitelist:" "$file" | grep "farms:" | sed 's/.*farms: *\[//' | sed 's/\].*//' | tr -d ' ')
-            echo "${farms//,/ }"
+            # Extract everything between [ and ] for farms in whitelist
+            local line=$(grep -A 2 "^whitelist:" "$file" | grep "farms:")
+            if [ -n "$line" ]; then
+                # Remove "  farms: [" from start and "]" from end, replace commas with spaces
+                echo "$line" | sed 's/^  farms: *\[//' | sed 's/\].*$//' | sed 's/,/ /g' | sed 's/^ *//' | sed 's/ *$//'
+            fi
             ;;
         "blacklist.nodes")
-            local nodes=$(grep -A 2 "^blacklist:" "$file" | grep "nodes:" | sed 's/.*nodes: *\[//' | sed 's/\].*//' | tr -d ' ')
-            echo "${nodes//,/ }"
+            # Extract everything between [ and ] for nodes in blacklist
+            local line=$(grep -A 2 "^blacklist:" "$file" | grep "nodes:")
+            if [ -n "$line" ]; then
+                # Remove "  nodes: [" from start and "]" from end, replace commas with spaces
+                echo "$line" | sed 's/^  nodes: *\[//' | sed 's/\].*$//' | sed 's/,/ /g' | sed 's/^ *//' | sed 's/ *$//'
+            fi
             ;;
         "blacklist.farms")
-            local farms=$(grep -A 2 "^blacklist:" "$file" | grep "farms:" | sed 's/.*farms: *\[//' | sed 's/\].*//' | tr -d ' ')
-            echo "${farms//,/ }"
+            # Extract everything between [ and ] for farms in blacklist
+            local line=$(grep -A 2 "^blacklist:" "$file" | grep "farms:")
+            if [ -n "$line" ]; then
+                # Remove "  farms: [" from start and "]" from end, replace commas with spaces
+                echo "$line" | sed 's/^  farms: *\[//' | sed 's/\].*$//' | sed 's/,/ /g' | sed 's/^ *//' | sed 's/ *$//'
+            fi
             ;;
         "preferences.max_cpu_usage")
-            grep -A 3 "^preferences:" "$file" | grep "max_cpu_usage:" | sed 's/.*max_cpu_usage: *//' | tr -d ' '
+            local line=$(grep -A 3 "^preferences:" "$file" | grep "max_cpu_usage:")
+            echo "$line" | sed 's/^  max_cpu_usage: *//' | sed 's/^ *//' | sed 's/ *$//'
             ;;
         "preferences.max_disk_usage")
-            grep -A 3 "^preferences:" "$file" | grep "max_disk_usage:" | sed 's/.*max_disk_usage: *//' | tr -d ' '
+            local line=$(grep -A 3 "^preferences:" "$file" | grep "max_disk_usage:")
+            echo "$line" | sed 's/^  max_disk_usage: *//' | sed 's/^ *//' | sed 's/ *$//'
             ;;
         "preferences.min_uptime_days")
-            grep -A 3 "^preferences:" "$file" | grep "min_uptime_days:" | sed 's/.*min_uptime_days: *//' | tr -d ' '
+            local line=$(grep -A 3 "^preferences:" "$file" | grep "min_uptime_days:")
+            echo "$line" | sed 's/^  min_uptime_days: *//' | sed 's/^ *//' | sed 's/ *$//'
             ;;
         "metadata.created")
-            grep "created:" "$file" | sed 's/.*created: *//' | tr -d ' '
+            local line=$(grep "created:" "$file")
+            echo "$line" | sed 's/^  created: *//' | sed 's/^ *//' | sed 's/ *$//'
             ;;
         "metadata.last_updated")
-            grep "last_updated:" "$file" | sed 's/.*last_updated: *//' | tr -d ' '
+            local line=$(grep "last_updated:" "$file")
+            echo "$line" | sed 's/^  last_updated: *//' | sed 's/^ *//' | sed 's/ *$//'
             ;;
         *)
             echo ""
