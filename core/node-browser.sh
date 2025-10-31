@@ -8,54 +8,14 @@ source "$SCRIPT_DIR/node-selector.sh"
 
 GRIDPROXY_URL="https://gridproxy.grid.tf"
 
-# Favorites file
-FAVORITES_FILE="$HOME/.config/tfgrid-compose/node-favorites"
+# Whitelist integration (consolidates previous favorites functionality)
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/preferences.sh"
 
-# Ensure favorites file exists
-ensure_favorites_file() {
-    mkdir -p "$(dirname "$FAVORITES_FILE")"
-    touch "$FAVORITES_FILE"
-}
-
-# Add node to favorites
-add_favorite() {
-    local node_id="$1"
-    # Trim whitespace from node_id
-    node_id=$(echo "$node_id" | xargs)
-    ensure_favorites_file
-
-    if grep -q "^${node_id}$" "$FAVORITES_FILE"; then
-        log_info "Node $node_id is already in favorites"
-    else
-        echo "$node_id" >> "$FAVORITES_FILE"
-        log_success "Added node $node_id to favorites"
-    fi
-}
-
-# Remove node from favorites
-remove_favorite() {
-    local node_id="$1"
-    ensure_favorites_file
-
-    if grep -q "^${node_id}$" "$FAVORITES_FILE"; then
-        sed -i "/^${node_id}$/d" "$FAVORITES_FILE"
-        log_success "Removed node $node_id from favorites"
-    else
-        log_info "Node $node_id is not in favorites"
-    fi
-}
-
-# Check if node is favorite
+# Check if node is in whitelist (for browser display)
 is_favorite() {
     local node_id="$1"
-    ensure_favorites_file
-    grep -q "^${node_id}$" "$FAVORITES_FILE"
-}
-
-# Get favorites list
-get_favorites() {
-    ensure_favorites_file
-    cat "$FAVORITES_FILE" 2>/dev/null || true
+    local whitelist_nodes=$(get_whitelist_nodes)
+    echo "$whitelist_nodes" | grep -q "$node_id"
 }
 
 # Display node table header
@@ -618,11 +578,7 @@ nodes_command() {
 }
 
 # Export functions
-export -f ensure_favorites_file
-export -f add_favorite
-export -f remove_favorite
 export -f is_favorite
-export -f get_favorites
 export -f show_table_header
 export -f show_node_row
 export -f show_node_details
