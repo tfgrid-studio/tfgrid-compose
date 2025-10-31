@@ -260,6 +260,7 @@ show_help() {
     echo -e "      ${GREEN}--node${NC} <id>       Deploy to specific node ID"
     echo -e "      ${GREEN}--blacklist-node${NC} <ids> Exclude specific nodes (e.g., '617,892')"
     echo -e "      ${GREEN}--blacklist-farm${NC} <names> Exclude specific farms"
+    echo -e "      ${GREEN}--whitelist-nodes${NC} <names> Only use specific nodes"
     echo -e "      ${GREEN}--whitelist-farm${NC} <names> Only use specific farms"
     echo -e "      ${GREEN}--max-cpu-usage${NC} <0-100> Maximum CPU usage threshold"
     echo -e "      ${GREEN}--max-disk-usage${NC} <0-100> Maximum disk usage threshold"
