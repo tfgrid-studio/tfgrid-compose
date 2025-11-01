@@ -503,6 +503,239 @@ export_for_deployment() {
     export CUSTOM_MIN_UPTIME_DAYS="$min_uptime"
 }
 
+# Add individual node to whitelist (non-destructive)
+add_whitelist_node() {
+    local node_id="$1"
+    
+    if [ -z "$node_id" ]; then
+        log_error "Node ID required"
+        return 1
+    fi
+    
+    # Validate node ID is numeric
+    if ! [[ "$node_id" =~ ^[0-9]+$ ]]; then
+        log_error "Invalid node ID: $node_id (must be numeric)"
+        return 1
+    fi
+    
+    # Get current nodes
+    local current_nodes=$(get_whitelist_nodes)
+    
+    # Check if node already exists
+    if [[ ",$current_nodes," == *",$node_id,"* ]]; then
+        log_info "Node $node_id is already in whitelist"
+        return 0
+    fi
+    
+    # Add to existing list (or create new)
+    local new_nodes
+    if [ -z "$current_nodes" ]; then
+        new_nodes="$node_id"
+    else
+        new_nodes="$current_nodes,$node_id"
+    fi
+    
+    update_whitelist_nodes "$new_nodes"
+    log_success "Added node $node_id to whitelist"
+}
+
+# Add individual farm to whitelist (non-destructive)
+add_whitelist_farm() {
+    local farm_name="$1"
+    
+    if [ -z "$farm_name" ]; then
+        log_error "Farm name required"
+        return 1
+    fi
+    
+    # Get current farms
+    local current_farms=$(get_whitelist_farms)
+    
+    # Check if farm already exists (case-insensitive)
+    if [[ ",${current_farms,,}," == *",${farm_name,,},"* ]]; then
+        log_info "Farm '$farm_name' is already in whitelist"
+        return 0
+    fi
+    
+    # Add to existing list (or create new)
+    local new_farms
+    if [ -z "$current_farms" ]; then
+        new_farms="$farm_name"
+    else
+        new_farms="$current_farms,$farm_name"
+    fi
+    
+    update_whitelist_farms "$new_farms"
+    log_success "Added farm '$farm_name' to whitelist"
+}
+
+# Remove individual node from whitelist (non-destructive)
+remove_whitelist_node() {
+    local node_id="$1"
+    
+    if [ -z "$node_id" ]; then
+        log_error "Node ID required"
+        return 1
+    fi
+    
+    # Get current nodes
+    local current_nodes=$(get_whitelist_nodes)
+    
+    # Check if node exists
+    if [[ ",$current_nodes," != *",$node_id,"* ]]; then
+        log_info "Node $node_id is not in whitelist"
+        return 0
+    fi
+    
+    # Remove from list
+    local new_nodes
+    if [[ "$current_nodes" == *","* ]]; then
+        # Multiple nodes - remove specific one
+        new_nodes=$(echo "$current_nodes" | tr ',' '\n' | grep -v "^$node_id$" | tr '\n' ',' | sed 's/,$//')
+    else
+        # Single node - will become empty
+        new_nodes=""
+    fi
+    
+    update_whitelist_nodes "$new_nodes"
+    log_success "Removed node $node_id from whitelist"
+}
+
+# Remove individual farm from whitelist (non-destructive)
+remove_whitelist_farm() {
+    local farm_name="$1"
+    
+    if [ -z "$farm_name" ]; then
+        log_error "Farm name required"
+        return 1
+    fi
+    
+    # Get current farms
+    local current_farms=$(get_whitelist_farms)
+    
+    # Check if farm exists (case-insensitive)
+    local farm_exists=false
+    IFS=',' read -ra FARM_ARRAY <<< "$current_farms"
+    for farm in "${FARM_ARRAY[@]}"; do
+        farm=$(echo "$farm" | xargs)  # Trim whitespace
+        if [[ "${farm,,}" == "${farm_name,,}" ]]; then
+            farm_exists=true
+            break
+        fi
+    done
+    
+    if [ "$farm_exists" = false ]; then
+        log_info "Farm '$farm_name' is not in whitelist"
+        return 0
+    fi
+    
+    # Remove from list
+    local new_farms=""
+    local first=true
+    IFS=',' read -ra FARM_ARRAY <<< "$current_farms"
+    for farm in "${FARM_ARRAY[@]}"; do
+        farm=$(echo "$farm" | xargs)  # Trim whitespace
+        if [[ "${farm,,}" != "${farm_name,,}" ]]; then
+            if [ "$first" = true ]; then
+                new_farms="$farm"
+                first=false
+            else
+                new_farms="$new_farms,$farm"
+            fi
+        fi
+    done
+    
+    update_whitelist_farms "$new_farms"
+    log_success "Removed farm '$farm_name' from whitelist"
+}
+
+# Enhanced interactive whitelist manager
+enhanced_interactive_whitelist() {
+    while true; do
+        # Get current state
+        local wl_nodes=$(get_whitelist_nodes)
+        local wl_farms=$(get_whitelist_farms)
+        
+        echo ""
+        echo "🎯 TFGrid Compose Whitelist Manager"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "Current whitelist:"
+        echo "  Nodes: ${wl_nodes:-none}"
+        echo "  Farms: ${wl_farms:-none}"
+        echo ""
+        echo "Actions:"
+        echo "  1) Add node to whitelist"
+        echo "  2) Add farm to whitelist"
+        echo "  3) Remove node from whitelist"
+        echo "  4) Remove farm from whitelist"
+        echo "  5) View current whitelist"
+        echo "  6) Clear whitelist"
+        echo "  7) Cancel"
+        echo ""
+        read -p "Enter choice (1-7): " choice
+        
+        case "$choice" in
+            1)
+                echo ""
+                echo "Current nodes: ${wl_nodes:-none}"
+                read -p "Enter node ID to add (or press Enter to skip): " new_node
+                if [ -n "$new_node" ]; then
+                    add_whitelist_node "$new_node"
+                fi
+                ;;
+            2)
+                echo ""
+                echo "Current farms: ${wl_farms:-none}"
+                read -p "Enter farm name to add (or press Enter to skip): " new_farm
+                if [ -n "$new_farm" ]; then
+                    add_whitelist_farm "$new_farm"
+                fi
+                ;;
+            3)
+                echo ""
+                echo "Current nodes: ${wl_nodes:-none}"
+                read -p "Enter node ID to remove (or press Enter to skip): " remove_node
+                if [ -n "$remove_node" ]; then
+                    remove_whitelist_node "$remove_node"
+                fi
+                ;;
+            4)
+                echo ""
+                echo "Current farms: ${wl_farms:-none}"
+                read -p "Enter farm name to remove (or press Enter to skip): " remove_farm
+                if [ -n "$remove_farm" ]; then
+                    remove_whitelist_farm "$remove_farm"
+                fi
+                ;;
+            5)
+                show_whitelist_status "all"
+                read -p "Press Enter to continue..."
+                ;;
+            6)
+                echo ""
+                read -p "Are you sure you want to clear the entire whitelist? (y/N): " confirm
+                if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                    clear_whitelist
+                    echo ""
+                    log_success "Whitelist cleared"
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            7|"")
+                echo ""
+                log_info "Whitelist management cancelled"
+                break
+                ;;
+            *)
+                echo ""
+                log_error "Invalid choice. Please enter 1-7."
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+    done
+}
+
 # Whitelist command handler
 cmd_whitelist() {
     local subcommand="$1"
@@ -552,10 +785,243 @@ cmd_whitelist() {
             clear_whitelist
             ;;
         *)
-            # No subcommand - interactive setup
-            interactive_setup_whitelist
+            # No subcommand - enhanced interactive setup
+            enhanced_interactive_whitelist
             ;;
     esac
+}
+
+# Add individual node to blacklist (non-destructive)
+add_blacklist_node() {
+    local node_id="$1"
+    
+    if [ -z "$node_id" ]; then
+        log_error "Node ID required"
+        return 1
+    fi
+    
+    # Validate node ID is numeric
+    if ! [[ "$node_id" =~ ^[0-9]+$ ]]; then
+        log_error "Invalid node ID: $node_id (must be numeric)"
+        return 1
+    fi
+    
+    # Get current nodes
+    local current_nodes=$(get_blacklist_nodes)
+    
+    # Check if node already exists
+    if [[ ",$current_nodes," == *",$node_id,"* ]]; then
+        log_info "Node $node_id is already in blacklist"
+        return 0
+    fi
+    
+    # Add to existing list (or create new)
+    local new_nodes
+    if [ -z "$current_nodes" ]; then
+        new_nodes="$node_id"
+    else
+        new_nodes="$current_nodes,$node_id"
+    fi
+    
+    update_blacklist_nodes "$new_nodes"
+    log_success "Added node $node_id to blacklist"
+}
+
+# Add individual farm to blacklist (non-destructive)
+add_blacklist_farm() {
+    local farm_name="$1"
+    
+    if [ -z "$farm_name" ]; then
+        log_error "Farm name required"
+        return 1
+    fi
+    
+    # Get current farms
+    local current_farms=$(get_blacklist_farms)
+    
+    # Check if farm already exists (case-insensitive)
+    if [[ ",${current_farms,,}," == *",${farm_name,,},"* ]]; then
+        log_info "Farm '$farm_name' is already in blacklist"
+        return 0
+    fi
+    
+    # Add to existing list (or create new)
+    local new_farms
+    if [ -z "$current_farms" ]; then
+        new_farms="$farm_name"
+    else
+        new_farms="$current_farms,$farm_name"
+    fi
+    
+    update_blacklist_farms "$new_farms"
+    log_success "Added farm '$farm_name' to blacklist"
+}
+
+# Remove individual node from blacklist (non-destructive)
+remove_blacklist_node() {
+    local node_id="$1"
+    
+    if [ -z "$node_id" ]; then
+        log_error "Node ID required"
+        return 1
+    fi
+    
+    # Get current nodes
+    local current_nodes=$(get_blacklist_nodes)
+    
+    # Check if node exists
+    if [[ ",$current_nodes," != *",$node_id,"* ]]; then
+        log_info "Node $node_id is not in blacklist"
+        return 0
+    fi
+    
+    # Remove from list
+    local new_nodes
+    if [[ "$current_nodes" == *","* ]]; then
+        # Multiple nodes - remove specific one
+        new_nodes=$(echo "$current_nodes" | tr ',' '\n' | grep -v "^$node_id$" | tr '\n' ',' | sed 's/,$//')
+    else
+        # Single node - will become empty
+        new_nodes=""
+    fi
+    
+    update_blacklist_nodes "$new_nodes"
+    log_success "Removed node $node_id from blacklist"
+}
+
+# Remove individual farm from blacklist (non-destructive)
+remove_blacklist_farm() {
+    local farm_name="$1"
+    
+    if [ -z "$farm_name" ]; then
+        log_error "Farm name required"
+        return 1
+    fi
+    
+    # Get current farms
+    local current_farms=$(get_blacklist_farms)
+    
+    # Check if farm exists (case-insensitive)
+    local farm_exists=false
+    IFS=',' read -ra FARM_ARRAY <<< "$current_farms"
+    for farm in "${FARM_ARRAY[@]}"; do
+        farm=$(echo "$farm" | xargs)  # Trim whitespace
+        if [[ "${farm,,}" == "${farm_name,,}" ]]; then
+            farm_exists=true
+            break
+        fi
+    done
+    
+    if [ "$farm_exists" = false ]; then
+        log_info "Farm '$farm_name' is not in blacklist"
+        return 0
+    fi
+    
+    # Remove from list
+    local new_farms=""
+    local first=true
+    IFS=',' read -ra FARM_ARRAY <<< "$current_farms"
+    for farm in "${FARM_ARRAY[@]}"; do
+        farm=$(echo "$farm" | xargs)  # Trim whitespace
+        if [[ "${farm,,}" != "${farm_name,,}" ]]; then
+            if [ "$first" = true ]; then
+                new_farms="$farm"
+                first=false
+            else
+                new_farms="$new_farms,$farm"
+            fi
+        fi
+    done
+    
+    update_blacklist_farms "$new_farms"
+    log_success "Removed farm '$farm_name' from blacklist"
+}
+
+# Enhanced interactive blacklist manager
+enhanced_interactive_blacklist() {
+    while true; do
+        # Get current state
+        local bl_nodes=$(get_blacklist_nodes)
+        local bl_farms=$(get_blacklist_farms)
+        
+        echo ""
+        echo "🚫 TFGrid Compose Blacklist Manager"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "Current blacklist:"
+        echo "  Nodes: ${bl_nodes:-none}"
+        echo "  Farms: ${bl_farms:-none}"
+        echo ""
+        echo "Actions:"
+        echo "  1) Add node to blacklist"
+        echo "  2) Add farm to blacklist"
+        echo "  3) Remove node from blacklist"
+        echo "  4) Remove farm from blacklist"
+        echo "  5) View current blacklist"
+        echo "  6) Clear blacklist"
+        echo "  7) Cancel"
+        echo ""
+        read -p "Enter choice (1-7): " choice
+        
+        case "$choice" in
+            1)
+                echo ""
+                echo "Current nodes: ${bl_nodes:-none}"
+                read -p "Enter node ID to add (or press Enter to skip): " new_node
+                if [ -n "$new_node" ]; then
+                    add_blacklist_node "$new_node"
+                fi
+                ;;
+            2)
+                echo ""
+                echo "Current farms: ${bl_farms:-none}"
+                read -p "Enter farm name to add (or press Enter to skip): " new_farm
+                if [ -n "$new_farm" ]; then
+                    add_blacklist_farm "$new_farm"
+                fi
+                ;;
+            3)
+                echo ""
+                echo "Current nodes: ${bl_nodes:-none}"
+                read -p "Enter node ID to remove (or press Enter to skip): " remove_node
+                if [ -n "$remove_node" ]; then
+                    remove_blacklist_node "$remove_node"
+                fi
+                ;;
+            4)
+                echo ""
+                echo "Current farms: ${bl_farms:-none}"
+                read -p "Enter farm name to remove (or press Enter to skip): " remove_farm
+                if [ -n "$remove_farm" ]; then
+                    remove_blacklist_farm "$remove_farm"
+                fi
+                ;;
+            5)
+                show_blacklist_status "all"
+                read -p "Press Enter to continue..."
+                ;;
+            6)
+                echo ""
+                read -p "Are you sure you want to clear the entire blacklist? (y/N): " confirm
+                if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                    clear_blacklist
+                    echo ""
+                    log_success "Blacklist cleared"
+                    read -p "Press Enter to continue..."
+                fi
+                ;;
+            7|"")
+                echo ""
+                log_info "Blacklist management cancelled"
+                break
+                ;;
+            *)
+                echo ""
+                log_error "Invalid choice. Please enter 1-7."
+                read -p "Press Enter to continue..."
+                ;;
+        esac
+    done
 }
 
 # Blacklist command handler
@@ -607,8 +1073,8 @@ cmd_blacklist() {
             clear_blacklist
             ;;
         *)
-            # No subcommand - interactive setup
-            interactive_setup_blacklist
+            # No subcommand - enhanced interactive setup
+            enhanced_interactive_blacklist
             ;;
     esac
 }
@@ -798,3 +1264,13 @@ export -f clear_blacklist_nodes
 export -f clear_blacklist_farms
 export -f interactive_setup_whitelist
 export -f interactive_setup_blacklist
+export -f add_whitelist_node
+export -f add_whitelist_farm
+export -f remove_whitelist_node
+export -f remove_whitelist_farm
+export -f enhanced_interactive_whitelist
+export -f add_blacklist_node
+export -f add_blacklist_farm
+export -f remove_blacklist_node
+export -f remove_blacklist_farm
+export -f enhanced_interactive_blacklist
