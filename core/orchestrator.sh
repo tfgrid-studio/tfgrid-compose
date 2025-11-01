@@ -4,6 +4,7 @@
 # Load dependencies
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
+source "$SCRIPT_DIR/deployment-status.sh"
 source "$SCRIPT_DIR/pattern-loader.sh"
 source "$SCRIPT_DIR/app-loader.sh"
 source "$SCRIPT_DIR/node-selector.sh"
@@ -12,7 +13,12 @@ source "$SCRIPT_DIR/interactive-config.sh"
 # Cleanup on deployment error
 cleanup_on_error() {
     local app_name="$1"
-    log_warning "Deployment failed, cleaning up partial state..."
+    local error_message="${2:-Deployment failed}"
+    
+    log_warning "Deployment failed: $error_message"
+    
+    # Mark deployment as failed
+    mark_deployment_failed "$app_name" "$error_message"
     
     # Don't clean if user wants to debug
     if [ "${TFGRID_DEBUG:-}" = "1" ]; then
@@ -30,8 +36,11 @@ deploy_app() {
     log_step "Starting deployment orchestration..."
     echo ""
     
+    # Mark deployment as deploying
+    mark_deployment_deploying "$APP_NAME"
+    
     # Setup error trap
-    trap 'cleanup_on_error "$APP_NAME"' ERR
+    trap 'cleanup_on_error "$APP_NAME" "$ERROR_MESSAGE"' ERR
     
     # Source .env from app directory if it exists
     if [ -f "$APP_DIR/.env" ]; then
@@ -248,6 +257,17 @@ EOF
     echo ""
     log_success "🎉 Deployment complete!"
     echo ""
+    
+    # Mark deployment as active
+    mark_deployment_active "$APP_NAME"
+    
+    # Perform health check to verify deployment
+    log_info "Performing health check..."
+    if ! perform_deployment_health_check "$APP_NAME" "$PATTERN_NAME"; then
+        log_warning "Health check failed - deployment may not be fully functional"
+        mark_deployment_failed "$APP_NAME" "Health check failed after deployment"
+    fi
+    
     log_info "App: $APP_NAME v$APP_VERSION"
     log_info "Pattern: $PATTERN_NAME v$PATTERN_VERSION"
     echo ""

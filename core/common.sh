@@ -55,9 +55,17 @@ check_requirements() {
         log_warning "yq not found, will use basic YAML parsing"
     fi
     
+    if ! command_exists jq; then
+        missing+=("jq")
+    fi
+    
     if [ ${#missing[@]} -gt 0 ]; then
         log_error "Missing required tools: ${missing[*]}"
         log_info "Please install: ${missing[*]}"
+        echo ""
+        echo "Ubuntu/Debian: sudo apt install jq"
+        echo "macOS: brew install jq"
+        echo "Or visit: https://stedolan.github.io/jq/"
         return 1
     fi
     
@@ -293,6 +301,15 @@ show_help() {
     echo -e "      ${GREEN}--min-uptime-days${NC} <days> Minimum uptime in days"
     echo -e "  ${GREEN}down${NC} [app]            Destroy a deployment"
     echo -e "  ${GREEN}clean${NC}                 Clean up local state directory"
+    echo ""
+    echo -e "${CYAN}Status Management:${NC}"
+    echo -e "  ${GREEN}status${NC} <subcommand>   Deployment status management"
+    echo -e "      ${GREEN}list${NC}              List all deployments with status"
+    echo -e "      ${GREEN}health${NC} <name>     Check deployment health"
+    echo -e "      ${GREEN}retry${NC} <name>      Retry failed deployment"
+    echo -e "      ${GREEN}logs${NC} <name>       Show deployment logs"
+    echo -e "      ${GREEN}reset${NC} <name>      Reset deployment status"
+    echo -e "      ${GREEN}show${NC} <name>       Show detailed status"
     echo ""
     echo -e "${CYAN}Management Commands:${NC}"
     echo -e "  ${GREEN}exec${NC} <cmd>            Execute command on active app"

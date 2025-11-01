@@ -16,6 +16,7 @@ source "$DEPLOYER_ROOT/core/orchestrator.sh"
 source "$DEPLOYER_ROOT/core/registry.sh"
 source "$DEPLOYER_ROOT/core/app-cache.sh"
 source "$DEPLOYER_ROOT/core/deployment-state.sh"
+source "$DEPLOYER_ROOT/core/deployment-status.sh"
 source "$DEPLOYER_ROOT/core/login.sh"
 source "$DEPLOYER_ROOT/core/gitconfig.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
@@ -330,7 +331,7 @@ case "$COMMAND" in
             echo "📱 Select an app:"
             echo ""
             
-            # Get list of deployed apps
+            # Get list of deployed apps (filtered for healthy deployments only)
             base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
             
             if [ ! -d "$base_dir" ] || [ -z "$(ls -A "$base_dir" 2>/dev/null)" ]; then
@@ -340,26 +341,35 @@ case "$COMMAND" in
                 exit 1
             fi
             
-            # Build array of apps
+            # Build array of healthy apps only
             APPS=()
             i=1
             for app_dir in "$base_dir"/*; do
                 if [ -d "$app_dir" ]; then
                     app=$(basename "$app_dir")
-                    APPS+=("$app")
                     
-                    # Get VM IP if available
-                    vm_ip=$(grep "^vm_ip:" "$app_dir/state.yaml" 2>/dev/null | awk '{print $2}')
-                    
-                    # Check if currently selected
-                    CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
-                    if [ -f "$CURRENT_APP_FILE" ] && [ "$(cat "$CURRENT_APP_FILE")" = "$app" ]; then
-                        echo "  $i) $app ($vm_ip) ← (currently selected)"
+                    # Check if deployment is healthy and should be included in selection
+                    if validate_deployment_for_context "$app"; then
+                        APPS+=("$app")
+                        
+                        # Get VM IP if available
+                        vm_ip=$(grep "^vm_ip:" "$app_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+                        
+                        # Get deployment status for display
+                        status=$(check_deployment_status "$app")
+                        
+                        # Check if currently selected
+                        CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
+                        if [ -f "$CURRENT_APP_FILE" ] && [ "$(cat "$CURRENT_APP_FILE")" = "$app" ]; then
+                            echo "  $i) $app ($vm_ip) ← (currently selected) [$status]"
+                        else
+                            echo "  $i) $app ($vm_ip) [$status]"
+                        fi
+                        
+                        ((i++))
                     else
-                        echo "  $i) $app ($vm_ip)"
+                        log_debug "Skipping unhealthy deployment: $app"
                     fi
-                    
-                    ((i++))
                 fi
             done
             
@@ -1009,6 +1019,9 @@ case "$COMMAND" in
             log_error "Destroy failed"
             exit 1
         fi
+        
+        # Cleanup deployment status tracking
+        cleanup_deployment "$APP_NAME"
         
         # Auto-unselect if this was the active app
         CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
@@ -2716,7 +2729,137 @@ EOF
         cmd_preferences "$@"
         exit $?
         ;;
-
+        
+    status)
+        # Deployment status management
+        log_info "TFGrid Compose v$VERSION - Status Management"
+        echo ""
+        
+        SUBCOMMAND="${1:-list}"
+        shift || true
+        
+        case "$SUBCOMMAND" in
+            list|ls)
+                # List all deployments with status
+                echo "All deployments:"
+                echo ""
+                
+                get_all_deployments | while IFS='|' read -r name status timestamp last_check; do
+                    case "$status" in
+                        "active")
+                            echo "✅ $name ($status) - $timestamp"
+                            ;;
+                        "failed")
+                            echo "❌ $name ($status) - $timestamp"
+                            ;;
+                        "deploying")
+                            echo "⏳ $name ($status) - $timestamp"
+                            ;;
+                        *)
+                            echo "❓ $name ($status) - $timestamp"
+                            ;;
+                    esac
+                done
+                
+                if [ -z "$(get_all_deployments)" ]; then
+                    echo "(no deployments found)"
+                fi
+                ;;
+            health|check)
+                # Check health of specific deployment
+                DEPLOYMENT_NAME="$1"
+                
+                if [ -z "$DEPLOYMENT_NAME" ]; then
+                    log_error "Usage: tfgrid-compose status health <deployment-name>"
+                    exit 1
+                fi
+                
+                echo "Checking health of: $DEPLOYMENT_NAME"
+                echo ""
+                
+                if perform_deployment_health_check "$DEPLOYMENT_NAME"; then
+                    echo "✅ Health check passed"
+                    exit 0
+                else
+                    echo "❌ Health check failed"
+                    echo ""
+                    echo "Error details:"
+                    get_deployment_logs "$DEPLOYMENT_NAME"
+                    exit 1
+                fi
+                ;;
+            retry)
+                # Retry a failed deployment
+                DEPLOYMENT_NAME="$1"
+                
+                if [ -z "$DEPLOYMENT_NAME" ]; then
+                    log_error "Usage: tfgrid-compose status retry <deployment-name>"
+                    exit 1
+                fi
+                
+                echo "Retrying deployment: $DEPLOYMENT_NAME"
+                echo ""
+                
+                # Reset status to deploying and retry
+                mark_deployment_deploying "$DEPLOYMENT_NAME"
+                tfgrid-compose up "$DEPLOYMENT_NAME"
+                ;;
+            logs)
+                # Show deployment logs
+                DEPLOYMENT_NAME="$1"
+                
+                if [ -z "$DEPLOYMENT_NAME" ]; then
+                    log_error "Usage: tfgrid-compose status logs <deployment-name>"
+                    exit 1
+                fi
+                
+                get_deployment_logs "$DEPLOYMENT_NAME"
+                ;;
+            reset)
+                # Reset deployment status
+                DEPLOYMENT_NAME="$1"
+                
+                if [ -z "$DEPLOYMENT_NAME" ]; then
+                    log_error "Usage: tfgrid-compose status reset <deployment-name>"
+                    exit 1
+                fi
+                
+                reset_deployment_status "$DEPLOYMENT_NAME"
+                echo "Reset status for deployment: $DEPLOYMENT_NAME"
+                ;;
+            show|details)
+                # Show detailed status of specific deployment
+                DEPLOYMENT_NAME="$1"
+                
+                if [ -z "$DEPLOYMENT_NAME" ]; then
+                    log_error "Usage: tfgrid-compose status show <deployment-name>"
+                    exit 1
+                fi
+                
+                get_deployment_status_details "$DEPLOYMENT_NAME" | jq '.' || cat
+                ;;
+            stats|statistics)
+                # Show deployment statistics
+                get_deployment_stats
+                ;;
+            *)
+                log_error "Unknown status subcommand: $SUBCOMMAND"
+                echo ""
+                echo "Available subcommands:"
+                echo "  list, ls          List all deployments with status"
+                echo "  health, check      Check health of a deployment"
+                echo "  retry              Retry a failed deployment"
+                echo "  logs              Show deployment logs"
+                echo "  reset             Reset deployment status"
+                echo "  show, details     Show detailed status"
+                echo "  stats, statistics Show deployment statistics"
+                echo ""
+                echo "Usage: tfgrid-compose status <subcommand> [options]"
+                exit 1
+                ;;
+        esac
+        ;;
+        
     *)
         # Try to execute as app-specific command
         if execute_app_command "$COMMAND" "$@"; then
