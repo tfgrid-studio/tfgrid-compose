@@ -289,6 +289,7 @@ case "$COMMAND" in
         
         echo ""
         log_info "Deploy an app: tfgrid-compose up <app-name>"
+        log_info "Multi-deploy: tfgrid-compose up <app> --name=<suffix>"
         exit 0
         ;;
     
@@ -301,6 +302,7 @@ case "$COMMAND" in
             log_warning "No apps deployed"
             echo ""
             log_info "Deploy an app: tfgrid-compose up <app-name>"
+            log_info "Multi-deploy: tfgrid-compose up <app> --name=<suffix>"
         else
             echo ""
             # Show smart context info
@@ -526,6 +528,7 @@ case "$COMMAND" in
                 log_error "No app specified and no active app context"
                 log_info "Usage: tfgrid-compose up <app-name>"
                 log_info "Or:    tfgrid-compose up <app-path>"
+                log_info "Or:    tfgrid-compose up <app> --name=<suffix>"
                 exit 1
             fi
             log_info "Using active app: $APP_INPUT"
