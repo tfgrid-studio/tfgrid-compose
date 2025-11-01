@@ -671,7 +671,7 @@ enhanced_interactive_whitelist() {
         echo "  4) Remove farm from whitelist"
         echo "  5) View current whitelist"
         echo "  6) Clear whitelist"
-        echo "  7) Cancel"
+        echo "  7) Exit"
         echo ""
         read -p "Enter choice (1-7): " choice
         
@@ -679,33 +679,53 @@ enhanced_interactive_whitelist() {
             1)
                 echo ""
                 echo "Current nodes: ${wl_nodes:-none}"
-                read -p "Enter node ID to add (or press Enter to skip): " new_node
-                if [ -n "$new_node" ]; then
-                    add_whitelist_node "$new_node"
+                read -p "Enter node ID(s) to add (comma-separated) or press Enter to skip: " new_nodes
+                if [ -n "$new_nodes" ]; then
+                    # Add each node individually for better feedback
+                    IFS=',' read -ra NODE_ARRAY <<< "$new_nodes"
+                    for node in "${NODE_ARRAY[@]}"; do
+                        node=$(echo "$node" | xargs)  # Trim whitespace
+                        [ -n "$node" ] && add_whitelist_node "$node"
+                    done
                 fi
                 ;;
             2)
                 echo ""
                 echo "Current farms: ${wl_farms:-none}"
-                read -p "Enter farm name to add (or press Enter to skip): " new_farm
-                if [ -n "$new_farm" ]; then
-                    add_whitelist_farm "$new_farm"
+                read -p "Enter farm name(s) to add (comma-separated) or press Enter to skip: " new_farms
+                if [ -n "$new_farms" ]; then
+                    # Add each farm individually for better feedback
+                    IFS=',' read -ra FARM_ARRAY <<< "$new_farms"
+                    for farm in "${FARM_ARRAY[@]}"; do
+                        farm=$(echo "$farm" | xargs)  # Trim whitespace
+                        [ -n "$farm" ] && add_whitelist_farm "$farm"
+                    done
                 fi
                 ;;
             3)
                 echo ""
                 echo "Current nodes: ${wl_nodes:-none}"
-                read -p "Enter node ID to remove (or press Enter to skip): " remove_node
-                if [ -n "$remove_node" ]; then
-                    remove_whitelist_node "$remove_node"
+                read -p "Enter node ID(s) to remove (comma-separated) or press Enter to skip: " remove_nodes
+                if [ -n "$remove_nodes" ]; then
+                    # Remove each node individually for better feedback
+                    IFS=',' read -ra NODE_ARRAY <<< "$remove_nodes"
+                    for node in "${NODE_ARRAY[@]}"; do
+                        node=$(echo "$node" | xargs)  # Trim whitespace
+                        [ -n "$node" ] && remove_whitelist_node "$node"
+                    done
                 fi
                 ;;
             4)
                 echo ""
                 echo "Current farms: ${wl_farms:-none}"
-                read -p "Enter farm name to remove (or press Enter to skip): " remove_farm
-                if [ -n "$remove_farm" ]; then
-                    remove_whitelist_farm "$remove_farm"
+                read -p "Enter farm name(s) to remove (comma-separated) or press Enter to skip: " remove_farms
+                if [ -n "$remove_farms" ]; then
+                    # Remove each farm individually for better feedback
+                    IFS=',' read -ra FARM_ARRAY <<< "$remove_farms"
+                    for farm in "${FARM_ARRAY[@]}"; do
+                        farm=$(echo "$farm" | xargs)  # Trim whitespace
+                        [ -n "$farm" ] && remove_whitelist_farm "$farm"
+                    done
                 fi
                 ;;
             5)
@@ -724,7 +744,7 @@ enhanced_interactive_whitelist() {
                 ;;
             7|"")
                 echo ""
-                log_info "Whitelist management cancelled"
+                log_info "Exiting whitelist manager"
                 break
                 ;;
             *)
@@ -959,7 +979,7 @@ enhanced_interactive_blacklist() {
         echo "  4) Remove farm from blacklist"
         echo "  5) View current blacklist"
         echo "  6) Clear blacklist"
-        echo "  7) Cancel"
+        echo "  7) Exit"
         echo ""
         read -p "Enter choice (1-7): " choice
         
@@ -967,33 +987,53 @@ enhanced_interactive_blacklist() {
             1)
                 echo ""
                 echo "Current nodes: ${bl_nodes:-none}"
-                read -p "Enter node ID to add (or press Enter to skip): " new_node
-                if [ -n "$new_node" ]; then
-                    add_blacklist_node "$new_node"
+                read -p "Enter node ID(s) to add (comma-separated) or press Enter to skip: " new_nodes
+                if [ -n "$new_nodes" ]; then
+                    # Add each node individually for better feedback
+                    IFS=',' read -ra NODE_ARRAY <<< "$new_nodes"
+                    for node in "${NODE_ARRAY[@]}"; do
+                        node=$(echo "$node" | xargs)  # Trim whitespace
+                        [ -n "$node" ] && add_blacklist_node "$node"
+                    done
                 fi
                 ;;
             2)
                 echo ""
                 echo "Current farms: ${bl_farms:-none}"
-                read -p "Enter farm name to add (or press Enter to skip): " new_farm
-                if [ -n "$new_farm" ]; then
-                    add_blacklist_farm "$new_farm"
+                read -p "Enter farm name(s) to add (comma-separated) or press Enter to skip: " new_farms
+                if [ -n "$new_farms" ]; then
+                    # Add each farm individually for better feedback
+                    IFS=',' read -ra FARM_ARRAY <<< "$new_farms"
+                    for farm in "${FARM_ARRAY[@]}"; do
+                        farm=$(echo "$farm" | xargs)  # Trim whitespace
+                        [ -n "$farm" ] && add_blacklist_farm "$farm"
+                    done
                 fi
                 ;;
             3)
                 echo ""
                 echo "Current nodes: ${bl_nodes:-none}"
-                read -p "Enter node ID to remove (or press Enter to skip): " remove_node
-                if [ -n "$remove_node" ]; then
-                    remove_blacklist_node "$remove_node"
+                read -p "Enter node ID(s) to remove (comma-separated) or press Enter to skip: " remove_nodes
+                if [ -n "$remove_nodes" ]; then
+                    # Remove each node individually for better feedback
+                    IFS=',' read -ra NODE_ARRAY <<< "$remove_nodes"
+                    for node in "${NODE_ARRAY[@]}"; do
+                        node=$(echo "$node" | xargs)  # Trim whitespace
+                        [ -n "$node" ] && remove_blacklist_node "$node"
+                    done
                 fi
                 ;;
             4)
                 echo ""
                 echo "Current farms: ${bl_farms:-none}"
-                read -p "Enter farm name to remove (or press Enter to skip): " remove_farm
-                if [ -n "$remove_farm" ]; then
-                    remove_blacklist_farm "$remove_farm"
+                read -p "Enter farm name(s) to remove (comma-separated) or press Enter to skip: " remove_farms
+                if [ -n "$remove_farms" ]; then
+                    # Remove each farm individually for better feedback
+                    IFS=',' read -ra FARM_ARRAY <<< "$remove_farms"
+                    for farm in "${FARM_ARRAY[@]}"; do
+                        farm=$(echo "$farm" | xargs)  # Trim whitespace
+                        [ -n "$farm" ] && remove_blacklist_farm "$farm"
+                    done
                 fi
                 ;;
             5)
@@ -1012,7 +1052,7 @@ enhanced_interactive_blacklist() {
                 ;;
             7|"")
                 echo ""
-                log_info "Blacklist management cancelled"
+                log_info "Exiting blacklist manager"
                 break
                 ;;
             *)
