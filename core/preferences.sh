@@ -253,18 +253,21 @@ update_whitelist_nodes() {
 update_whitelist_farms() {
     local farms_input="$1"
     
-    if [ -z "$farms_input" ]; then
-        log_error "No farm names provided"
-        return 1
+    # Allow empty input to clear farms list
+    if [ -n "$farms_input" ]; then
+        init_preferences
+        
+        # Just use the input as-is for farm names (they should already be comma-separated)
+        local normalized_farms=$(echo "$farms_input" | tr -s ' ' | sed 's/ *, */,/g' | sed 's/^,//' | sed 's/,$//')
+        
+        yaml_update_value "$PREFERENCES_FILE" "whitelist.farms" "" "$normalized_farms"
+        log_success "Updated whitelist farms: $farms_input"
+    else
+        # Clear farms list
+        init_preferences
+        yaml_update_value "$PREFERENCES_FILE" "whitelist.farms" "" ""
+        log_info "Cleared whitelist farms"
     fi
-    
-    init_preferences
-    
-    # Just use the input as-is for farm names (they should already be comma-separated)
-    local normalized_farms=$(echo "$farms_input" | tr -s ' ' | sed 's/ *, */,/g' | sed 's/^,//' | sed 's/,$//')
-    
-    yaml_update_value "$PREFERENCES_FILE" "whitelist.farms" "" "$normalized_farms"
-    log_success "Updated whitelist farms: $farms_input"
 }
 
 # Update blacklist nodes
@@ -299,18 +302,21 @@ update_blacklist_nodes() {
 update_blacklist_farms() {
     local farms_input="$1"
     
-    if [ -z "$farms_input" ]; then
-        log_error "No farm names provided"
-        return 1
+    # Allow empty input to clear farms list
+    if [ -n "$farms_input" ]; then
+        init_preferences
+        
+        # Just use the input as-is for farm names (they should already be comma-separated)
+        local normalized_farms=$(echo "$farms_input" | tr -s ' ' | sed 's/ *, */,/g' | sed 's/^,//' | sed 's/,$//')
+        
+        yaml_update_value "$PREFERENCES_FILE" "blacklist.farms" "" "$normalized_farms"
+        log_success "Updated blacklist farms: $farms_input"
+    else
+        # Clear farms list
+        init_preferences
+        yaml_update_value "$PREFERENCES_FILE" "blacklist.farms" "" ""
+        log_info "Cleared blacklist farms"
     fi
-    
-    init_preferences
-    
-    # Just use the input as-is for farm names (they should already be comma-separated)
-    local normalized_farms=$(echo "$farms_input" | tr -s ' ' | sed 's/ *, */,/g' | sed 's/^,//' | sed 's/,$//')
-    
-    yaml_update_value "$PREFERENCES_FILE" "blacklist.farms" "" "$normalized_farms"
-    log_success "Updated blacklist farms: $farms_input"
 }
 
 # Update general preference
@@ -718,15 +724,40 @@ enhanced_interactive_whitelist() {
             4)
                 echo ""
                 echo "Current farms: ${wl_farms:-none}"
-                read -p "Enter farm name(s) to remove (comma-separated) or press Enter to skip: " remove_farms
-                if [ -n "$remove_farms" ]; then
-                    # Remove each farm individually for better feedback
-                    IFS=',' read -ra FARM_ARRAY <<< "$remove_farms"
+                
+                if [ -z "${wl_farms}" ] || [ "${wl_farms}" = "none" ]; then
+                    echo "No farms to remove."
+                    read -p "Press Enter to continue..."
+                else
+                    echo ""
+                    echo "Available farms to remove:"
+                    
+                    # Create numbered list for selection
+                    IFS=',' read -ra FARM_ARRAY <<< "$wl_farms"
+                    local i=1
                     for farm in "${FARM_ARRAY[@]}"; do
                         farm=$(echo "$farm" | xargs)  # Trim whitespace
-                        [ -n "$farm" ] && remove_whitelist_farm "$farm"
+                        echo "  $i) $farm"
+                        i=$((i + 1))
                     done
+                    echo "  $i) Cancel (go back)"
+                    
+                    echo ""
+                    read -p "Enter choice [$i]: " choice
+                    choice=${choice:-$i}  # Default to cancel
+                    
+                    if [ "$choice" -eq "$i" ]; then
+                        echo "Cancelled."
+                    elif [ "$choice" -ge 1 ] && [ "$choice" -le $((i - 1)) ]; then
+                        # Remove selected farm
+                        local selected_farm="${FARM_ARRAY[$((choice - 1))]}"
+                        selected_farm=$(echo "$selected_farm" | xargs)  # Trim whitespace
+                        remove_whitelist_farm "$selected_farm"
+                    else
+                        echo "Invalid choice."
+                    fi
                 fi
+                read -p "Press Enter to continue..."
                 ;;
             5)
                 show_whitelist_status "all"
