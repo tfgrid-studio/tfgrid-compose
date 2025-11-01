@@ -29,25 +29,37 @@ load_node_filter_config() {
                 blacklist_nodes) BLACKLIST_NODES="$value" ;;
                 blacklist_farms) BLACKLIST_FARMS="$value" ;;
                 whitelist_farms) WHITELIST_FARMS="$value" ;;
+                whitelist_nodes) WHITELIST_NODES="$value" ;;
                 max_cpu_usage) MAX_CPU_USAGE="$value" ;;
                 max_disk_usage) MAX_DISK_USAGE="$value" ;;
                 min_uptime_days) MIN_UPTIME_DAYS="$value" ;;
             esac
-        done < <(grep -E "^(blacklist_nodes|blacklist_farms|whitelist_farms|max_cpu_usage|max_disk_usage|min_uptime_days):" "$config_file" 2>/dev/null || true)
+        done < <(grep -E "^(blacklist_nodes|blacklist_farms|whitelist_farms|whitelist_nodes|max_cpu_usage|max_disk_usage|min_uptime_days):" "$config_file" 2>/dev/null || true)
     fi
+
+    # Load environment variables if set
+    BLACKLIST_NODES="${CUSTOM_BLACKLIST_NODES:-$BLACKLIST_NODES}"
+    BLACKLIST_FARMS="${CUSTOM_BLACKLIST_FARMS:-$BLACKLIST_FARMS}"
+    WHITELIST_FARMS="${CUSTOM_WHITELIST_FARMS:-$WHITELIST_FARMS}"
+    WHITELIST_NODES="${CUSTOM_WHITELIST_NODES:-$WHITELIST_NODES}"
+    MAX_CPU_USAGE="${CUSTOM_MAX_CPU_USAGE:-$MAX_CPU_USAGE}"
+    MAX_DISK_USAGE="${CUSTOM_MAX_DISK_USAGE:-$MAX_DISK_USAGE}"
+    MIN_UPTIME_DAYS="${CUSTOM_MIN_UPTIME_DAYS:-$MIN_UPTIME_DAYS}"
 }
 
 # Apply node filtering based on configuration and CLI overrides
 apply_node_filters() {
     local nodes_json="$1"
-    local cli_blacklist_nodes="${2:-}"
-    local cli_blacklist_farms="${3:-}"
-    local cli_whitelist_farms="${4:-}"
-    local cli_max_cpu="${5:-}"
-    local cli_max_disk="${6:-}"
-    local cli_min_uptime="${7:-}"
+    local cli_whitelist_nodes="${2:-}"
+    local cli_blacklist_nodes="${3:-}"
+    local cli_blacklist_farms="${4:-}"
+    local cli_whitelist_farms="${5:-}"
+    local cli_max_cpu="${6:-}"
+    local cli_max_disk="${7:-}"
+    local cli_min_uptime="${8:-}"
 
     # Use CLI overrides if provided, otherwise use config
+    local whitelist_nodes="${cli_whitelist_nodes:-$WHITELIST_NODES}"
     local blacklist_nodes="${cli_blacklist_nodes:-$BLACKLIST_NODES}"
     local blacklist_farms="${cli_blacklist_farms:-$BLACKLIST_FARMS}"
     local whitelist_farms="${cli_whitelist_farms:-$WHITELIST_FARMS}"
@@ -56,6 +68,12 @@ apply_node_filters() {
     local min_uptime="${cli_min_uptime:-$MIN_UPTIME_DAYS}"
 
     # Convert comma-separated strings to arrays (filter out empty values)
+    IFS=',' read -ra temp_nodes <<< "$whitelist_nodes"
+    whitelist_nodes_array=()
+    for node in "${temp_nodes[@]}"; do
+        [[ -n "$node" ]] && whitelist_nodes_array+=("$node")
+    done
+
     IFS=',' read -ra temp_nodes <<< "$blacklist_nodes"
     blacklist_nodes_array=()
     for node in "${temp_nodes[@]}"; do
@@ -75,9 +93,16 @@ apply_node_filters() {
     done
 
     # Convert arrays to JSON for jq (handle empty arrays properly)
+    local whitelist_nodes_json
     local blacklist_nodes_json
     local blacklist_farms_json
     local whitelist_farms_json
+
+    if [ ${#whitelist_nodes_array[@]} -eq 0 ]; then
+        whitelist_nodes_json="[]"
+    else
+        whitelist_nodes_json="$(printf '%s\n' "${whitelist_nodes_array[@]}" | jq -R . | jq -s .)"
+    fi
 
     if [ ${#blacklist_nodes_array[@]} -eq 0 ]; then
         blacklist_nodes_json="[]"
@@ -101,18 +126,22 @@ apply_node_filters() {
     local filtered_nodes=$(echo "$nodes_json" | jq -r '
         [.[] | select(.healthy == true and .dedicated == false)] |
         map(
-            # Apply blacklist filters
+            # Apply whitelist logic:
+            # - If whitelist_nodes specified: node MUST be in whitelist_nodes
+            # - If NO whitelist_nodes but whitelist_farms specified: node can be any node from whitelist_farms
+            # - If neither specified: no node whitelist restriction
+            select(
+                ($whitelist_nodes_array | length > 0 and (.nodeId | tostring | IN($whitelist_nodes_array[] | tostring))) or
+                ($whitelist_nodes_array | length == 0 and $whitelist_farms_array | length == 0) or
+                ($whitelist_nodes_array | length == 0 and (.farmName | IN($whitelist_farms_array[])))
+            ) |
+
+            # Apply blacklist filters (takes precedence - overrides whitelist)
             select(
                 (.nodeId | tostring | IN($blacklist_nodes_array[] | tostring)) | not
             ) |
             select(
                 (.farmName | IN($blacklist_farms_array[])) | not
-            ) |
-
-            # Apply whitelist filters (if specified)
-            select(
-                ($whitelist_farms_array | length == 0) or
-                (.farmName | IN($whitelist_farms_array[]))
             ) |
 
             # Apply health thresholds
@@ -129,7 +158,8 @@ apply_node_filters() {
                 (.uptime / 86400 | floor) >= ($min_uptime | tonumber)
             )
         )
-    ' --argjson blacklist_nodes_array "$blacklist_nodes_json" \
+    ' --argjson whitelist_nodes_array "$whitelist_nodes_json" \
+      --argjson blacklist_nodes_array "$blacklist_nodes_json" \
       --argjson blacklist_farms_array "$blacklist_farms_json" \
       --argjson whitelist_farms_array "$whitelist_farms_json" \
       --arg max_cpu "$max_cpu" \
