@@ -132,7 +132,7 @@ apply_node_filters() {
             # - Node is in whitelist_nodes, OR
             # - Node is in any of the whitelist_farms
             select(
-                ($whitelist_nodes_array | length == 0 and $whitelist_farms_array | length == 0) or
+                ($whitelist_nodes_array == [] and $whitelist_farms_array == []) or
                 (.nodeId | tostring | IN($whitelist_nodes_array[] | tostring)) or
                 (.farmName | IN($whitelist_farms_array[]))
             ) |
