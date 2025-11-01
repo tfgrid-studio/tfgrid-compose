@@ -14,10 +14,12 @@ ensure_state_dir() {
     mkdir -p "$STATE_BASE_DIR"
 }
 
-# Get state directory for an app
+# Get state directory for an app (Docker-style ID only)
 get_app_state_dir() {
     local app_name="$1"
-    echo "$STATE_BASE_DIR/$app_name"
+    
+    # Always use deployment ID - no legacy fallback
+    echo "$STATE_BASE_DIR/$DEPLOYMENT_ID"
 }
 
 # Check if app is deployed

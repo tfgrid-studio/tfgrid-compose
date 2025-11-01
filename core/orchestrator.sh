@@ -5,10 +5,35 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 source "$SCRIPT_DIR/deployment-status.sh"
+source "$SCRIPT_DIR/deployment-id.sh"
 source "$SCRIPT_DIR/pattern-loader.sh"
 source "$SCRIPT_DIR/app-loader.sh"
 source "$SCRIPT_DIR/node-selector.sh"
 source "$SCRIPT_DIR/interactive-config.sh"
+
+# Get VM IP from deployment state
+get_vm_ip_from_state() {
+    # Try to get VM IP from various state files
+    if [ -f "$STATE_DIR/state.yaml" ]; then
+        # Check different possible IP field names
+        local vm_ip=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+        if [ -n "$vm_ip" ]; then
+            echo "$vm_ip"
+            return 0
+        fi
+        
+        # Try gateway_ip as fallback
+        vm_ip=$(grep "^gateway_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+        if [ -n "$vm_ip" ]; then
+            echo "$vm_ip"
+            return 0
+        fi
+    fi
+    
+    # Return empty if not found
+    echo ""
+    return 1
+}
 
 # Cleanup on deployment error
 cleanup_on_error() {
@@ -19,6 +44,11 @@ cleanup_on_error() {
     
     # Mark deployment as failed
     mark_deployment_failed "$app_name" "$error_message"
+    
+    # Unregister from Docker-style ID system if we had an ID
+    if [ -n "${DEPLOYMENT_ID:-}" ] && [ "${DEPLOYMENT_ID:-}" != "false" ]; then
+        unregister_deployment "$app_name" || true
+    fi
     
     # Don't clean if user wants to debug
     if [ "${TFGRID_DEBUG:-}" = "1" ]; then
@@ -35,6 +65,12 @@ cleanup_on_error() {
 deploy_app() {
     log_step "Starting deployment orchestration..."
     echo ""
+    
+    # Generate unique deployment ID (Docker-style)
+    if [ -z "${DEPLOYMENT_ID:-}" ]; then
+        export DEPLOYMENT_ID=$(generate_deployment_id)
+        log_info "Generated deployment ID: $DEPLOYMENT_ID"
+    fi
     
     # Mark deployment as deploying
     mark_deployment_deploying "$APP_NAME"
@@ -257,6 +293,10 @@ EOF
     echo ""
     log_success "🎉 Deployment complete!"
     echo ""
+    
+    # Register deployment in Docker-style ID system
+    local vm_ip=$(get_vm_ip_from_state)
+    register_deployment "$DEPLOYMENT_ID" "$APP_NAME" "$STATE_DIR" "$vm_ip"
     
     # Mark deployment as active
     mark_deployment_active "$APP_NAME"
@@ -710,6 +750,9 @@ destroy_deployment() {
     
     # Clear state
     state_clear
+    
+    # Unregister from Docker-style ID system
+    unregister_deployment "$APP_NAME"
     
     log_success "Deployment destroyed"
     return 0
