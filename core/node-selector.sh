@@ -126,17 +126,18 @@ apply_node_filters() {
     local filtered_nodes=$(echo "$nodes_json" | jq -r '
         [.[] | select(.healthy == true and .dedicated == false)] |
         map(
-            # Apply whitelist logic:
-            # - If whitelist_nodes specified: node MUST be in whitelist_nodes
-            # - If NO whitelist_nodes but whitelist_farms specified: node can be any node from whitelist_farms
-            # - If neither specified: no node whitelist restriction
+            # Apply whitelist logic (OR logic):
+            # Node allowed if:
+            # - No whitelist restrictions at all, OR
+            # - Node is in whitelist_nodes, OR
+            # - Node is in any of the whitelist_farms
             select(
-                ($whitelist_nodes_array | length > 0 and (.nodeId | tostring | IN($whitelist_nodes_array[] | tostring))) or
                 ($whitelist_nodes_array | length == 0 and $whitelist_farms_array | length == 0) or
-                ($whitelist_nodes_array | length == 0 and (.farmName | IN($whitelist_farms_array[])))
+                (.nodeId | tostring | IN($whitelist_nodes_array[] | tostring)) or
+                (.farmName | IN($whitelist_farms_array[]))
             ) |
 
-            # Apply blacklist filters (takes precedence - overrides whitelist)
+            # Apply blacklist filters (takes precedence - always overrides whitelist)
             select(
                 (.nodeId | tostring | IN($blacklist_nodes_array[] | tostring)) | not
             ) |
