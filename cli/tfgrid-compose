@@ -18,6 +18,7 @@ source "$DEPLOYER_ROOT/core/app-cache.sh"
 source "$DEPLOYER_ROOT/core/deployment-state.sh"
 source "$DEPLOYER_ROOT/core/deployment-status.sh"
 source "$DEPLOYER_ROOT/core/login.sh"
+source "$DEPLOYER_ROOT/core/deployment-id.sh"
 source "$DEPLOYER_ROOT/core/gitconfig.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
 source "$DEPLOYER_ROOT/core/node-browser.sh"
@@ -888,6 +889,76 @@ case "$COMMAND" in
         
         exit 0
         ;;
+    
+    ps)
+        # Docker-style deployment list
+        log_info "TFGrid Compose v$VERSION - Docker-style Deployment List"
+        echo ""
+        
+        list_deployments_docker_style
+        exit $?
+        ;;
+        
+    inspect)
+        # Docker-style deployment inspection
+        DEPLOYMENT_ID="${1:-}"
+        
+        if [ -z "$DEPLOYMENT_ID" ]; then
+            echo ""
+            echo "Usage: tfgrid-compose inspect <deployment-id>"
+            echo ""
+            echo "Example: tfgrid-compose inspect abc123def456"
+            echo ""
+            echo "Get deployment ID from: tfgrid-compose ps"
+            exit 1
+        fi
+        
+        log_info "TFGrid Compose v$VERSION - Deployment Inspection"
+        echo ""
+        
+        # Resolve deployment ID or app name to actual ID
+        if ! RESOLVED_ID=$(resolve_deployment "$DEPLOYMENT_ID"); then
+            log_error "Deployment not found: $DEPLOYMENT_ID"
+            exit 1
+        fi
+        
+        echo "Deployment Details:"
+        echo "==================="
+        echo ""
+        
+        # Get deployment details
+        DEPLOYMENT_DETAILS=$(get_deployment_by_id "$RESOLVED_ID")
+        
+        if [ -z "$DEPLOYMENT_DETAILS" ]; then
+            log_error "Deployment details not found for ID: $RESOLVED_ID"
+            exit 1
+        fi
+        
+        # Display deployment details
+        if command_exists yq; then
+            echo "$DEPLOYMENT_DETAILS" | yq eval '.' -
+        else
+            echo "$DEPLOYMENT_DETAILS"
+        fi
+        
+        echo ""
+        echo "State Directory: $HOME/.config/tfgrid-compose/state/$RESOLVED_ID"
+        echo ""
+        
+        # Show state.yaml if it exists
+        local state_file="$HOME/.config/tfgrid-compose/state/$RESOLVED_ID/state.yaml"
+        if [ -f "$state_file" ]; then
+            echo "State Configuration:"
+            echo "-------------------"
+            if command_exists yq; then
+                yq eval '.' "$state_file" 2>/dev/null || cat "$state_file"
+            else
+                cat "$state_file"
+            fi
+        fi
+        
+        exit 0
+        ;;
         
     down)
         # Down command
@@ -917,7 +988,7 @@ case "$COMMAND" in
                 log_success "Using app: $APP_NAME"
             else
                 # Download from registry
-                REPO_URL=$(get_app_repo_url "$APP_NAME")
+                REPO_URL=$(get_app_repo "$APP_NAME")
                 if [ $? -ne 0 ]; then
                     log_error "App not found in registry: $APP_NAME"
                     exit 1
