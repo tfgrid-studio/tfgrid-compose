@@ -226,6 +226,53 @@ validate_terraform_state() {
     return 0
 }
 
+# Generate unique deployment name for app
+generate_unique_deployment_name() {
+    local base_name="$1"
+    local custom_suffix="$2"
+    
+    # If custom suffix provided, create custom name
+    if [ -n "$custom_suffix" ]; then
+        local custom_name="${base_name}-${custom_suffix}"
+        # Validate it doesn't already exist
+        if ! is_app_deployed "$custom_name"; then
+            echo "$custom_name"
+            return 0
+        else
+            log_error "Deployment name '$custom_name' already exists"
+            log_info "Try a different name or use: tfgrid-compose down $custom_name"
+            exit 1
+        fi
+    fi
+    
+    # Auto-generate numeric suffix
+    local counter=1
+    local deployment_name="${base_name}"
+    
+    # Find highest existing numeric suffix
+    for state_dir in "$STATE_BASE_DIR"/*; do
+        if [ -d "$state_dir" ]; then
+            local name=$(basename "$state_dir")
+            # Check if name matches pattern base_name-N
+            if [[ "$name" =~ ^${base_name}-([0-9]+)$ ]]; then
+                local num="${BASH_REMATCH[1]}"
+                if [ "$num" -gt "$counter" ]; then
+                    counter=$((num + 1))
+                fi
+            elif [ "$name" = "$base_name" ]; then
+                # Base name exists, start counter at 2
+                counter=2
+            fi
+        fi
+    done
+    
+    if [ $counter -gt 1 ]; then
+        deployment_name="${base_name}-${counter}"
+    fi
+    
+    echo "$deployment_name"
+}
+
 # Clean stale Terraform state
 clean_stale_state() {
     local app_name="$1"
@@ -273,3 +320,6 @@ is_deployment_healthy() {
     
     return 0
 }
+
+# Export functions for use in CLI
+export -f generate_unique_deployment_name

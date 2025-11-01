@@ -283,6 +283,7 @@ show_help() {
     echo -e "      ${GREEN}--no-refresh${NC}      Skip cache refresh (use with --force for testing)"
     echo -e "      ${GREEN}--interactive${NC}, -i Interactive node/resource selection"
     echo -e "      ${GREEN}--node${NC} <id>       Deploy to specific node ID"
+    echo -e "      ${GREEN}--name${NC} <suffix>   Custom deployment name suffix"
     echo -e "      ${GREEN}--blacklist-node${NC} <ids> Exclude specific nodes (e.g., '617,892')"
     echo -e "      ${GREEN}--blacklist-farm${NC} <names> Exclude specific farm NAMES"
     echo -e "      ${GREEN}--whitelist-nodes${NC} <names> Only use specific nodes"

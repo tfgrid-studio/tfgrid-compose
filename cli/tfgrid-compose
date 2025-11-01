@@ -620,6 +620,14 @@ case "$COMMAND" in
                             CUSTOM_NODE="${1#--node=}"
                             shift
                             ;;
+                        --name)
+                            DEPLOYMENT_NAME="$2"
+                            shift 2
+                            ;;
+                        --name=*)
+                            DEPLOYMENT_NAME="${1#--name=}"
+                            shift
+                            ;;
                         --cpu)
                             CUSTOM_CPU="$2"
                             shift 2
@@ -736,10 +744,18 @@ case "$COMMAND" in
                     DESTROYED_DEPLOYMENT=true
                     echo ""
                 else
-                    log_error "App '$APP_NAME' is already deployed"
-                    log_info "Destroy first: tfgrid-compose down $APP_NAME"
-                    log_info "Or force redeploy: tfgrid-compose up $APP_NAME --force"
-                    exit 1
+                    # Auto-generate unique deployment name instead of erroring
+                    UNIQUE_APP_NAME=$(generate_unique_deployment_name "$APP_NAME" "$DEPLOYMENT_NAME")
+                    
+                    if [ "$UNIQUE_APP_NAME" != "$APP_NAME" ]; then
+                        log_info "Using deployment name: $UNIQUE_APP_NAME"
+                        log_info "First deployment: $APP_NAME"
+                        log_info "This deployment: $UNIQUE_APP_NAME"
+                    fi
+                    
+                    # Update APP_NAME for rest of deployment
+                    APP_NAME="$UNIQUE_APP_NAME"
+                    export APP_NAME
                 fi
             else
                 # Deployment exists but unhealthy - clean stale state
