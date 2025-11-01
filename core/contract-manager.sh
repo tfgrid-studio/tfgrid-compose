@@ -92,3 +92,47 @@ contracts_delete() {
     log_success "Contract $contract_id deleted successfully"
     return 0
 }
+
+# Simple wrapper for tfcmd cancel all contracts
+contracts_cancel_all() {
+    log_warning "This will cancel ALL contracts associated with your mnemonic!"
+    echo ""
+    echo "Contracts that will be cancelled:"
+    echo "  • All active node contracts"
+    echo "  • All active rent contracts"
+    echo "  • All active deployment contracts"
+    echo ""
+    
+    read -p "Are you sure you want to cancel ALL contracts? (yes/no): " -r
+    if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+        log_info "Cancelled by user"
+        return 0
+    fi
+    
+    if ! check_tfcmd_installed; then
+        log_error "tfcmd not installed"
+        log_info "Install tfcmd with: tfgrid-compose tfcmd-install"
+        return 1
+    fi
+    
+    # Load credentials and use mnemonic directly
+    if ! load_tfgrid_credentials; then
+        return 1
+    fi
+    
+    log_info "Cancelling ALL contracts via tfcmd..."
+    echo ""
+    echo "⚠️  This action cannot be undone!"
+    echo ""
+    
+    # Call tfcmd to cancel all contracts using mnemonic
+    if ! echo "$TFGRID_MNEMONIC" | tfcmd cancel contracts -a; then
+        log_error "Failed to cancel contracts via tfcmd"
+        return 1
+    fi
+    
+    log_success "All contracts cancelled successfully"
+    echo ""
+    log_info "Note: This may take a few minutes to complete on the grid"
+    return 0
+}

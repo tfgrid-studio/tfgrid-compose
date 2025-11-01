@@ -2682,13 +2682,18 @@ EOF
                 
                 contracts_delete "$CONTRACT_ID"
                 ;;
+            cancel-all)
+                # Cancel all contracts using simple wrapper
+                contracts_cancel_all
+                ;;
             *)
                 log_error "Unknown contracts subcommand: $SUBCOMMAND"
                 echo ""
                 echo "Available subcommands:"
-                echo "  list     List all contracts (via tfcmd)"
-                echo "  show     Show contract details (coming soon)"
-                echo "  delete   Delete single contract (wraps tfcmd cancel)"
+                echo "  list       List all contracts (via tfcmd)"
+                echo "  show       Show contract details (coming soon)"
+                echo "  delete     Delete single contract (wraps tfcmd cancel)"
+                echo "  cancel-all Cancel ALL contracts (⚠️ DANGEROUS!)"
                 echo ""
                 echo "First time setup:"
                 echo "  1. tfgrid-compose tfcmd-install    # Install tfcmd"
