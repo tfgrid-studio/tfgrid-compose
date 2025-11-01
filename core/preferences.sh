@@ -142,81 +142,25 @@ yaml_update_value() {
     
     case "$section" in
         "whitelist.nodes")
-            awk -v value="$value" '
-                /^whitelist:/,/^blacklist:/ {
-                    if (/^  nodes:/) {
-                        print "  nodes: [" value "]"
-                        next
-                    }
-                }
-                {print}
-            ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+            sed -i "/^whitelist:/,/^  farms:/ s/^  nodes: \[.*\]/  nodes: [$value]/" "$file"
             ;;
         "whitelist.farms")
-            awk -v value="$value" '
-                /^whitelist:/,/^blacklist:/ {
-                    if (/^  farms:/) {
-                        print "  farms: [" value "]"
-                        next
-                    }
-                }
-                {print}
-            ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+            sed -i "/^whitelist:/,/^blacklist:/ s/^  farms: \[.*\]/  farms: [$value]/" "$file"
             ;;
         "blacklist.nodes")
-            awk -v value="$value" '
-                /^blacklist:/,/^preferences:/ {
-                    if (/^  nodes:/) {
-                        print "  nodes: [" value "]"
-                        next
-                    }
-                }
-                {print}
-            ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+            sed -i "/^blacklist:/,/^  farms:/ s/^  nodes: \[.*\]/  nodes: [$value]/" "$file"
             ;;
         "blacklist.farms")
-            awk -v value="$value" '
-                /^blacklist:/,/^preferences:/ {
-                    if (/^  farms:/) {
-                        print "  farms: [" value "]"
-                        next
-                    }
-                }
-                {print}
-            ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+            sed -i "/^blacklist:/,/^preferences:/ s/^  farms: \[.*\]/  farms: [$value]/" "$file"
             ;;
         "preferences.max_cpu_usage")
-            awk -v value="$value" '
-                /^preferences:/,/^metadata:/ {
-                    if (/^  max_cpu_usage:/) {
-                        print "  max_cpu_usage: " value
-                        next
-                    }
-                }
-                {print}
-            ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+            sed -i "/^preferences:/,/^  max_disk_usage:/ s/^  max_cpu_usage: .*/  max_cpu_usage: $value/" "$file"
             ;;
         "preferences.max_disk_usage")
-            awk -v value="$value" '
-                /^preferences:/,/^metadata:/ {
-                    if (/^  max_disk_usage:/) {
-                        print "  max_disk_usage: " value
-                        next
-                    }
-                }
-                {print}
-            ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+            sed -i "/^preferences:/,/^  min_uptime_days:/ s/^  max_disk_usage: .*/  max_disk_usage: $value/" "$file"
             ;;
         "preferences.min_uptime_days")
-            awk -v value="$value" '
-                /^preferences:/,/^metadata:/ {
-                    if (/^  min_uptime_days:/) {
-                        print "  min_uptime_days: " value
-                        next
-                    }
-                }
-                {print}
-            ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+            sed -i "/^preferences:/,/^metadata:/ s/^  min_uptime_days: .*/  min_uptime_days: $value/" "$file"
             ;;
     esac
     
@@ -253,21 +197,23 @@ get_blacklist_farms() {
 
 # Get preference value
 get_preference() {
-    init_preferences
     local pref_name="$1"
     
     case "$pref_name" in
         "max_cpu_usage")
-            local value=$(yaml_get_value "$PREFERENCES_FILE" "preferences.max_cpu_usage")
-            echo "${value:-80}"
+            echo "$(yaml_get_value "$PREFERENCES_FILE" "preferences.max_cpu_usage")"
             ;;
         "max_disk_usage")
-            local value=$(yaml_get_value "$PREFERENCES_FILE" "preferences.max_disk_usage")
-            echo "${value:-60}"
+            echo "$(yaml_get_value "$PREFERENCES_FILE" "preferences.max_disk_usage")"
             ;;
         "min_uptime_days")
-            local value=$(yaml_get_value "$PREFERENCES_FILE" "preferences.min_uptime_days")
-            echo "${value:-3}"
+            echo "$(yaml_get_value "$PREFERENCES_FILE" "preferences.min_uptime_days")"
+            ;;
+        "created")
+            echo "$(yaml_get_value "$PREFERENCES_FILE" "metadata.created")"
+            ;;
+        "last_updated")
+            echo "$(yaml_get_value "$PREFERENCES_FILE" "metadata.last_updated")"
             ;;
         *)
             echo ""
@@ -303,18 +249,22 @@ update_whitelist_nodes() {
     log_success "Updated whitelist nodes: $nodes"
 }
 
-# Update whitelist farms
+# Update whitelist farms (case-insensitive, names only)
 update_whitelist_farms() {
-    local farms="$1"
+    local farms_input="$1"
     
-    if [ -z "$farms" ]; then
+    if [ -z "$farms_input" ]; then
         log_error "No farm names provided"
         return 1
     fi
     
     init_preferences
-    yaml_update_value "$PREFERENCES_FILE" "whitelist.farms" "" "$farms"
-    log_success "Updated whitelist farms: $farms"
+    
+    # Just use the input as-is for farm names (they should already be comma-separated)
+    local normalized_farms=$(echo "$farms_input" | tr -s ' ' | sed 's/ *, */,/g' | sed 's/^,//' | sed 's/,$//')
+    
+    yaml_update_value "$PREFERENCES_FILE" "whitelist.farms" "" "$normalized_farms"
+    log_success "Updated whitelist farms: $farms_input"
 }
 
 # Update blacklist nodes
@@ -345,18 +295,22 @@ update_blacklist_nodes() {
     log_success "Updated blacklist nodes: $nodes"
 }
 
-# Update blacklist farms
+# Update blacklist farms (case-insensitive, names only)
 update_blacklist_farms() {
-    local farms="$1"
+    local farms_input="$1"
     
-    if [ -z "$farms" ]; then
+    if [ -z "$farms_input" ]; then
         log_error "No farm names provided"
         return 1
     fi
     
     init_preferences
-    yaml_update_value "$PREFERENCES_FILE" "blacklist.farms" "" "$farms"
-    log_success "Updated blacklist farms: $farms"
+    
+    # Just use the input as-is for farm names (they should already be comma-separated)
+    local normalized_farms=$(echo "$farms_input" | tr -s ' ' | sed 's/ *, */,/g' | sed 's/^,//' | sed 's/,$//')
+    
+    yaml_update_value "$PREFERENCES_FILE" "blacklist.farms" "" "$normalized_farms"
+    log_success "Updated blacklist farms: $farms_input"
 }
 
 # Update general preference
@@ -387,7 +341,7 @@ update_preference() {
     
     init_preferences
     yaml_update_value "$PREFERENCES_FILE" "preferences.$pref_name" "" "$value"
-    log_success "Updated $pref_name: $value"
+    log_success "Updated preference $pref_name: $value"
 }
 
 # Clear whitelist
@@ -408,20 +362,19 @@ clear_blacklist() {
 
 # Clear all preferences
 clear_all_preferences() {
-    if [ ! -f "$PREFERENCES_FILE" ]; then
-        log_info "No preferences file found"
-        return 0
-    fi
-    
-    rm "$PREFERENCES_FILE"
     init_preferences
-    log_success "Cleared all preferences"
+    yaml_update_value "$PREFERENCES_FILE" "whitelist.nodes" "" ""
+    yaml_update_value "$PREFERENCES_FILE" "whitelist.farms" "" ""
+    yaml_update_value "$PREFERENCES_FILE" "blacklist.nodes" "" ""
+    yaml_update_value "$PREFERENCES_FILE" "blacklist.farms" "" ""
+    yaml_update_value "$PREFERENCES_FILE" "preferences.max_cpu_usage" "" "80"
+    yaml_update_value "$PREFERENCES_FILE" "preferences.max_disk_usage" "" "60"
+    yaml_update_value "$PREFERENCES_FILE" "preferences.min_uptime_days" "" "3"
+    log_success "Cleared all preferences (restored defaults)"
 }
 
-# Show current preferences
+# Show all preferences
 show_preferences() {
-    init_preferences
-    
     if [ ! -f "$PREFERENCES_FILE" ]; then
         log_info "No preferences file found"
         return
@@ -433,148 +386,101 @@ show_preferences() {
     echo "File: $PREFERENCES_FILE"
     echo ""
     
-    # Show whitelist
+    echo "📋 Whitelist:"
     local wl_nodes=$(get_whitelist_nodes)
     local wl_farms=$(get_whitelist_farms)
-    
-    echo "📋 Whitelist:"
-    if [ -n "$wl_nodes" ]; then
-        echo "  Nodes: $wl_nodes"
-    else
-        echo "  Nodes: (none)"
-    fi
-    
-    if [ -n "$wl_farms" ]; then
-        echo "  Farms: $wl_farms"
-    else
-        echo "  Farms: (none)"
-    fi
-    
-    # Show blacklist
-    local bl_nodes=$(get_blacklist_nodes)
-    local bl_farms=$(get_blacklist_farms)
+    echo "  Nodes: ${wl_nodes:-none}"
+    echo "  Farms: ${wl_farms:-none}"
     
     echo ""
     echo "🚫 Blacklist:"
-    if [ -n "$bl_nodes" ]; then
-        echo "  Nodes: $bl_nodes"
-    else
-        echo "  Nodes: (none)"
-    fi
-    
-    if [ -n "$bl_farms" ]; then
-        echo "  Farms: $bl_farms"
-    else
-        echo "  Farms: (none)"
-    fi
-    
-    # Show general preferences
-    local cpu=$(get_preference "max_cpu_usage")
-    local disk=$(get_preference "max_disk_usage") 
-    local uptime=$(get_preference "min_uptime_days")
+    local bl_nodes=$(get_blacklist_nodes)
+    local bl_farms=$(get_blacklist_farms)
+    echo "  Nodes: ${bl_nodes:-none}"
+    echo "  Farms: ${bl_farms:-none}"
     
     echo ""
     echo "⚙️  General Preferences:"
-    echo "  Max CPU Usage: ${cpu}%"
-    echo "  Max Disk Usage: ${disk}%"
-    echo "  Min Uptime: ${uptime} days"
-    
-    # Show metadata
-    local created=$(yaml_get_value "$PREFERENCES_FILE" "metadata.created")
-    local updated=$(yaml_get_value "$PREFERENCES_FILE" "metadata.last_updated")
+    local max_cpu=$(get_preference "max_cpu_usage")
+    local max_disk=$(get_preference "max_disk_usage")
+    local min_uptime=$(get_preference "min_uptime_days")
+    echo "  Max CPU Usage: ${max_cpu:-80}%"
+    echo "  Max Disk Usage: ${max_disk:-60}%"
+    echo "  Min Uptime: ${min_uptime:-3} days"
     
     echo ""
     echo "📅 Metadata:"
+    local created=$(get_preference "created")
+    local last_updated=$(get_preference "last_updated")
     echo "  Created: $created"
-    echo "  Last Updated: $updated"
+    echo "  Last Updated: $last_updated"
+    
     echo ""
 }
 
-# Interactive setup for whitelist/blacklist
+# Interactive setup for preferences
 interactive_setup() {
     echo ""
-    echo "🎯 TFGrid Compose Preferences Setup"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo ""
-    
-    # Whitelist setup
-    echo "📋 WHITELIST (Preferred nodes/farms):"
+    echo "🎯 TFGrid Compose Preferences - Interactive Setup"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     
     local wl_nodes=$(get_whitelist_nodes)
     local wl_farms=$(get_whitelist_farms)
-    
-    echo "Current whitelist nodes: ${wl_nodes:-none}"
-    read -p "Enter node IDs to whitelist (comma-separated, or press Enter to keep current): " new_wl_nodes
-    new_wl_nodes=${new_wl_nodes:-$wl_nodes}
-    
-    echo ""
-    echo "Current whitelist farms: ${wl_farms:-none}"
-    read -p "Enter farm names to whitelist (comma-separated, or press Enter to keep current): " new_wl_farms
-    new_wl_farms=${new_wl_farms:-$wl_farms}
-    
-    # Blacklist setup
-    echo ""
-    echo "🚫 BLACKLIST (Nodes/farms to avoid):"
-    echo ""
-    
     local bl_nodes=$(get_blacklist_nodes)
     local bl_farms=$(get_blacklist_farms)
     
+    echo "📋 WHITELIST (Preferred nodes/farms):"
+    echo ""
+    echo "Current whitelist nodes: ${wl_nodes:-none}"
+    read -p "Enter node IDs to whitelist (comma-separated): " new_wl_nodes
+    
+    echo ""
+    echo "Current whitelist farms: ${wl_farms:-none}"
+    read -p "Enter farm names to whitelist (comma-separated): " new_wl_farms
+    new_wl_farms=${new_wl_farms:-$wl_farms}
+    
+    echo ""
+    echo "🚫 BLACKLIST (Nodes/farms to avoid):"
+    echo ""
     echo "Current blacklist nodes: ${bl_nodes:-none}"
-    read -p "Enter node IDs to blacklist (comma-separated, or press Enter to keep current): " new_bl_nodes
-    new_bl_nodes=${new_bl_nodes:-$bl_nodes}
+    read -p "Enter node IDs to blacklist (comma-separated): " new_bl_nodes
     
     echo ""
     echo "Current blacklist farms: ${bl_farms:-none}"
     read -p "Enter farm names to blacklist (comma-separated, or press Enter to keep current): " new_bl_farms
     new_bl_farms=${new_bl_farms:-$bl_farms}
     
-    # General preferences
     echo ""
     echo "⚙️  GENERAL PREFERENCES:"
     echo ""
-    
     local current_cpu=$(get_preference "max_cpu_usage")
     local current_disk=$(get_preference "max_disk_usage")
     local current_uptime=$(get_preference "min_uptime_days")
     
-    echo "Current max CPU usage: ${current_cpu}%"
-    read -p "Max CPU usage % (0-100) [${current_cpu}]: " new_cpu
+    read -p "Max CPU usage % [$current_cpu]: " new_cpu
     new_cpu=${new_cpu:-$current_cpu}
     
-    echo ""
-    echo "Current max disk usage: ${current_disk}%"
-    read -p "Max disk usage % (0-100) [${current_disk}]: " new_disk
+    read -p "Max disk usage % [$current_disk]: " new_disk
     new_disk=${new_disk:-$current_disk}
     
-    echo ""
-    echo "Current min uptime: ${current_uptime} days"
-    read -p "Min uptime in days [${current_uptime}]: " new_uptime
+    read -p "Min uptime days [$current_uptime]: " new_uptime
     new_uptime=${new_uptime:-$current_uptime}
     
     # Apply changes
-    echo ""
-    echo "💾 Saving preferences..."
-    
     [ -n "$new_wl_nodes" ] && update_whitelist_nodes "$new_wl_nodes"
     [ -n "$new_wl_farms" ] && update_whitelist_farms "$new_wl_farms"
     [ -n "$new_bl_nodes" ] && update_blacklist_nodes "$new_bl_nodes"
     [ -n "$new_bl_farms" ] && update_blacklist_farms "$new_bl_farms"
-    
     [ -n "$new_cpu" ] && update_preference "max_cpu_usage" "$new_cpu"
     [ -n "$new_disk" ] && update_preference "max_disk_usage" "$new_disk"
     [ -n "$new_uptime" ] && update_preference "min_uptime_days" "$new_uptime"
     
     echo ""
-    log_success "Preferences saved successfully!"
-    echo ""
-    
-    # Show updated preferences
     show_preferences
 }
 
-# Export preferences for deployment (set environment variables)
+# Export preferences as environment variables for deployment
 export_for_deployment() {
     init_preferences
     
@@ -583,143 +489,153 @@ export_for_deployment() {
     local wl_farms=$(get_whitelist_farms)
     local bl_nodes=$(get_blacklist_nodes)
     local bl_farms=$(get_blacklist_farms)
+    local max_cpu=$(get_preference "max_cpu_usage")
+    local max_disk=$(get_preference "max_disk_usage")
+    local min_uptime=$(get_preference "min_uptime_days")
     
-    # Only export if not already set by command line
-    [ -z "${CUSTOM_WHITELIST_NODES:-}" ] && [ -n "$wl_nodes" ] && export CUSTOM_WHITELIST_NODES="$wl_nodes"
-    [ -z "${CUSTOM_WHITELIST_FARMS:-}" ] && [ -n "$wl_farms" ] && export CUSTOM_WHITELIST_FARMS="$wl_farms"
-    [ -z "${CUSTOM_BLACKLIST_NODES:-}" ] && [ -n "$bl_nodes" ] && export CUSTOM_BLACKLIST_NODES="$bl_nodes"
-    [ -z "${CUSTOM_BLACKLIST_FARMS:-}" ] && [ -n "$bl_farms" ] && export CUSTOM_BLACKLIST_FARMS="$bl_farms"
-    
-    # Export general preferences
-    local cpu=$(get_preference "max_cpu_usage")
-    local disk=$(get_preference "max_disk_usage")
-    local uptime=$(get_preference "min_uptime_days")
-    
-    [ -z "${CUSTOM_MAX_CPU_USAGE:-}" ] && [ -n "$cpu" ] && export CUSTOM_MAX_CPU_USAGE="$cpu"
-    [ -z "${CUSTOM_MAX_DISK_USAGE:-}" ] && [ -n "$disk" ] && export CUSTOM_MAX_DISK_USAGE="$disk"
-    [ -z "${CUSTOM_MIN_UPTIME_DAYS:-}" ] && [ -n "$uptime" ] && export CUSTOM_MIN_UPTIME_DAYS="$uptime"
-    
-    if [ -n "$wl_nodes" ] || [ -n "$bl_nodes" ] || [ -n "$wl_farms" ] || [ -n "$bl_farms" ]; then
-        log_info "Loaded preferences from $PREFERENCES_FILE"
-    fi
+    # Export as CUSTOM_* variables for the deployment system
+    export CUSTOM_WHITELIST_NODES="$wl_nodes"
+    export CUSTOM_WHITELIST_FARMS="$wl_farms"
+    export CUSTOM_BLACKLIST_NODES="$bl_nodes"
+    export CUSTOM_BLACKLIST_FARMS="$bl_farms"
+    export CUSTOM_MAX_CPU_USAGE="$max_cpu"
+    export CUSTOM_MAX_DISK_USAGE="$max_disk"
+    export CUSTOM_MIN_UPTIME_DAYS="$min_uptime"
 }
 
-# CLI command handlers
+# Whitelist command handler
 cmd_whitelist() {
     local subcommand="$1"
     shift || true
     
     case "$subcommand" in
-        "nodes")
-            if [ "$1" = "--status" ]; then
-                show_whitelist_status "nodes"
-            elif [ "$1" = "--clear" ]; then
-                clear_whitelist_nodes
-            else
-                if [ -z "$1" ]; then
+        "nodes"|"n")
+            # Whitelist nodes
+            if [ -z "$1" ]; then
+                if [ "$1" = "--status" ]; then
+                    show_whitelist_status "nodes"
+                elif [ "$1" = "--clear" ]; then
+                    init_preferences
+                    yaml_update_value "$PREFERENCES_FILE" "whitelist.nodes" ""
+                    log_success "Cleared whitelist nodes"
+                else
                     log_error "Usage: tfgrid-compose whitelist nodes <node_ids> | --status | --clear"
                     exit 1
                 fi
+            else
                 update_whitelist_nodes "$1"
             fi
             ;;
-        "farms")
-            if [ "$1" = "--status" ]; then
-                show_whitelist_status "farms"
-            elif [ "$1" = "--clear" ]; then
-                clear_whitelist_farms
-            else
-                if [ -z "$1" ]; then
+        "farms"|"f")
+            # Whitelist farms
+            if [ -z "$1" ]; then
+                if [ "$1" = "--status" ]; then
+                    show_whitelist_status "farms"
+                elif [ "$1" = "--clear" ]; then
+                    init_preferences
+                    yaml_update_value "$PREFERENCES_FILE" "whitelist.farms" ""
+                    log_success "Cleared whitelist farms"
+                else
                     log_error "Usage: tfgrid-compose whitelist farms <farm_names> | --status | --clear"
                     exit 1
                 fi
+            else
                 update_whitelist_farms "$1"
             fi
             ;;
-        "--status")
+        "--status"|"status"|"-s")
+            # Show whitelist status
             show_whitelist_status "all"
             ;;
-        "--clear")
+        "--clear"|"clear"|"-c")
+            # Clear whitelist
             clear_whitelist
             ;;
-        "")
-            # Interactive mode
-            interactive_setup_whitelist
-            ;;
         *)
-            log_error "Unknown whitelist subcommand: $subcommand"
-            log_info "Usage: tfgrid-compose whitelist [nodes|farm] [--status|--clear] | <values>"
-            exit 1
+            # No subcommand - interactive setup
+            interactive_setup_whitelist
             ;;
     esac
 }
 
+# Blacklist command handler
 cmd_blacklist() {
     local subcommand="$1"
     shift || true
     
     case "$subcommand" in
-        "nodes")
-            if [ "$1" = "--status" ]; then
-                show_blacklist_status "nodes"
-            elif [ "$1" = "--clear" ]; then
-                clear_blacklist_nodes
-            else
-                if [ -z "$1" ]; then
+        "nodes"|"n")
+            # Blacklist nodes
+            if [ -z "$1" ]; then
+                if [ "$1" = "--status" ]; then
+                    show_blacklist_status "nodes"
+                elif [ "$1" = "--clear" ]; then
+                    init_preferences
+                    yaml_update_value "$PREFERENCES_FILE" "blacklist.nodes" ""
+                    log_success "Cleared blacklist nodes"
+                else
                     log_error "Usage: tfgrid-compose blacklist nodes <node_ids> | --status | --clear"
                     exit 1
                 fi
+            else
                 update_blacklist_nodes "$1"
             fi
             ;;
-        "farms")
-            if [ "$1" = "--status" ]; then
-                show_blacklist_status "farms"
-            elif [ "$1" = "--clear" ]; then
-                clear_blacklist_farms
-            else
-                if [ -z "$1" ]; then
+        "farms"|"f")
+            # Blacklist farms
+            if [ -z "$1" ]; then
+                if [ "$1" = "--status" ]; then
+                    show_blacklist_status "farms"
+                elif [ "$1" = "--clear" ]; then
+                    init_preferences
+                    yaml_update_value "$PREFERENCES_FILE" "blacklist.farms" ""
+                    log_success "Cleared blacklist farms"
+                else
                     log_error "Usage: tfgrid-compose blacklist farms <farm_names> | --status | --clear"
                     exit 1
                 fi
+            else
                 update_blacklist_farms "$1"
             fi
             ;;
-        "--status")
+        "--status"|"status"|"-s")
+            # Show blacklist status
             show_blacklist_status "all"
             ;;
-        "--clear")
+        "--clear"|"clear"|"-c")
+            # Clear blacklist
             clear_blacklist
             ;;
-        "")
-            # Interactive mode
-            interactive_setup_blacklist
-            ;;
         *)
-            log_error "Unknown blacklist subcommand: $subcommand"
-            log_info "Usage: tfgrid-compose blacklist [nodes|farm] [--status|--clear] | <values>"
-            exit 1
+            # No subcommand - interactive setup
+            interactive_setup_blacklist
             ;;
     esac
 }
 
+# Preferences command handler
 cmd_preferences() {
     local option="$1"
     
     case "$option" in
-        "--status")
+        "--status"|"status"|"-s"|"")
+            # Show all preferences
             show_preferences
             ;;
-        "--clear")
-            clear_all_preferences
-            ;;
-        "")
-            # Interactive setup for all preferences
-            interactive_setup
+        "--clear"|"clear"|"-c")
+            # Clear all preferences
+            echo ""
+            echo "⚠️  This will clear ALL preferences and restore defaults!"
+            read -p "Are you sure? (yes/no): " confirm
+            if [ "$confirm" = "yes" ]; then
+                clear_all_preferences
+            else
+                log_info "Cancelled - preferences unchanged"
+            fi
             ;;
         *)
-            log_error "Unknown preferences option: $option"
-            log_info "Usage: tfgrid-compose preferences [--status|--clear]"
+            log_error "Unknown option: $option"
+            log_info "Usage: tfgrid-compose preferences [--status | --clear]"
             exit 1
             ;;
     esac
@@ -819,6 +735,7 @@ interactive_setup_whitelist() {
     echo ""
     echo "Current whitelist farms: ${wl_farms:-none}"
     read -p "Enter farm names to whitelist (comma-separated): " new_wl_farms
+    new_wl_farms=${new_wl_farms:-$wl_farms}
     
     [ -n "$new_wl_nodes" ] && update_whitelist_nodes "$new_wl_nodes"
     [ -n "$new_wl_farms" ] && update_whitelist_farms "$new_wl_farms"
@@ -842,7 +759,8 @@ interactive_setup_blacklist() {
     
     echo ""
     echo "Current blacklist farms: ${bl_farms:-none}"
-    read -p "Enter farm names to blacklist (comma-separated): " new_bl_farms
+    read -p "Enter farm names to blacklist (comma-separated, or press Enter to keep current): " new_bl_farms
+    new_bl_farms=${new_bl_farms:-$bl_farms}
     
     [ -n "$new_bl_nodes" ] && update_blacklist_nodes "$new_bl_nodes"
     [ -n "$new_bl_farms" ] && update_blacklist_farms "$new_bl_farms"
