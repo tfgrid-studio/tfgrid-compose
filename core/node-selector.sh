@@ -7,6 +7,133 @@ source "$SCRIPT_DIR/common.sh"
 
 GRIDPROXY_URL="https://gridproxy.grid.tf"
 
+# Farm cache for case-insensitive and ID-based lookup
+FARM_CACHE_FILE="$HOME/.config/tfgrid-compose/farm-cache.json"
+FARM_CACHE_AGE=3600  # 1 hour
+
+# Fetch and cache farm information from GridProxy
+fetch_farm_cache() {
+    local cache_age=0
+    if [ -f "$FARM_CACHE_FILE" ]; then
+        local file_time=$(stat -c %Y "$FARM_CACHE_FILE" 2>/dev/null || echo 0)
+        local current_time=$(date +%s)
+        cache_age=$((current_time - file_time))
+    fi
+    
+    # Use cached data if fresh enough
+    if [ "$cache_age" -lt "$FARM_CACHE_AGE" ] && [ -f "$FARM_CACHE_FILE" ]; then
+        return 0
+    fi
+    
+    log_info "Updating farm cache from GridProxy..."
+    
+    # Fetch farms and create cache
+    local farms_data=$(curl -s "$GRIDPROXY_URL/farms?size=200" 2>/dev/null)
+    if [ $? -eq 0 ] && [ -n "$farms_data" ] && [ "$farms_data" != "null" ]; then
+        echo "$farms_data" > "$FARM_CACHE_FILE"
+        log_success "Farm cache updated"
+    else
+        log_warning "Failed to fetch farm data from GridProxy"
+        # Keep old cache if exists, otherwise create empty cache
+        if [ ! -f "$FARM_CACHE_FILE" ]; then
+            echo '[]' > "$FARM_CACHE_FILE"
+        fi
+    fi
+}
+
+# Get farm name by ID (case-insensitive)
+get_farm_name_by_id() {
+    local farm_id="$1"
+    fetch_farm_cache
+    
+    # Search by farm_id (exact match since IDs are numeric)
+    local farm_name=$(jq -r ".[] | select(.farmId == $farm_id) | .name" "$FARM_CACHE_FILE" 2>/dev/null | head -1)
+    
+    if [ -n "$farm_name" ] && [ "$farm_name" != "null" ]; then
+        echo "$farm_name"
+        return 0
+    fi
+    
+    # If not found by ID, try treating input as name
+    echo "$farm_id"
+}
+
+# Get farm ID by name (case-insensitive)
+get_farm_id_by_name() {
+    local farm_name="$1"
+    fetch_farm_cache
+    
+    # Case-insensitive search by name
+    local farm_id=$(jq -r ".[] | select(.name | ascii_downcase == \"$(echo "$farm_name" | tr '[:upper:]' '[:lower:]')\") | .farmId" "$FARM_CACHE_FILE" 2>/dev/null | head -1)
+    
+    if [ -n "$farm_id" ] && [ "$farm_id" != "null" ]; then
+        echo "$farm_id"
+        return 0
+    fi
+    
+    echo ""
+}
+
+# Normalize farm name (case-insensitive)
+normalize_farm_name() {
+    local input="$1"
+    local farm_name=$(get_farm_name_by_id "$input")
+    echo "$farm_name"
+}
+
+# Check if a farm exists (case-insensitive)
+farm_exists() {
+    local farm_input="$1"
+    
+    # If it's a numeric farm ID, check if ID exists
+    if [[ "$farm_input" =~ ^[0-9]+$ ]]; then
+        local farm_name=$(get_farm_name_by_id "$farm_input")
+        [ -n "$farm_name" ] && [ "$farm_name" != "null" ]
+        return $?
+    fi
+    
+    # Otherwise, check if farm name exists (case-insensitive)
+    fetch_farm_cache
+    local exists=$(jq -r ".[] | select(.name | ascii_downcase == \"$(echo "$farm_input" | tr '[:upper:]' '[:lower:]')\") | .name" "$FARM_CACHE_FILE" 2>/dev/null | head -1)
+    [ -n "$exists" ] && [ "$exists" != "null" ]
+}
+
+# Validate and normalize farm list (remove non-existent farms)
+validate_farm_list() {
+    local farms_input="$1"
+    
+    if [ -z "$farms_input" ]; then
+        echo ""
+        return 0
+    fi
+    
+    local valid_farms=()
+    IFS=',' read -ra farm_array <<< "$farms_input"
+    
+    for farm in "${farm_array[@]}"; do
+        # Trim whitespace
+        farm=$(echo "$farm" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        [ -z "$farm" ] && continue
+        
+        # If farm exists, add its canonical name to the list
+        if farm_exists "$farm"; then
+            local canonical_name=$(get_farm_name_by_id "$farm")
+            if [ -n "$canonical_name" ] && [ "$canonical_name" != "null" ]; then
+                valid_farms+=("$canonical_name")
+            fi
+        else
+            log_warning "Farm '$farm' not found in GridProxy, skipping"
+        fi
+    done
+    
+    # Join valid farms back with commas
+    if [ ${#valid_farms[@]} -gt 0 ]; then
+        printf '%s\n' "${valid_farms[@]}" | tr '\n' ',' | sed 's/,$//'
+    else
+        echo ""
+    fi
+}
+
 # Load configuration from config file
 load_node_filter_config() {
     local config_file="$HOME/.config/tfgrid-compose/config.yaml"
@@ -45,6 +172,17 @@ load_node_filter_config() {
     MAX_CPU_USAGE="${CUSTOM_MAX_CPU_USAGE:-$MAX_CPU_USAGE}"
     MAX_DISK_USAGE="${CUSTOM_MAX_DISK_USAGE:-$MAX_DISK_USAGE}"
     MIN_UPTIME_DAYS="${CUSTOM_MIN_UPTIME_DAYS:-$MIN_UPTIME_DAYS}"
+
+    # Validate and normalize farm lists (case-insensitive, remove non-existent farms)
+    if [ -n "$WHITELIST_FARMS" ]; then
+        local validated_whitelist_farms=$(validate_farm_list "$WHITELIST_FARMS")
+        WHITELIST_FARMS="$validated_whitelist_farms"
+    fi
+    
+    if [ -n "$BLACKLIST_FARMS" ]; then
+        local validated_blacklist_farms=$(validate_farm_list "$BLACKLIST_FARMS")
+        BLACKLIST_FARMS="$validated_blacklist_farms"
+    fi
 }
 
 # Apply node filtering based on configuration and CLI overrides
@@ -119,7 +257,13 @@ apply_node_filters() {
     if [ ${#whitelist_farms_array[@]} -eq 0 ]; then
         whitelist_farms_json="[]"
     else
+        # Ensure proper JSON array formatting
         whitelist_farms_json="$(printf '%s\n' "${whitelist_farms_array[@]}" | jq -R . | jq -s .)"
+        # Debug logging (remove in production)
+        if [ "${TFC_DEBUG:-}" = "1" ]; then
+            echo "DEBUG: whitelist_farms_array size: ${#whitelist_farms_array[@]}" >&2
+            echo "DEBUG: whitelist_farms_json: $whitelist_farms_json" >&2
+        fi
     fi
 
     # Apply filters using jq
@@ -130,11 +274,11 @@ apply_node_filters() {
             # Node allowed if:
             # - No whitelist restrictions at all, OR
             # - Node is in whitelist_nodes, OR
-            # - Node is in any of the whitelist_farms
+            # - Node is in any of the whitelist_farms (case-insensitive)
             select(
                 ($whitelist_nodes_array == [] and $whitelist_farms_array == []) or
                 (.nodeId | tostring | IN($whitelist_nodes_array[] | tostring)) or
-                (.farmName | IN($whitelist_farms_array[]))
+                (.farmName | ascii_downcase | IN($whitelist_farms_array[]))
             ) |
 
             # Apply blacklist filters (takes precedence - always overrides whitelist)
@@ -142,7 +286,7 @@ apply_node_filters() {
                 (.nodeId | tostring | IN($blacklist_nodes_array[] | tostring)) | not
             ) |
             select(
-                (.farmName | IN($blacklist_farms_array[])) | not
+                (.farmName | ascii_downcase | IN($blacklist_farms_array[])) | not
             ) |
 
             # Apply health thresholds
@@ -382,3 +526,18 @@ get_node_from_list() {
         .[$(($selection - 1))].nodeId
     "
 }
+
+# Export functions for use in other scripts
+export -f fetch_farm_cache
+export -f get_farm_name_by_id
+export -f get_farm_id_by_name
+export -f normalize_farm_name
+export -f farm_exists
+export -f validate_farm_list
+export -f load_node_filter_config
+export -f apply_node_filters
+export -f select_best_node
+export -f verify_node_exists
+export -f query_gridproxy
+export -f show_available_nodes
+export -f get_node_from_list
