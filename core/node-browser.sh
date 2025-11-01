@@ -190,7 +190,7 @@ interactive_browser() {
                 echo "Page $((current_page + 1)) of $total_pages (nodes $((start_idx + 1))-$end_idx of $node_count)"
                 echo "Node $((start_idx + current_index + 1)) of $node_count selected"
                 echo ""
-                echo "Navigation: ↑/↓ page arrows, PageUp/PageDown (5 pages)"
+                echo "Navigation: ↑/↓/←/→ page arrows, PageUp/PageDown (5 pages)"
                 echo "Actions: Enter=details, /=jump to node, f=favorite, d=deploy, q=quit"
                 echo ""
                 read -rsn1 key
@@ -224,6 +224,18 @@ interactive_browser() {
                                     current_page=$((total_pages - 1))
                                 fi
                                 current_index=0
+                                ;;
+                            "[C")  # Right arrow - Next page (same as down arrow)
+                                if [ $current_page -lt $((total_pages - 1)) ]; then
+                                    current_page=$((current_page + 1))
+                                    current_index=0  # Reset to first node on page
+                                fi
+                                ;;
+                            "[D")  # Left arrow - Previous page (same as up arrow)
+                                if [ $current_page -gt 0 ]; then
+                                    current_page=$((current_page - 1))
+                                    current_index=0  # Reset to first node on page
+                                fi
                                 ;;
                         esac
                         ;;
