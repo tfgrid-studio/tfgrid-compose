@@ -120,12 +120,6 @@ show_node_details() {
     else
         echo "☆ This node is not in your favorites"
     fi
-
-    echo ""
-    echo "Commands:"
-    echo "  f) Toggle favorite"
-    echo "  d) Deploy to this node"
-    echo "  q) Back to list"
 }
 
 # Interactive node browser
