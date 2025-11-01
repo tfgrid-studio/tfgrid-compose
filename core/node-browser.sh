@@ -112,14 +112,6 @@ show_node_details() {
 
     echo ""
     echo "Uptime: ${uptime_days} days, ${uptime_hours} hours"
-
-    # Favorite status
-    echo ""
-    if is_favorite "$node_id"; then
-        echo "⭐ This node is in your favorites"
-    else
-        echo "☆ This node is not in your favorites"
-    fi
 }
 
 # Interactive node browser
