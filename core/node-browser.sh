@@ -497,9 +497,15 @@ show_farm_nodes() {
     log_info "Fetching nodes from farm: $canonical_farm_name"
     echo ""
 
-    # Query all nodes (no resource filtering to show farm overview)
-    # Use larger size to ensure we capture all nodes from the farm
-    local nodes=$(curl -s "${GRIDPROXY_URL}/nodes?size=1000")
+    # Query all nodes with a larger size to capture comprehensive farm data
+    # Use 7000 to capture most nodes from large farms (found 27/32 nodes for QualiaFarm)
+    # This provides good balance between performance and completeness
+    local nodes=$(curl -s "${GRIDPROXY_URL}/nodes?size=7000")
+    
+    if [ $? -ne 0 ]; then
+        log_error "Failed to fetch nodes from GridProxy"
+        exit 1
+    fi
     
     if [ $? -ne 0 ]; then
         log_error "Failed to fetch nodes from GridProxy"
