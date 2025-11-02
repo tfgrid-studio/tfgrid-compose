@@ -338,8 +338,8 @@ select_best_node() {
     local mru=$((mem_mb * 1024 * 1024))
     local sru=$((disk_gb * 1024 * 1024 * 1024))
 
-    # Query GridProxy
-    local api_url="${GRIDPROXY_URL}/nodes?status=up&free_mru=${mru}&free_sru=${sru}&size=50"
+    # Query GridProxy with comprehensive size to capture all available nodes
+    local api_url="${GRIDPROXY_URL}/nodes?status=up&free_mru=${mru}&free_sru=${sru}&size=7000"
     local response=$(curl -s "$api_url")
 
     if [ $? -ne 0 ]; then
@@ -464,7 +464,7 @@ query_gridproxy() {
     local mru=$((mem_mb * 1024 * 1024))
     local sru=$((disk_gb * 1024 * 1024 * 1024))
 
-    local response=$(curl -s "${GRIDPROXY_URL}/nodes?status=up&free_mru=${mru}&free_sru=${sru}&size=50")
+    local response=$(curl -s "${GRIDPROXY_URL}/nodes?status=up&free_mru=${mru}&free_sru=${sru}&size=7000")
 
     # Load config and apply filters
     load_node_filter_config
