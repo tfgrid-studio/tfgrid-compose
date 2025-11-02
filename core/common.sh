@@ -33,6 +33,13 @@ log_step() {
     echo -e "${CYAN}▶${NC} $1" >&2
 }
 
+log_debug() {
+    # Debug logging (only show if DEBUG environment variable is set)
+    if [ "${DEBUG:-false}" = "true" ]; then
+        echo -e "${PURPLE}🐛${NC} $1" >&2
+    fi
+}
+
 # Check if command exists
 command_exists() {
     command -v "$1" &> /dev/null

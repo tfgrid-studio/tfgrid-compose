@@ -109,18 +109,54 @@ list_deployed_apps() {
         return 0
     fi
     
+    # Check if we have tfcmd for contract validation
+    local has_tfcmd=false
+    if command -v tfcmd >/dev/null 2>&1; then
+        has_tfcmd=true
+    fi
+    
     for state_dir in "$STATE_BASE_DIR"/*; do
         if [ -d "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
             local app_name=$(basename "$state_dir")
-            found_any=1
+            local has_valid_contract=true
             
-            # Get VM IP for display
-            local vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
+            # If tfcmd is available, validate against actual contracts
+            if [ "$has_tfcmd" = true ]; then
+                # Load credentials for contract validation
+                if [ -f "$SCRIPT_DIR/login.sh" ]; then
+                    source "$SCRIPT_DIR/login.sh" 2>/dev/null
+                    if load_credentials 2>/dev/null; then
+                        # Check if this app has any active contracts
+                        if ! echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null | grep -q "node\|name"; then
+                            # No contracts found for this mnemonic
+                            has_valid_contract=false
+                        fi
+                    fi
+                fi
+            fi
             
-            if [ "$app_name" = "$current_app" ]; then
-                echo "  * $app_name (active) - $vm_ip"
+            # Only show apps with valid contracts OR when tfcmd is not available (fallback)
+            if [ "$has_valid_contract" = true ] || [ "$has_tfcmd" = false ]; then
+                found_any=1
+                
+                # Get VM IP for display
+                local vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
+                
+                if [ "$app_name" = "$current_app" ]; then
+                    if [ "$has_valid_contract" = false ]; then
+                        echo "  * $app_name (active, no contracts) - $vm_ip"
+                    else
+                        echo "  * $app_name (active) - $vm_ip"
+                    fi
+                else
+                    if [ "$has_valid_contract" = false ]; then
+                        echo "    $app_name (no contracts) - $vm_ip"
+                    else
+                        echo "    $app_name - $vm_ip"
+                    fi
+                fi
             else
-                echo "    $app_name - $vm_ip"
+                log_debug "Skipping $app_name: no matching contracts found"
             fi
         fi
     done
