@@ -474,14 +474,116 @@ show_favorites() {
     echo "        🟢 = Online node | 🔴 = Offline node | ★ = Favorite"
 }
 
+# Show nodes from a specific farm
+show_farm_nodes() {
+    local farm_name="$1"
+    
+    if [ -z "$farm_name" ]; then
+        log_error "Usage: tfgrid-compose nodes --farm <farm-name>"
+        exit 1
+    fi
+
+    # Validate farm exists
+    if ! farm_exists "$farm_name"; then
+        log_error "Farm '$farm_name' not found"
+        log_info "Run 'tfgrid-compose nodes' to browse all available nodes"
+        exit 1
+    fi
+
+    local normalized_farm=$(normalize_farm_name "$farm_name")
+    
+    log_info "Fetching nodes from farm: $normalized_farm"
+    echo ""
+
+    # Query all nodes (no resource filtering to show farm overview)
+    local nodes=$(curl -s "${GRIDPROXY_URL}/nodes?size=200")
+    
+    if [ $? -ne 0 ]; then
+        log_error "Failed to fetch nodes from GridProxy"
+        exit 1
+    fi
+
+    # Filter nodes by farm (case-insensitive)
+    local farm_nodes=$(echo "$nodes" | jq -r --arg farm "$normalized_farm" '
+        [.[] | select(.farmName | ascii_downcase == ($farm | ascii_downcase))]
+    ')
+
+    local node_count=$(echo "$farm_nodes" | jq -r 'length')
+
+    if [ "$node_count" -eq 0 ]; then
+        log_error "No nodes found in farm '$normalized_farm'"
+        exit 1
+    fi
+
+    # Count online/offline nodes
+    local online_nodes=$(echo "$farm_nodes" | jq '[.[] | select(.status == "up")] | length')
+    local offline_nodes=$((node_count - online_nodes))
+
+    echo "🏢 Farm: $normalized_farm"
+    echo "📊 Total Nodes: $node_count"
+    echo "🟢 Online: $online_nodes"
+    echo "🔴 Offline: $offline_nodes"
+    echo ""
+
+    # Display nodes table
+    show_table_header
+    
+    # Show all nodes from farm (sorted by status, then uptime)
+    echo "$farm_nodes" | jq -r '
+        sort_by(.status != "up") |
+        sort_by(.uptime) | reverse |
+        .[] |
+        "\(.nodeId) \(.farmName) \(.country) \(.total_resources.cru) \((.total_resources.mru / 1024 / 1024 / 1024)) \(.public_config.ipv4 | length > 0) \(((.used_resources.cru / (.total_resources.cru | tostring | tonumber)) * 100 | floor)) \(.uptime / 86400 | floor)"
+    ' | while IFS= read -r line; do
+        local node_id=$(echo "$line" | awk '{print $1}')
+        local farm=$(echo "$line" | awk '{print $2}')
+        local country=$(echo "$line" | awk '{print $3}')
+        local cpu=$(echo "$line" | awk '{print $4}')
+        local ram_gb=$(echo "$line" | awk '{print $5}')
+        local has_ipv4=$(echo "$line" | awk '{print $6}')
+        local load=$(echo "$line" | awk '{print $7}')
+        local uptime_days=$(echo "$line" | awk '{print $8}')
+        
+        local status_indicator=""
+        local node_info=$(echo "$farm_nodes" | jq -r --arg nid "$node_id" '.[] | select(.nodeId == ($nid | tonumber))')
+        local status=$(echo "$node_info" | jq -r '.status')
+        
+        if [ "$status" = "up" ]; then
+            status_indicator="🟢"
+        else
+            status_indicator="🔴"
+        fi
+        
+        printf "%-6s %-20s %-15s %-6s %-6s %-6s %-6s %-8s %-10s\n" \
+            "${node_id}${status_indicator}" "$farm" "$country" "$cpu" "${ram_gb}G" "Yes" "$has_ipv4" "${load}%" "${uptime_days}d"
+    done
+
+    echo ""
+    echo "Legend: ID=Node ID, Farm=Farm Name, Location=Country"
+    echo "        CPU=Total Cores, RAM=Total GB, IPv4=IPv4 Available, Load=CPU Usage %, Uptime=Days"
+    echo "        🟢 = Online node | 🔴 = Offline node"
+}
+
 # Main nodes command handler
 nodes_command() {
     local subcommand="$1"
     shift || true  # Don't fail if no arguments to shift
 
+    # Check for farm filter from CLI
+    local farm_filter="${NODES_FARM_FILTER:-}"
+    
+    # Handle farm filtering
+    if [ -n "$farm_filter" ]; then
+        show_farm_nodes "$farm_filter"
+        return $?
+    fi
+
     case "$subcommand" in
         "favorites"|"fav")
             show_favorites
+            ;;
+        "farm")
+            show_farm_nodes "$1"
             ;;
         "show")
             local node_id="$1"
@@ -546,11 +648,16 @@ nodes_command() {
             echo ""
             echo "Usage:"
             echo "  tfgrid-compose nodes                    Interactive browser"
+            echo "  tfgrid-compose nodes --farm <name>      Show nodes from specific farm"
+            echo "  tfgrid-compose nodes farm <name>        Alternative: Show nodes from farm"
             echo "  tfgrid-compose nodes favorites          Show favorite nodes"
             echo "  tfgrid-compose nodes show <id>          Show node details"
             echo "  tfgrid-compose nodes favorite add <id>  Add to favorites"
             echo "  tfgrid-compose nodes favorite remove <id> Remove from favorites"
             echo ""
+            echo "Examples:"
+            echo "  tfgrid-compose nodes --farm qualiafarm"
+            echo "  tfgrid-compose nodes farm quantumnodes"
             ;;
         "")
             # Check if we have a TTY for interactive mode
@@ -563,6 +670,7 @@ nodes_command() {
                 log_error "Interactive node browser requires a terminal (TTY)"
                 log_info "Run 'tfgrid-compose nodes favorites' to list favorite nodes"
                 log_info "Run 'tfgrid-compose nodes show <id>' to view node details"
+                log_info "Run 'tfgrid-compose nodes --farm <name>' to browse farm nodes"
                 log_info "Run 'tfgrid-compose nodes favorite add <id>' to add favorites"
                 return 1
             fi
@@ -582,4 +690,5 @@ export -f show_node_row
 export -f show_node_details
 export -f interactive_browser
 export -f show_favorites
+export -f show_farm_nodes
 export -f nodes_command

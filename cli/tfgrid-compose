@@ -2151,7 +2151,31 @@ EOF
         ;;
 
     nodes)
-        # Interactive node browser
+        # Interactive node browser with farm filtering support
+        NODES_FARM=""
+        
+        # Parse --farm parameter for nodes command
+        while [[ $# -gt 0 ]]; do
+            case $1 in
+                --farm)
+                    NODES_FARM="$2"
+                    shift 2
+                    ;;
+                --farm=*)
+                    NODES_FARM="${1#--farm=}"
+                    shift
+                    ;;
+                *)
+                    # Pass other arguments to nodes_command
+                    break
+                    ;;
+            esac
+        done
+        
+        # Export farm filter for nodes_command
+        export NODES_FARM_FILTER="$NODES_FARM"
+        
+        # Call nodes_command with remaining arguments
         nodes_command "$@"
         ;;
 
