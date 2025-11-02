@@ -2,6 +2,9 @@
 # TFGrid Compose - Update Git Config Module
 # Updates git configuration on running VMs
 
+# Source dependencies
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/deployment-id.sh"
+
 # Update git config on a deployed app
 update_git_config() {
     local app_name="$1"
@@ -48,13 +51,24 @@ update_git_config() {
     
     # Get deployment state
     local base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
-    local state_dir="$base_dir/$app_name"
     
-    if [ ! -d "$state_dir" ]; then
+    # Resolve app name to deployment ID via registry
+    local deployment_id=$(resolve_deployment "$app_name")
+    if [ -z "$deployment_id" ]; then
         log_error "No deployment found for: $app_name"
         echo ""
-        echo "Available deployments:"
-        tfgrid-compose list
+        echo "Deploy first with: tfgrid-compose up $app_name"
+        echo ""
+        return 1
+    fi
+    
+    local state_dir="$base_dir/$deployment_id"
+    
+    if [ ! -d "$state_dir" ]; then
+        log_error "Deployment state not found (inconsistent state)"
+        echo ""
+        echo "Try redeploying: tfgrid-compose up $app_name --force"
+        echo ""
         return 1
     fi
     
