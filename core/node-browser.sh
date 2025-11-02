@@ -490,28 +490,61 @@ show_farm_nodes() {
         exit 1
     fi
 
-    local normalized_farm=$(normalize_farm_name "$farm_name")
+    # Get the canonical farm name using case-insensitive search
+    local farm_id=$(get_farm_id_by_name "$farm_name")
+    local canonical_farm_name=$(get_farm_name_by_id "$farm_id")
     
-    log_info "Fetching nodes from farm: $normalized_farm"
+    log_info "Fetching nodes from farm: $canonical_farm_name"
     echo ""
 
     # Query all nodes (no resource filtering to show farm overview)
-    local nodes=$(curl -s "${GRIDPROXY_URL}/nodes?size=200")
+    # Use larger size to ensure we capture all nodes from the farm
+    local nodes=$(curl -s "${GRIDPROXY_URL}/nodes?size=1000")
     
     if [ $? -ne 0 ]; then
         log_error "Failed to fetch nodes from GridProxy"
         exit 1
     fi
 
-    # Filter nodes by farm (case-insensitive)
-    local farm_nodes=$(echo "$nodes" | jq -r --arg farm "$normalized_farm" '
-        [.[] | select(.farmName | ascii_downcase == ($farm | ascii_downcase))]
-    ')
+    # Validate that we got valid JSON
+    if ! echo "$nodes" | jq empty 2>/dev/null; then
+        log_error "Invalid response from GridProxy API"
+        exit 1
+    fi
+
+    # Filter nodes by farm using case-insensitive comparison
+    local farm_nodes=$(echo "$nodes" | jq -r --arg farm "$farm_name" --arg canonical "$canonical_farm_name" '
+        if type == "array" then
+            [.[] |
+             select(
+                 (.farmName | ascii_downcase == ($farm | ascii_downcase)) or
+                 (.farmName | ascii_downcase == ($canonical | ascii_downcase))
+             )]
+        else
+            []
+        end
+    ' 2>/dev/null)
+
+    # Debug: Log results
+    if [ "${TFC_DEBUG:-}" = "1" ]; then
+        echo "DEBUG: Filtering for farm: '$farm_name' (canonical: '$canonical_farm_name')" >&2
+        echo "DEBUG: jq exit code: $?" >&2
+        echo "DEBUG: total nodes fetched: $(echo "$nodes" | jq -r 'length')" >&2
+        echo "DEBUG: farm_nodes length: $(echo "$farm_nodes" | jq -r 'length')" >&2
+        echo "DEBUG: farm_nodes: $farm_nodes" >&2
+    fi
+
+    # Check if jq succeeded and we got valid output
+    if [ $? -ne 0 ] || [ -z "$farm_nodes" ]; then
+        farm_nodes="[]"
+    fi
 
     local node_count=$(echo "$farm_nodes" | jq -r 'length')
 
-    if [ "$node_count" -eq 0 ]; then
-        log_error "No nodes found in farm '$normalized_farm'"
+    if [ "$node_count" -eq 0 ] || [ "$node_count" = "null" ]; then
+        if [ "${TFC_DEBUG:-}" != "1" ]; then
+            log_error "No nodes found in farm '$canonical_farm_name'"
+        fi
         exit 1
     fi
 
@@ -519,7 +552,7 @@ show_farm_nodes() {
     local online_nodes=$(echo "$farm_nodes" | jq '[.[] | select(.status == "up")] | length')
     local offline_nodes=$((node_count - online_nodes))
 
-    echo "🏢 Farm: $normalized_farm"
+    echo "🏢 Farm: $canonical_farm_name"
     echo "📊 Total Nodes: $node_count"
     echo "🟢 Online: $online_nodes"
     echo "🔴 Offline: $offline_nodes"
