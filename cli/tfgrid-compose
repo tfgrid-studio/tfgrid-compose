@@ -328,29 +328,34 @@ case "$COMMAND" in
         
         if [ -z "$APP_NAME" ]; then
             # Interactive selection
-            echo ""
-            echo "📱 Select an app:"
-            echo ""
-            
-            # Get list of deployed apps (filtered for healthy deployments only)
             base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
             
+            # Quick check: if no state directory exists, show error immediately
             if [ ! -d "$base_dir" ] || [ -z "$(ls -A "$base_dir" 2>/dev/null)" ]; then
-                log_error "No apps deployed"
                 echo ""
-                log_info "Deploy an app first: tfgrid-compose up <app>"
+                echo "📱 Select an app:"
+                echo ""
+                log_error "No apps available for selection"
+                echo ""
+                log_info "No apps deployed"
+                echo ""
+                log_info "Deploy an app: tfgrid-compose up <app-name>"
+                echo ""
                 exit 1
             fi
             
             # Build array of healthy apps only
             APPS=()
+            VALID_APPS=()
             i=1
+            
             for app_dir in "$base_dir"/*; do
                 if [ -d "$app_dir" ]; then
                     app=$(basename "$app_dir")
                     
                     # Check if deployment is healthy and should be included in selection
-                    if validate_deployment_for_context "$app"; then
+                    # Add timeout to prevent hanging
+                    if timeout 5 validate_deployment_for_context "$app" 2>/dev/null; then
                         APPS+=("$app")
                         
                         # Get VM IP if available
@@ -359,12 +364,12 @@ case "$COMMAND" in
                         # Get deployment status for display
                         status=$(check_deployment_status "$app")
                         
+                        VALID_APPS+=("$(echo -e "$i) $app ($vm_ip) [$status]" | sed 's/^[[:space:]]*/  /')")
+                        
                         # Check if currently selected
                         CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
                         if [ -f "$CURRENT_APP_FILE" ] && [ "$(cat "$CURRENT_APP_FILE")" = "$app" ]; then
-                            echo "  $i) $app ($vm_ip) ← (currently selected) [$status]"
-                        else
-                            echo "  $i) $app ($vm_ip) [$status]"
+                            VALID_APPS[$((i-1))]="${VALID_APPS[$((i-1))]} ← (currently selected)"
                         fi
                         
                         ((i++))
@@ -374,10 +379,28 @@ case "$COMMAND" in
                 fi
             done
             
+            # Check if any valid apps found
             if [ ${#APPS[@]} -eq 0 ]; then
-                log_error "No apps deployed"
+                echo ""
+                echo "📱 Select an app:"
+                echo ""
+                log_error "No apps available for selection"
+                echo ""
+                log_info "Deployed apps are unhealthy or have no valid contracts"
+                log_info "Check status with: tfgrid-compose status"
+                echo ""
+                log_info "Deploy an app: tfgrid-compose up <app-name>"
+                echo ""
                 exit 1
             fi
+            
+            # Print header and available apps
+            echo ""
+            echo "📱 Select an app:"
+            echo ""
+            for app_display in "${VALID_APPS[@]}"; do
+                echo "$app_display"
+            done
             
             echo ""
             read -p "Enter number [1-${#APPS[@]}] or 'q' to quit: " choice
