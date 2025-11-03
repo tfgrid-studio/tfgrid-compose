@@ -138,11 +138,88 @@ update_deployment_status() {
     fi
 }
 
-# Resolve deployment identifier (ID or app name)
+# Helper function to calculate deployment age
+calculate_deployment_age() {
+    local created_at="$1"
+    
+    if [ -z "$created_at" ]; then
+        echo "unknown"
+        return
+    fi
+    
+    # Parse ISO 8601 timestamp
+    local created_timestamp=$(date -d "$created_at" +%s 2>/dev/null || echo 0)
+    local current_timestamp=$(date -u +%s)
+    
+    if [ "$created_timestamp" -eq 0 ]; then
+        echo "unknown"
+        return
+    fi
+    
+    local age_seconds=$((current_timestamp - created_timestamp))
+    
+    if [ "$age_seconds" -lt 60 ]; then
+        echo "${age_seconds}s ago"
+    elif [ "$age_seconds" -lt 3600 ]; then
+        echo "$((age_seconds / 60))m ago"
+    elif [ "$age_seconds" -lt 86400 ]; then
+        echo "$((age_seconds / 3600))h ago"
+    elif [ "$age_seconds" -lt 2592000 ]; then
+        echo "$((age_seconds / 86400))d ago"
+    else
+        echo "$((age_seconds / 2592000))mo ago"
+    fi
+}
+
+# Resolve partial deployment ID (Docker-style)
+resolve_partial_deployment_id() {
+    local partial_id="$1"
+    local max_matches="${2:-10}"
+    
+    init_deployment_registry
+    
+    local matches=()
+    
+    if command_exists yq; then
+        # Get all deployment IDs that start with partial_id
+        local all_deployments=$(yq eval '.deployments | keys | .[]' "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
+        
+        while IFS= read -r deployment_id; do
+            if [[ "$deployment_id" == "$partial_id"* ]]; then
+                matches+=("$deployment_id")
+            fi
+        done <<< "$all_deployments"
+    else
+        # Fallback: search in text registry
+        while IFS='|' read -r deployment_id app_name state_dir vm_ip timestamp status; do
+            if [[ "$deployment_id" == "$partial_id"* ]]; then
+                matches+=("$deployment_id")
+            fi
+        done < "$DEPLOYMENT_REGISTRY"
+    fi
+    
+    # Return matches based on count
+    case ${#matches[@]} in
+        0)
+            return 1  # No matches
+            ;;
+        1)
+            echo "${matches[0]}"
+            return 0  # Single match - unique
+            ;;
+        *)
+            # Multiple matches - show them for user selection
+            printf '%s\n' "${matches[@]}"
+            return 2  # Multiple matches - need user choice
+            ;;
+    esac
+}
+
+# Resolve deployment identifier (ID or app name) with smart matching
 resolve_deployment() {
     local identifier="$1"
     
-    # If it looks like a deployment ID, search by ID
+    # If it looks like a deployment ID, try exact match first
     if is_deployment_id "$identifier"; then
         local deployment_id="$identifier"
         if [ -n "$(get_deployment_by_id "$deployment_id")" ]; then
@@ -150,6 +227,23 @@ resolve_deployment() {
             return 0
         fi
     fi
+    
+    # Try partial ID resolution
+    local partial_result=$(resolve_partial_deployment_id "$identifier" 2>/dev/null)
+    local resolve_result=$?
+    
+    case $resolve_result in
+        0)
+            # Single partial match found
+            echo "$partial_result"
+            return 0
+            ;;
+        2)
+            # Multiple partial matches - show selection menu
+            echo "AMBIGUOUS:$partial_result"
+            return 3
+            ;;
+    esac
     
     # Otherwise, search for active deployment with this app name
     local deployment_id=$(get_active_deployment_for_app "$identifier")
@@ -161,7 +255,7 @@ resolve_deployment() {
     return 1
 }
 
-# List deployments in Docker-style format
+# List deployments in Docker-style format with timestamps and ages
 list_deployments_docker_style() {
     echo "Deployments (Docker-style):"
     echo ""
@@ -172,16 +266,18 @@ list_deployments_docker_style() {
         return 0
     fi
     
-    echo "CONTAINER ID    APP NAME           STATUS          IP ADDRESS"
-    echo "─────────────────────────────────────────────────────────────────"
+    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS    AGE"
+    echo "─────────────────────────────────────────────────────────────────────"
     
     if command_exists yq; then
         echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip status created_at; do
-            printf "%-16s %-19s %-14s %s\n" "$deployment_id" "$app_name" "$status" "${vm_ip:-N/A}"
+            local age=$(calculate_deployment_age "$created_at")
+            printf "%-16s %-19s %-9s %-12s %s\n" "$deployment_id" "$app_name" "$status" "${vm_ip:-N/A}" "$age"
         done
     else
         echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip status created_at; do
-            printf "%-16s %-19s %-14s %s\n" "$deployment_id" "$app_name" "$status" "${vm_ip:-N/A}"
+            local age=$(calculate_deployment_age "$created_at")
+            printf "%-16s %-19s %-9s %-12s %s\n" "$deployment_id" "$app_name" "$status" "${vm_ip:-N/A}" "$age"
         done
     fi
 }
@@ -197,6 +293,8 @@ export -f get_active_deployment_for_app
 export -f get_all_deployments
 export -f update_deployment_status
 export -f resolve_deployment
+export -f resolve_partial_deployment_id
+export -f calculate_deployment_age
 export -f list_deployments_docker_style
 
 # Initialize on source

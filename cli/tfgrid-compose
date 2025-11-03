@@ -128,13 +128,63 @@ execute_app_command() {
     # Get VM IP from state
     base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
     
-    # Resolve app name to deployment ID via registry
-    DEPLOYMENT_ID=$(resolve_deployment "$APP_NAME")
-    if [ -z "$DEPLOYMENT_ID" ]; then
-        log_error "No deployment found for: $APP_NAME"
-        log_info "Deploy first with: tfgrid-compose up $APP_NAME"
-        return 1
-    fi
+    # Resolve app name to deployment ID via registry with enhanced resolution
+    RESOLVED_DEPLOYMENT=$(resolve_deployment "$APP_NAME" 2>/dev/null)
+    RESOLVE_RESULT=$?
+    
+    case $RESOLVE_RESULT in
+        0)
+            # Single match found
+            DEPLOYMENT_ID="$RESOLVED_DEPLOYMENT"
+            ;;
+        3)
+            # Multiple matches - show selection menu
+            echo ""
+            echo "📱 Multiple deployments found for: $APP_NAME"
+            echo ""
+            
+            # Parse ambiguous results and show options
+            local IFS=$'\n'
+            local options=($RESOLVED_DEPLOYMENT)
+            local deployment_info=()
+            
+            for i in "${!options[@]}"; do
+                local deployment_id="${options[$i]}"
+                local details=$(get_deployment_by_id "$deployment_id" 2>/dev/null)
+                
+                if [ -n "$details" ]; then
+                    local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
+                    local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
+                    local created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
+                    local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
+                    
+                    echo "$((i+1))) $deployment_id $app_name ($vm_ip) - $age"
+                    deployment_info+=("$deployment_id")
+                fi
+            done
+            
+            echo ""
+            read -p "Select deployment [1-${#options[@]}]: " choice
+            
+            # Validate choice
+            if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#options[@]} ]; then
+                log_error "Invalid choice"
+                return 1
+            fi
+            
+            # Get selected deployment
+            DEPLOYMENT_ID="${deployment_info[$((choice-1))]}"
+            echo ""
+            log_info "Using deployment: $DEPLOYMENT_ID"
+            ;;
+        *)
+            # No matches found
+            log_error "No deployment found for: $APP_NAME"
+            log_info "Deploy first with: tfgrid-compose up $APP_NAME"
+            log_info "Or use 'tfgrid-compose ps' to see available deployments"
+            return 1
+            ;;
+    esac
     
     state_dir="$base_dir/$DEPLOYMENT_ID"
     
@@ -332,7 +382,7 @@ case "$COMMAND" in
         ;;
     
     select)
-        # Select active app
+        # Select active app with multi-deployment support
         APP_NAME="$1"
         
         if [ -z "$APP_NAME" ]; then
@@ -342,77 +392,120 @@ case "$COMMAND" in
             # Quick check: if no state directory exists, show error immediately
             if [ ! -d "$base_dir" ] || [ -z "$(ls -A "$base_dir" 2>/dev/null)" ]; then
                 echo ""
-                echo "📱 Select an app:"
+                echo "📱 Select deployment:"
                 echo ""
-                log_error "No apps available for selection"
+                log_error "No deployments available for selection"
                 echo ""
-                log_info "No apps deployed"
+                log_info "No deployments found"
                 echo ""
                 log_info "Deploy an app: tfgrid-compose up <app-name>"
                 echo ""
                 exit 1
             fi
             
-            # Build array of healthy apps only
-            APPS=()
-            VALID_APPS=()
+            # Build array of deployments for selection
+            DEPLOYMENTS=()
+            DEPLOYMENT_OPTIONS=()
             i=1
             
-            for app_dir in "$base_dir"/*; do
-                if [ -d "$app_dir" ]; then
-                    app=$(basename "$app_dir")
+            # Get all deployments from registry
+            local all_deployments=$(get_all_deployments 2>/dev/null || echo "")
+            
+            if [ -n "$all_deployments" ] && command_exists yq; then
+                # Use enhanced deployment listing with timestamps
+                while IFS='|' read -r deployment_id app_name vm_ip status created_at; do
+                    # Skip if deployment details not available
+                    if [ -z "$deployment_id" ] || [ -z "$app_name" ]; then
+                        continue
+                    fi
+                    
+                    # Check if deployment state exists
+                    local state_dir="$base_dir/$deployment_id"
+                    if [ ! -d "$state_dir" ]; then
+                        log_debug "Skipping deployment with missing state: $deployment_id"
+                        continue
+                    fi
                     
                     # Check if deployment is healthy and should be included in selection
-                    # Add timeout to prevent hanging
-                    if timeout 5 validate_deployment_for_context "$app" 2>/dev/null; then
-                        APPS+=("$app")
+                    if timeout 5 validate_deployment_for_context "$deployment_id" 2>/dev/null; then
+                        DEPLOYMENTS+=("$deployment_id")
                         
-                        # Get VM IP if available
-                        vm_ip=$(grep "^vm_ip:" "$app_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+                        # Calculate age for display
+                        local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
                         
-                        # Get deployment status for display
-                        status=$(check_deployment_status "$app")
+                        # Format deployment option
+                        local option="$i) $deployment_id $app_name ($vm_ip) - $age"
+                        DEPLOYMENT_OPTIONS+=("$option")
                         
-                        VALID_APPS+=("$(echo -e "$i) $app ($vm_ip) [$status]" | sed 's/^[[:space:]]*/  /')")
-                        
-                        # Check if currently selected
+                        # Mark if currently selected
                         CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
-                        if [ -f "$CURRENT_APP_FILE" ] && [ "$(cat "$CURRENT_APP_FILE")" = "$app" ]; then
-                            VALID_APPS[$((i-1))]="${VALID_APPS[$((i-1))]} ← (currently selected)"
+                        if [ -f "$CURRENT_APP_FILE" ] && [ "$(cat "$CURRENT_APP_FILE")" = "$deployment_id" ]; then
+                            DEPLOYMENT_OPTIONS[$((i-1))]="${DEPLOYMENT_OPTIONS[$((i-1))]} ← (currently selected)"
                         fi
                         
                         ((i++))
                     else
-                        log_debug "Skipping unhealthy deployment: $app"
+                        log_debug "Skipping unhealthy deployment: $deployment_id"
                     fi
-                fi
-            done
+                done <<< "$all_deployments"
+            else
+                # Fallback to old app-based selection
+                for app_dir in "$base_dir"/*; do
+                    if [ -d "$app_dir" ]; then
+                        app=$(basename "$app_dir")
+                        
+                        # Check if deployment is healthy and should be included in selection
+                        if timeout 5 validate_deployment_for_context "$app" 2>/dev/null; then
+                            DEPLOYMENTS+=("$app")
+                            
+                            # Get VM IP if available
+                            vm_ip=$(grep "^vm_ip:" "$app_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+                            
+                            # Get deployment status for display
+                            status=$(check_deployment_status "$app")
+                            
+                            local option="$i) $app ($vm_ip) [$status]"
+                            DEPLOYMENT_OPTIONS+=("$option")
+                            
+                            # Check if currently selected
+                            CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
+                            if [ -f "$CURRENT_APP_FILE" ] && [ "$(cat "$CURRENT_APP_FILE")" = "$app" ]; then
+                                DEPLOYMENT_OPTIONS[$((i-1))]="${DEPLOYMENT_OPTIONS[$((i-1))]} ← (currently selected)"
+                            fi
+                            
+                            ((i++))
+                        else
+                            log_debug "Skipping unhealthy deployment: $app"
+                        fi
+                    fi
+                done
+            fi
             
-            # Check if any valid apps found
-            if [ ${#APPS[@]} -eq 0 ]; then
+            # Check if any valid deployments found
+            if [ ${#DEPLOYMENTS[@]} -eq 0 ]; then
                 echo ""
-                echo "📱 Select an app:"
+                echo "📱 Select deployment:"
                 echo ""
-                log_error "No apps available for selection"
+                log_error "No deployments available for selection"
                 echo ""
                 log_info "Deployed apps are unhealthy or have no valid contracts"
-                log_info "Check status with: tfgrid-compose status"
+                log_info "Check status with: tfgrid-compose ps"
                 echo ""
                 log_info "Deploy an app: tfgrid-compose up <app-name>"
                 echo ""
                 exit 1
             fi
             
-            # Print header and available apps
+            # Print header and available deployments
             echo ""
-            echo "📱 Select an app:"
+            echo "📱 Select deployment:"
             echo ""
-            for app_display in "${VALID_APPS[@]}"; do
-                echo "$app_display"
+            for option in "${DEPLOYMENT_OPTIONS[@]}"; do
+                echo "$option"
             done
             
             echo ""
-            read -p "Enter number [1-${#APPS[@]}] or 'q' to quit: " choice
+            read -p "Enter number [1-${#DEPLOYMENTS[@]}] or 'q' to quit: " choice
             
             if [ "$choice" = "q" ] || [ "$choice" = "Q" ]; then
                 echo ""
@@ -421,20 +514,97 @@ case "$COMMAND" in
             fi
             
             # Validate choice
-            if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#APPS[@]} ]; then
+            if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#DEPLOYMENTS[@]} ]; then
                 echo ""
                 log_error "Invalid choice"
                 exit 1
             fi
             
-            # Get selected app (arrays are 0-indexed)
-            APP_NAME="${APPS[$((choice-1))]}"
+            # Get selected deployment (arrays are 0-indexed)
+            APP_NAME="${DEPLOYMENTS[$((choice-1))]}"
+        else
+            # Direct selection - resolve identifier with smart matching
+            RESOLVED_DEPLOYMENT=$(resolve_deployment "$APP_NAME" 2>/dev/null)
+            RESOLVE_RESULT=$?
+            
+            case $RESOLVE_RESULT in
+                0)
+                    # Single match found
+                    APP_NAME="$RESOLVED_DEPLOYMENT"
+                    ;;
+                3)
+                    # Multiple matches - show selection menu
+                    echo ""
+                    echo "📱 Select deployment:"
+                    echo ""
+                    
+                    # Parse ambiguous results and show options
+                    local IFS=$'\n'
+                    local options=($RESOLVED_DEPLOYMENT)
+                    local deployment_info=()
+                    
+                    for i in "${!options[@]}"; do
+                        local deployment_id="${options[$i]}"
+                        local details=$(get_deployment_by_id "$deployment_id" 2>/dev/null)
+                        
+                        if [ -n "$details" ]; then
+                            local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
+                            local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
+                            local created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
+                            local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
+                            
+                            echo "$((i+1))) $deployment_id $app_name ($vm_ip) - $age"
+                            deployment_info+=("$deployment_id")
+                        fi
+                    done
+                    
+                    echo ""
+                    read -p "Enter number [1-${#options[@]}] or 'q' to quit: " choice
+                    
+                    if [ "$choice" = "q" ] || [ "$choice" = "Q" ]; then
+                        echo ""
+                        log_info "Cancelled"
+                        exit 0
+                    fi
+                    
+                    # Validate choice
+                    if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#options[@]} ]; then
+                        echo ""
+                        log_error "Invalid choice"
+                        exit 1
+                    fi
+                    
+                    # Get selected deployment
+                    APP_NAME="${deployment_info[$((choice-1))]}"
+                    ;;
+                *)
+                    # No matches found
+                    log_error "Deployment not found: $APP_NAME"
+                    echo ""
+                    log_info "Use 'tfgrid-compose ps' to see available deployments"
+                    exit 1
+                    ;;
+            esac
         fi
         
         if set_current_app "$APP_NAME"; then
             echo ""
-            log_success "Selected $APP_NAME"
-            log_info "App-specific commands will now take precedence"
+            
+            # Get deployment details for confirmation
+            local details=$(get_deployment_by_id "$APP_NAME" 2>/dev/null)
+            if [ -n "$details" ]; then
+                local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
+                local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
+                local created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
+                local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
+                
+                log_success "Selected $APP_NAME $app_name"
+                log_info "VM: $vm_ip | Age: $age"
+            else
+                log_success "Selected $APP_NAME"
+            fi
+            
+            log_info "Deployment-specific commands will now take precedence"
             echo ""
         else
             exit 1
@@ -948,11 +1118,62 @@ case "$COMMAND" in
         log_info "TFGrid Compose v$VERSION - Deployment Inspection"
         echo ""
         
-        # Resolve deployment ID or app name to actual ID
-        if ! RESOLVED_ID=$(resolve_deployment "$DEPLOYMENT_ID"); then
-            log_error "Deployment not found: $DEPLOYMENT_ID"
-            exit 1
-        fi
+        # Resolve deployment ID or app name to actual ID with enhanced resolution
+        RESOLVED_DEPLOYMENT=$(resolve_deployment "$DEPLOYMENT_ID" 2>/dev/null)
+        RESOLVE_RESULT=$?
+        
+        case $RESOLVE_RESULT in
+            0)
+                # Single match found
+                RESOLVED_ID="$RESOLVED_DEPLOYMENT"
+                ;;
+            3)
+                # Multiple matches - show selection menu
+                echo ""
+                echo "📱 Multiple deployments found for: $DEPLOYMENT_ID"
+                echo ""
+                
+                # Parse ambiguous results and show options
+                local IFS=$'\n'
+                local options=($RESOLVED_DEPLOYMENT)
+                local deployment_info=()
+                
+                for i in "${!options[@]}"; do
+                    local deployment_id="${options[$i]}"
+                    local details=$(get_deployment_by_id "$deployment_id" 2>/dev/null)
+                    
+                    if [ -n "$details" ]; then
+                        local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
+                        local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
+                        local created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
+                        local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
+                        
+                        echo "$((i+1))) $deployment_id $app_name ($vm_ip) - $age"
+                        deployment_info+=("$deployment_id")
+                    fi
+                done
+                
+                echo ""
+                read -p "Select deployment [1-${#options[@]}]: " choice
+                
+                # Validate choice
+                if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#options[@]} ]; then
+                    log_error "Invalid choice"
+                    exit 1
+                fi
+                
+                # Get selected deployment
+                RESOLVED_ID="${deployment_info[$((choice-1))]}"
+                echo ""
+                log_info "Inspecting deployment: $RESOLVED_ID"
+                ;;
+            *)
+                # No matches found
+                log_error "Deployment not found: $DEPLOYMENT_ID"
+                log_info "Use 'tfgrid-compose ps' to see available deployments"
+                exit 1
+                ;;
+        esac
         
         echo "Deployment Details:"
         echo "==================="
