@@ -10,7 +10,8 @@ DEPLOYMENT_REGISTRY="$HOME/.config/tfgrid-compose/deployments.yaml"
 init_deployment_registry() {
     mkdir -p "$(dirname "$DEPLOYMENT_REGISTRY")"
     
-    if [ ! -f "$DEPLOYMENT_REGISTRY" ]; then
+    # Create or fix the deployments.yaml file
+    if [ ! -f "$DEPLOYMENT_REGISTRY" ] || [ ! -s "$DEPLOYMENT_REGISTRY" ]; then
         echo "deployments: {}" > "$DEPLOYMENT_REGISTRY"
     fi
 }
@@ -40,13 +41,7 @@ register_deployment() {
     
     # Use yq if available, otherwise use simple sed/awk
     if command_exists yq; then
-        yq eval ".deployments.\"$deployment_id\" = {
-            app_name: \"$app_name\",
-            state_dir: \"$state_dir\",
-            vm_ip: \"$vm_ip\",
-            created_at: \"$timestamp\",
-            status: \"active\"
-        }" "$DEPLOYMENT_REGISTRY" > "${DEPLOYMENT_REGISTRY}.tmp"
+        yq eval ".deployments.\"$deployment_id\" = {\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"vm_ip\": \"$vm_ip\", \"created_at\": \"$timestamp\", \"status\": \"active\"}" "$DEPLOYMENT_REGISTRY" > "${DEPLOYMENT_REGISTRY}.tmp"
         mv "${DEPLOYMENT_REGISTRY}.tmp" "$DEPLOYMENT_REGISTRY"
     else
         # Fallback for systems without yq
