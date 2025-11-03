@@ -47,6 +47,39 @@ fi
 # Make executable
 chmod +x "$TFGRID_COMPOSE"
 
+# Check for tfcmd dependency (required for grid operations)
+echo "🔍 Checking tfcmd dependency..."
+if ! command -v tfcmd >/dev/null 2>&1; then
+    echo ""
+    echo "⚠️  tfcmd not found - Required for ThreeFold Grid operations"
+    echo ""
+    echo "tfcmd is now essential for:"
+    echo "  • Contract validation and management"
+    echo "  • Grid-authoritative deployment status"
+    echo "  • Docker-style deployment operations"
+    echo ""
+    echo "Install tfcmd:"
+    echo "  curl -fsSL https://raw.githubusercontent.com/threefoldtech/tfcmd/main/install.sh | bash"
+    echo ""
+    echo "Or visit: https://github.com/threefoldtech/tfcmd"
+    echo ""
+    read -p "Install tfcmd now? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "🚀 Installing tfcmd..."
+        if curl -fsSL https://raw.githubusercontent.com/threefoldtech/tfcmd/main/install.sh | bash; then
+            echo "✅ tfcmd installed successfully"
+        else
+            echo "❌ tfcmd installation failed"
+            echo "Please install manually: https://github.com/threefoldtech/tfcmd"
+        fi
+    else
+        echo "⚠️  Continuing without tfcmd - Some features may not work"
+    fi
+else
+    echo "✅ tfcmd found - Grid operations enabled"
+fi
+
 # Create symlink
 echo "📦 Installing to $INSTALL_DIR..."
 if [ "$NEEDS_SUDO" = true ]; then
