@@ -274,7 +274,7 @@ resolve_deployment() {
     return 1
 }
 
-# List deployments in Docker-style format with contract linkage
+# List deployments in Docker-style format with contract linkage (auto-filtered)
 list_deployments_docker_style() {
     echo "Deployments (Docker-style):"
     echo ""
@@ -285,24 +285,37 @@ list_deployments_docker_style() {
         return 0
     fi
     
+    # Filter to show only deployments with contract IDs (exclude orphaned deployments)
+    local valid_deployments=""
+    if command_exists yq; then
+        valid_deployments=$(echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+            if [ -n "$contract_id" ] && [ "$contract_id" != "null" ]; then
+                echo "$deployment_id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+            fi
+        done)
+    else
+        valid_deployments=$(echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+            if [ -n "$contract_id" ] && [ "$contract_id" != "null" ]; then
+                echo "$deployment_id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+            fi
+        done)
+    fi
+    
+    # Show header only if there are valid deployments
+    if [ -z "$valid_deployments" ]; then
+        echo "(no active deployments with contracts)"
+        return 0
+    fi
+    
     echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS    CONTRACT    AGE"
     echo "───────────────────────────────────────────────────────────────────────────"
     
-    if command_exists yq; then
-        echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
-            local age=$(calculate_deployment_age "$created_at")
-            local contract_display="${contract_id:-N/A}"
-            
-            printf "%-16s %-19s %-9s %-12s %-9s %s\n" "$deployment_id" "$app_name" "$status" "${vm_ip:-N/A}" "$contract_display" "$age"
-        done
-    else
-        echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
-            local age=$(calculate_deployment_age "$created_at")
-            local contract_display="${contract_id:-N/A}"
-            
-            printf "%-16s %-19s %-9s %-12s %-9s %s\n" "$deployment_id" "$app_name" "$status" "${vm_ip:-N/A}" "$contract_display" "$age"
-        done
-    fi
+    # Display filtered deployments
+    echo "$valid_deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+        local age=$(calculate_deployment_age "$created_at")
+        
+        printf "%-16s %-19s %-9s %-12s %-9s %s\n" "$deployment_id" "$app_name" "$status" "${vm_ip:-N/A}" "$contract_id" "$age"
+    done
 }
 
 # Export functions for use in other scripts
