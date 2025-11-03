@@ -52,19 +52,102 @@ EOF
     fi
 }
 
-# Check deployment status
+# Check deployment status with contract validation
 # Returns: status or "unknown" if not found
 check_deployment_status() {
     local deployment_name="$1"
     local status_file="$DEPLOYMENTS_DIR/$deployment_name.status"
     
     if [ ! -f "$status_file" ]; then
+        # Check if this deployment exists in registry but has no status file
+        local registry_status=$(get_deployment_status_from_registry "$deployment_name" 2>/dev/null || echo "")
+        if [ -n "$registry_status" ]; then
+            echo "$registry_status"
+            return 0
+        fi
         echo "unknown"
         return 1
     fi
     
     local status=$(jq -r '.status' "$status_file")
+    
+    # Validate status against actual contracts if tfcmd is available
+    local has_tfcmd=false
+    if command -v tfcmd >/dev/null 2>&1; then
+        has_tfcmd=true
+    fi
+    
+    if [ "$has_tfcmd" = true ]; then
+        # Validate contract status
+        local contract_valid=$(validate_deployment_contracts "$deployment_name")
+        if [ "$contract_valid" = "false" ]; then
+            # Contracts are invalid, update status to failed
+            mark_deployment_failed "$deployment_name" "Contracts cancelled"
+            echo "failed"
+            return 0
+        fi
+    fi
+    
     echo "$status"
+}
+
+# Get deployment status from registry
+get_deployment_status_from_registry() {
+    local deployment_id="$1"
+    
+    # Try to get status from deployment registry
+    local deployment_details=$(get_deployment_by_id "$deployment_id" 2>/dev/null || echo "")
+    if [ -n "$deployment_details" ]; then
+        echo "$deployment_details" | grep "status:" | awk '{print $2}' || echo "active"
+    else
+        echo ""
+    fi
+}
+
+# Validate deployment contracts on the grid
+validate_deployment_contracts() {
+    local deployment_id="$1"
+    
+    # Load credentials
+    if [ ! -f "$SCRIPT_DIR/login.sh" ]; then
+        echo "true"  # Can't validate, assume valid
+        return
+    fi
+    
+    source "$SCRIPT_DIR/login.sh" 2>/dev/null || return
+    
+    if ! load_credentials 2>/dev/null; then
+        echo "true"  # Can't validate, assume valid
+        return
+    fi
+    
+    # Get deployment details from state
+    local state_dir="$HOME/.config/tfgrid-compose/state/$deployment_id"
+    if [ ! -d "$state_dir" ] || [ ! -f "$state_dir/state.yaml" ]; then
+        echo "true"  # State not found, assume valid
+        return
+    fi
+    
+    local deployment_name=$(grep "^deployment_name:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+    if [ -z "$deployment_name" ]; then
+        deployment_name="vm"  # Default fallback
+    fi
+    
+    # Check if any contracts exist for this mnemonic
+    local contracts_output=$(echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null || echo "")
+    
+    # If no contracts found at all, deployment is invalid
+    if [ -z "$contracts_output" ] || ! echo "$contracts_output" | grep -q "node\|name"; then
+        echo "false"
+        return
+    fi
+    
+    # Look for contracts related to this deployment
+    if echo "$contracts_output" | grep -q "$deployment_name"; then
+        echo "true"  # Found matching contracts
+    else
+        echo "false" # No matching contracts found
+    fi
 }
 
 # Get deployment status with details

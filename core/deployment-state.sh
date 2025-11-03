@@ -98,14 +98,15 @@ set_current_app() {
     return 0
 }
 
-# List all deployed apps
+# List all deployed apps using deployment registry
 list_deployed_apps() {
-    ensure_state_dir
-    
     local current_app=$(get_current_app)
     local found_any=0
     
-    if [ ! "$(ls -A $STATE_BASE_DIR 2>/dev/null)" ]; then
+    # Use deployment registry instead of state directory
+    local deployments=$(get_all_deployments 2>/dev/null || echo "")
+    
+    if [ -z "$deployments" ]; then
         return 0
     fi
     
@@ -115,51 +116,107 @@ list_deployed_apps() {
         has_tfcmd=true
     fi
     
-    for state_dir in "$STATE_BASE_DIR"/*; do
-        if [ -d "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
-            local app_name=$(basename "$state_dir")
-            local has_valid_contract=true
-            
-            # If tfcmd is available, validate against actual contracts
-            if [ "$has_tfcmd" = true ]; then
-                # Load credentials for contract validation
-                if [ -f "$SCRIPT_DIR/login.sh" ]; then
-                    source "$SCRIPT_DIR/login.sh" 2>/dev/null
-                    if load_credentials 2>/dev/null; then
-                        # Check if this app has any active contracts
-                        if ! echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null | grep -q "node\|name"; then
-                            # No contracts found for this mnemonic
-                            has_valid_contract=false
+    # Parse deployments from registry
+    if command_exists yq; then
+        while IFS='|' read -r deployment_id app_name vm_ip status created_at; do
+            if [ -n "$deployment_id" ] && [ -n "$app_name" ]; then
+                local has_valid_contract=true
+                local state_dir="$HOME/.config/tfgrid-compose/state/$deployment_id"
+                
+                # If tfcmd is available, validate against actual contracts
+                if [ "$has_tfcmd" = true ] && [ -d "$state_dir" ]; then
+                    # Load credentials for contract validation
+                    if [ -f "$SCRIPT_DIR/login.sh" ]; then
+                        source "$SCRIPT_DIR/login.sh" 2>/dev/null
+                        if load_credentials 2>/dev/null; then
+                            # Get deployment details from state
+                            local deployment_name=$(grep "^deployment_name:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "vm")
+                            
+                            # Check if this specific deployment has active contracts
+                            if ! echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null | grep -q "$deployment_name"; then
+                                has_valid_contract=false
+                            fi
                         fi
                     fi
                 fi
-            fi
-            
-            # Only show apps with valid contracts OR when tfcmd is not available (fallback)
-            if [ "$has_valid_contract" = true ] || [ "$has_tfcmd" = false ]; then
-                found_any=1
                 
-                # Get VM IP for display
-                local vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
-                
-                if [ "$app_name" = "$current_app" ]; then
-                    if [ "$has_valid_contract" = false ]; then
-                        echo "  * $app_name (active, no contracts) - $vm_ip"
+                # Only show apps with valid contracts OR when tfcmd is not available (fallback)
+                if [ "$has_valid_contract" = true ] || [ "$has_tfcmd" = false ]; then
+                    found_any=1
+                    
+                    # Get deployment status for display
+                    local display_status=$(check_deployment_status "$deployment_id" 2>/dev/null || echo "active")
+                    
+                    if [ "$deployment_id" = "$current_app" ]; then
+                        if [ "$has_valid_contract" = false ]; then
+                            echo "  * $deployment_id $app_name ($display_status, no contracts) - $vm_ip"
+                        else
+                            echo "  * $deployment_id $app_name ($display_status) - $vm_ip"
+                        fi
                     else
-                        echo "  * $app_name (active) - $vm_ip"
+                        if [ "$has_valid_contract" = false ]; then
+                            echo "    $app_name (no contracts) - $vm_ip"
+                        else
+                            echo "    $app_name - $vm_ip"
+                        fi
                     fi
                 else
-                    if [ "$has_valid_contract" = false ]; then
-                        echo "    $app_name (no contracts) - $vm_ip"
-                    else
-                        echo "    $app_name - $vm_ip"
+                    log_debug "Skipping $app_name: no matching contracts found"
+                fi
+            fi
+        done <<< "$deployments"
+    else
+        # Fallback: Use state directory method
+        if [ ! "$(ls -A $STATE_BASE_DIR 2>/dev/null)" ]; then
+            return 0
+        fi
+        
+        for state_dir in "$STATE_BASE_DIR"/*; do
+            if [ -d "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
+                local app_name=$(basename "$state_dir")
+                local has_valid_contract=true
+                
+                # If tfcmd is available, validate against actual contracts
+                if [ "$has_tfcmd" = true ]; then
+                    # Load credentials for contract validation
+                    if [ -f "$SCRIPT_DIR/login.sh" ]; then
+                        source "$SCRIPT_DIR/login.sh" 2>/dev/null
+                        if load_credentials 2>/dev/null; then
+                            # Check if this app has any active contracts
+                            if ! echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null | grep -q "node\|name"; then
+                                # No contracts found for this mnemonic
+                                has_valid_contract=false
+                            fi
+                        fi
                     fi
                 fi
-            else
-                log_debug "Skipping $app_name: no matching contracts found"
+                
+                # Only show apps with valid contracts OR when tfcmd is not available (fallback)
+                if [ "$has_valid_contract" = true ] || [ "$has_tfcmd" = false ]; then
+                    found_any=1
+                    
+                    # Get VM IP for display
+                    local vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
+                    
+                    if [ "$app_name" = "$current_app" ]; then
+                        if [ "$has_valid_contract" = false ]; then
+                            echo "  * $app_name (active, no contracts) - $vm_ip"
+                        else
+                            echo "  * $app_name (active) - $vm_ip"
+                        fi
+                    else
+                        if [ "$has_valid_contract" = false ]; then
+                            echo "    $app_name (no contracts) - $vm_ip"
+                        else
+                            echo "    $app_name - $vm_ip"
+                        fi
+                    fi
+                else
+                    log_debug "Skipping $app_name: no matching contracts found"
+                fi
             fi
-        fi
-    done
+        done
+    fi
     
     if [ $found_any -eq 0 ]; then
         return 1

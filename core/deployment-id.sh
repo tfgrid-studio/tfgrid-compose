@@ -255,8 +255,11 @@ resolve_deployment() {
     return 1
 }
 
-# List deployments in Docker-style format with timestamps and ages
+# List deployments in Docker-style format with timestamps, ages, and contract validation
 list_deployments_docker_style() {
+    # Clean up invalid deployments first
+    cleanup_invalid_deployments
+    
     echo "Deployments (Docker-style):"
     echo ""
     
@@ -269,15 +272,77 @@ list_deployments_docker_style() {
     echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS    AGE"
     echo "─────────────────────────────────────────────────────────────────────"
     
+    # Check if we have tfcmd for contract validation
+    local has_tfcmd=false
+    if command -v tfcmd >/dev/null 2>&1; then
+        has_tfcmd=true
+    fi
+    
     if command_exists yq; then
         echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip status created_at; do
             local age=$(calculate_deployment_age "$created_at")
-            printf "%-16s %-19s %-9s %-12s %s\n" "$deployment_id" "$app_name" "$status" "${vm_ip:-N/A}" "$age"
+            local display_status="$status"
+            
+            # Validate contract status if tfcmd is available
+            if [ "$has_tfcmd" = true ]; then
+                local state_dir="$HOME/.config/tfgrid-compose/state/$deployment_id"
+                if [ -d "$state_dir" ]; then
+                    # Check if this deployment has valid contracts
+                    local contract_valid="true"
+                    
+                    # Load credentials for contract validation
+                    if [ -f "$SCRIPT_DIR/../login.sh" ]; then
+                        source "$SCRIPT_DIR/../login.sh" 2>/dev/null
+                        if load_credentials 2>/dev/null; then
+                            local deployment_name=$(grep "^deployment_name:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "vm")
+                            
+                            # Check if this specific deployment has active contracts
+                            if ! echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null | grep -q "$deployment_name"; then
+                                contract_valid="false"
+                            fi
+                        fi
+                    fi
+                    
+                    if [ "$contract_valid" = "false" ]; then
+                        display_status="failed"
+                    fi
+                fi
+            fi
+            
+            printf "%-16s %-19s %-9s %-12s %s\n" "$deployment_id" "$app_name" "$display_status" "${vm_ip:-N/A}" "$age"
         done
     else
         echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip status created_at; do
             local age=$(calculate_deployment_age "$created_at")
-            printf "%-16s %-19s %-9s %-12s %s\n" "$deployment_id" "$app_name" "$status" "${vm_ip:-N/A}" "$age"
+            local display_status="$status"
+            
+            # Validate contract status if tfcmd is available
+            if [ "$has_tfcmd" = true ]; then
+                local state_dir="$HOME/.config/tfgrid-compose/state/$deployment_id"
+                if [ -d "$state_dir" ]; then
+                    # Check if this deployment has valid contracts
+                    local contract_valid="true"
+                    
+                    # Load credentials for contract validation
+                    if [ -f "$SCRIPT_DIR/../login.sh" ]; then
+                        source "$SCRIPT_DIR/../login.sh" 2>/dev/null
+                        if load_credentials 2>/dev/null; then
+                            local deployment_name=$(grep "^deployment_name:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "vm")
+                            
+                            # Check if this specific deployment has active contracts
+                            if ! echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null | grep -q "$deployment_name"; then
+                                contract_valid="false"
+                            fi
+                        fi
+                    fi
+                    
+                    if [ "$contract_valid" = "false" ]; then
+                        display_status="failed"
+                    fi
+                fi
+            fi
+            
+            printf "%-16s %-19s %-9s %-12s %s\n" "$deployment_id" "$app_name" "$display_status" "${vm_ip:-N/A}" "$age"
         done
     fi
 }
@@ -296,6 +361,60 @@ export -f resolve_deployment
 export -f resolve_partial_deployment_id
 export -f calculate_deployment_age
 export -f list_deployments_docker_style
+
+# Clean up invalid deployments from registry and mark as failed
+cleanup_invalid_deployments() {
+    local deployments=$(get_all_deployments 2>/dev/null || echo "")
+    
+    if [ -z "$deployments" ]; then
+        return 0
+    fi
+    
+    # Check if we have tfcmd for contract validation
+    local has_tfcmd=false
+    if command -v tfcmd >/dev/null 2>&1; then
+        has_tfcmd=true
+    fi
+    
+    if [ "$has_tfcmd" = false ]; then
+        return 0  # Can't validate without tfcmd
+    fi
+    
+    # Load credentials for contract validation
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$script_dir/../login.sh" ]; then
+        source "$script_dir/../login.sh" 2>/dev/null
+        if load_credentials 2>/dev/null; then
+            local failed_count=0
+            
+            if command_exists yq; then
+                while IFS='|' read -r deployment_id app_name vm_ip status created_at; do
+                    if [ -n "$deployment_id" ]; then
+                        local state_dir="$HOME/.config/tfgrid-compose/state/$deployment_id"
+                        if [ -d "$state_dir" ]; then
+                            # Check if this deployment has valid contracts
+                            local deployment_name=$(grep "^deployment_name:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "vm")
+                            
+                            # Check if this specific deployment has active contracts
+                            if ! echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null | grep -q "$deployment_name"; then
+                                # Mark as failed instead of removing
+                                log_info "Marking deployment as failed (contracts cancelled): $deployment_id"
+                                update_deployment_status "$deployment_id" "failed"
+                                ((failed_count++))
+                            fi
+                        fi
+                    fi
+                done <<< "$deployments"
+                
+                if [ $failed_count -gt 0 ]; then
+                    log_info "Marked $failed_count deployment(s) as failed (contracts cancelled)"
+                fi
+            fi
+        fi
+    fi
+}
+
+export -f cleanup_invalid_deployments
 
 # Initialize on source
 if [ -z "$DEPLOYMENT_ID_INITIALIZED" ]; then
