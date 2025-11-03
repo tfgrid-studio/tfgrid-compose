@@ -118,50 +118,54 @@ list_deployed_apps() {
     
     # Parse deployments from registry
     if command_exists yq; then
-        while IFS='|' read -r deployment_id app_name vm_ip status created_at; do
+        while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
             if [ -n "$deployment_id" ] && [ -n "$app_name" ]; then
                 local has_valid_contract=true
-                local state_dir="$HOME/.config/tfgrid-compose/state/$deployment_id"
                 
-                # If tfcmd is available, validate against actual contracts
-                if [ "$has_tfcmd" = true ] && [ -d "$state_dir" ]; then
+                # If tfcmd is available and contract_id exists, validate against grid contracts
+                if [ "$has_tfcmd" = true ] && [ -n "$contract_id" ]; then
                     # Load credentials for contract validation
                     if [ -f "$SCRIPT_DIR/login.sh" ]; then
                         source "$SCRIPT_DIR/login.sh" 2>/dev/null
                         if load_credentials 2>/dev/null; then
-                            # Get deployment details from state
-                            local deployment_name=$(grep "^deployment_name:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "vm")
+                            # Check if this contract exists on the grid using tfgrid-compose contracts
+                            local contracts_output=$(tfgrid-compose contracts list 2>/dev/null || echo "")
                             
-                            # Check if this specific deployment has active contracts
-                            if ! echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null | grep -q "$deployment_name"; then
+                            if ! echo "$contracts_output" | grep -q "$contract_id"; then
                                 has_valid_contract=false
                             fi
                         fi
                     fi
+                elif [ "$has_tfcmd" = true ] && [ -z "$contract_id" ]; then
+                    # Registry entry without contract ID - validate it doesn't exist on grid
+                    has_valid_contract=false
                 fi
                 
                 # Only show apps with valid contracts OR when tfcmd is not available (fallback)
                 if [ "$has_valid_contract" = true ] || [ "$has_tfcmd" = false ]; then
                     found_any=1
                     
-                    # Get deployment status for display
-                    local display_status=$(check_deployment_status "$deployment_id" 2>/dev/null || echo "active")
+                    # Build display name
+                    local display_name="$app_name"
+                    if [ -n "$contract_id" ]; then
+                        display_name="$app_name (contract: $contract_id)"
+                    fi
                     
                     if [ "$deployment_id" = "$current_app" ]; then
                         if [ "$has_valid_contract" = false ]; then
-                            echo "  * $deployment_id $app_name ($display_status, no contracts) - $vm_ip"
+                            echo "  * $deployment_id $display_name (no contracts) - ${vm_ip:-N/A}"
                         else
-                            echo "  * $deployment_id $app_name ($display_status) - $vm_ip"
+                            echo "  * $deployment_id $display_name - ${vm_ip:-N/A}"
                         fi
                     else
                         if [ "$has_valid_contract" = false ]; then
-                            echo "    $app_name (no contracts) - $vm_ip"
+                            echo "    $deployment_id $display_name (no contracts) - ${vm_ip:-N/A}"
                         else
-                            echo "    $app_name - $vm_ip"
+                            echo "    $deployment_id $display_name - ${vm_ip:-N/A}"
                         fi
                     fi
                 else
-                    log_debug "Skipping $app_name: no matching contracts found"
+                    log_debug "Skipping $deployment_id $app_name: no matching contracts found on grid"
                 fi
             fi
         done <<< "$deployments"

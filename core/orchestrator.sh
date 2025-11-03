@@ -294,9 +294,39 @@ EOF
     log_success "🎉 Deployment complete!"
     echo ""
     
-    # Register deployment in Docker-style ID system
+    # Register deployment in Docker-style ID system with contract linkage
     local vm_ip=$(get_vm_ip_from_state)
-    register_deployment "$DEPLOYMENT_ID" "$APP_NAME" "$STATE_DIR" "$vm_ip"
+    
+    # Extract node IDs from terraform outputs for contract mapping
+    local node_ids=""
+    if [ -f "$STATE_DIR/terraform/terraform.tfstate" ]; then
+        node_ids=$(cd "$STATE_DIR" && terraform output node_ids 2>/dev/null | jq -r '.[]' 2>/dev/null | tr '\n' ',' | sed 's/,$//' || echo "")
+    fi
+    
+    # Query grid for contract IDs based on node IDs
+    local contract_id=""
+    if [ -n "$node_ids" ] && command -v tfcmd >/dev/null 2>&1; then
+        # Load credentials for contract lookup
+        if [ -f "$SCRIPT_DIR/login.sh" ]; then
+            source "$SCRIPT_DIR/login.sh" 2>/dev/null
+            if load_credentials 2>/dev/null; then
+                # Get contracts and find one that matches our node IDs
+                local contracts_output=$(echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null || echo "")
+                
+                # Look for contracts that match our deployment name and node IDs
+                if echo "$contracts_output" | grep -q "$APP_NAME"; then
+                    # Get the most recent contract for this deployment
+                    contract_id=$(echo "$contracts_output" | grep "$APP_NAME" | tail -1 | awk '{print $1}' | head -1)
+                elif [ -n "$node_ids" ]; then
+                    # Alternative: look for contracts on our node IDs
+                    local first_node=$(echo "$node_ids" | cut -d',' -f1)
+                    contract_id=$(echo "$contracts_output" | grep "node.*$first_node" | tail -1 | awk '{print $1}' | head -1)
+                fi
+            fi
+        fi
+    fi
+    
+    register_deployment "$DEPLOYMENT_ID" "$APP_NAME" "$STATE_DIR" "$vm_ip" "$contract_id"
     
     # Mark deployment as active
     mark_deployment_active "$APP_NAME"

@@ -28,12 +28,13 @@ is_deployment_id() {
     [[ "$identifier" =~ ^[a-f0-9]{16}$ ]]
 }
 
-# Register deployment in registry
+# Register deployment in registry with contract ID linkage
 register_deployment() {
     local deployment_id="$1"
     local app_name="$2"
     local state_dir="$3"
     local vm_ip="$4"
+    local contract_id="${5:-}"  # Optional contract ID from grid
     
     init_deployment_registry
     
@@ -41,13 +42,21 @@ register_deployment() {
     
     # Use yq if available, otherwise use simple sed/awk
     if command_exists yq; then
-        yq eval ".deployments.\"$deployment_id\" = {\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"vm_ip\": \"$vm_ip\", \"created_at\": \"$timestamp\", \"status\": \"active\"}" "$DEPLOYMENT_REGISTRY" > "${DEPLOYMENT_REGISTRY}.tmp"
+        if [ -n "$contract_id" ]; then
+            yq eval ".deployments.\"$deployment_id\" = {\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"vm_ip\": \"$vm_ip\", \"contract_id\": \"$contract_id\", \"created_at\": \"$timestamp\", \"status\": \"active\"}" "$DEPLOYMENT_REGISTRY" > "${DEPLOYMENT_REGISTRY}.tmp"
+        else
+            yq eval ".deployments.\"$deployment_id\" = {\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"vm_ip\": \"$vm_ip\", \"created_at\": \"$timestamp\", \"status\": \"active\"}" "$DEPLOYMENT_REGISTRY" > "${DEPLOYMENT_REGISTRY}.tmp"
+        fi
         mv "${DEPLOYMENT_REGISTRY}.tmp" "$DEPLOYMENT_REGISTRY"
     else
         # Fallback for systems without yq
         echo "Warning: yq not available, using basic YAML registry" >&2
         # For now, create a simple text-based registry
-        echo "$deployment_id|$app_name|$state_dir|$vm_ip|$timestamp|active" >> "${DEPLOYMENT_REGISTRY}.tmp"
+        if [ -n "$contract_id" ]; then
+            echo "$deployment_id|$app_name|$state_dir|$vm_ip|$contract_id|$timestamp|active" >> "${DEPLOYMENT_REGISTRY}.tmp"
+        else
+            echo "$deployment_id|$app_name|$state_dir|$vm_ip|||$timestamp|active" >> "${DEPLOYMENT_REGISTRY}.tmp"
+        fi
         if [ ! -f "${DEPLOYMENT_REGISTRY}.backup" ]; then
             cp "$DEPLOYMENT_REGISTRY" "${DEPLOYMENT_REGISTRY}.backup" 2>/dev/null || true
         fi
@@ -107,12 +116,15 @@ get_active_deployment_for_app() {
     fi
 }
 
-# Get all deployments
+# Get all deployments with cross-validation against grid contracts
 get_all_deployments() {
     init_deployment_registry
     
+    # First, clean up orphaned deployments (those without corresponding grid contracts)
+    cleanup_orphaned_deployments
+    
     if command_exists yq; then
-        yq eval ".deployments | to_entries | .[] | \"\(.key)|\(.value.app_name)|\(.value.vm_ip)|\(.value.status)|\(.value.created_at)\"" "$DEPLOYMENT_REGISTRY"
+        yq eval ".deployments | to_entries | .[] | \"\(.key)|\(.value.app_name)|\(.value.vm_ip)|\(.value.contract_id // \"\")|\(.value.status)|\(.value.created_at)\"" "$DEPLOYMENT_REGISTRY"
     else
         # Fallback: show text registry
         cat "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo ""
@@ -255,11 +267,8 @@ resolve_deployment() {
     return 1
 }
 
-# List deployments in Docker-style format with timestamps, ages, and contract validation
+# List deployments in Docker-style format with contract linkage
 list_deployments_docker_style() {
-    # Clean up invalid deployments first
-    cleanup_invalid_deployments
-    
     echo "Deployments (Docker-style):"
     echo ""
     
@@ -269,80 +278,22 @@ list_deployments_docker_style() {
         return 0
     fi
     
-    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS    AGE"
-    echo "─────────────────────────────────────────────────────────────────────"
-    
-    # Check if we have tfcmd for contract validation
-    local has_tfcmd=false
-    if command -v tfcmd >/dev/null 2>&1; then
-        has_tfcmd=true
-    fi
+    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS    CONTRACT    AGE"
+    echo "───────────────────────────────────────────────────────────────────────────"
     
     if command_exists yq; then
-        echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip status created_at; do
+        echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
             local age=$(calculate_deployment_age "$created_at")
-            local display_status="$status"
+            local contract_display="${contract_id:-N/A}"
             
-            # Validate contract status if tfcmd is available
-            if [ "$has_tfcmd" = true ]; then
-                local state_dir="$HOME/.config/tfgrid-compose/state/$deployment_id"
-                if [ -d "$state_dir" ]; then
-                    # Check if this deployment has valid contracts
-                    local contract_valid="true"
-                    
-                    # Load credentials for contract validation
-                    if [ -f "$SCRIPT_DIR/../login.sh" ]; then
-                        source "$SCRIPT_DIR/../login.sh" 2>/dev/null
-                        if load_credentials 2>/dev/null; then
-                            local deployment_name=$(grep "^deployment_name:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "vm")
-                            
-                            # Check if this specific deployment has active contracts
-                            if ! echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null | grep -q "$deployment_name"; then
-                                contract_valid="false"
-                            fi
-                        fi
-                    fi
-                    
-                    if [ "$contract_valid" = "false" ]; then
-                        display_status="failed"
-                    fi
-                fi
-            fi
-            
-            printf "%-16s %-19s %-9s %-12s %s\n" "$deployment_id" "$app_name" "$display_status" "${vm_ip:-N/A}" "$age"
+            printf "%-16s %-19s %-9s %-12s %-9s %s\n" "$deployment_id" "$app_name" "$status" "${vm_ip:-N/A}" "$contract_display" "$age"
         done
     else
-        echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip status created_at; do
+        echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
             local age=$(calculate_deployment_age "$created_at")
-            local display_status="$status"
+            local contract_display="${contract_id:-N/A}"
             
-            # Validate contract status if tfcmd is available
-            if [ "$has_tfcmd" = true ]; then
-                local state_dir="$HOME/.config/tfgrid-compose/state/$deployment_id"
-                if [ -d "$state_dir" ]; then
-                    # Check if this deployment has valid contracts
-                    local contract_valid="true"
-                    
-                    # Load credentials for contract validation
-                    if [ -f "$SCRIPT_DIR/../login.sh" ]; then
-                        source "$SCRIPT_DIR/../login.sh" 2>/dev/null
-                        if load_credentials 2>/dev/null; then
-                            local deployment_name=$(grep "^deployment_name:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "vm")
-                            
-                            # Check if this specific deployment has active contracts
-                            if ! echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null | grep -q "$deployment_name"; then
-                                contract_valid="false"
-                            fi
-                        fi
-                    fi
-                    
-                    if [ "$contract_valid" = "false" ]; then
-                        display_status="failed"
-                    fi
-                fi
-            fi
-            
-            printf "%-16s %-19s %-9s %-12s %s\n" "$deployment_id" "$app_name" "$display_status" "${vm_ip:-N/A}" "$age"
+            printf "%-16s %-19s %-9s %-12s %-9s %s\n" "$deployment_id" "$app_name" "$status" "${vm_ip:-N/A}" "$contract_display" "$age"
         done
     fi
 }
@@ -415,6 +366,80 @@ cleanup_invalid_deployments() {
 }
 
 export -f cleanup_invalid_deployments
+
+# Clean up orphaned deployments (registry entries without corresponding grid contracts)
+cleanup_orphaned_deployments() {
+    local deployments=$(get_all_deployments_raw 2>/dev/null || echo "")
+    
+    if [ -z "$deployments" ]; then
+        return 0
+    fi
+    
+    # Check if we have tfcmd for contract validation
+    local has_tfcmd=false
+    if command -v tfcmd >/dev/null 2>&1; then
+        has_tfcmd=true
+    fi
+    
+    if [ "$has_tfcmd" = false ]; then
+        return 0  # Can't validate without tfcmd
+    fi
+    
+    # Load credentials for contract validation
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$script_dir/../login.sh" ]; then
+        source "$script_dir/../login.sh" 2>/dev/null
+        if load_credentials 2>/dev/null; then
+            local cleaned_count=0
+            
+            if command_exists yq; then
+                while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+                    if [ -n "$deployment_id" ] && [ -n "$contract_id" ]; then
+                        # Check if this contract exists on the grid
+                        local contract_exists="false"
+                        
+                        # Query tfgrid-compose contracts to get active contracts
+                        local contracts_output=$(tfgrid-compose contracts list 2>/dev/null || echo "")
+                        
+                        if echo "$contracts_output" | grep -q "$contract_id"; then
+                            contract_exists="true"
+                        fi
+                        
+                        if [ "$contract_exists" = "false" ]; then
+                            log_info "Removing orphaned deployment: $deployment_id (contract $contract_id not found on grid)"
+                            unregister_deployment "$deployment_id"
+                            ((cleaned_count++))
+                        fi
+                    elif [ -n "$deployment_id" ] && [ -z "$contract_id" ]; then
+                        # Registry entry without contract ID - likely old format, remove it
+                        log_info "Removing legacy deployment without contract ID: $deployment_id"
+                        unregister_deployment "$deployment_id"
+                        ((cleaned_count++))
+                    fi
+                done <<< "$deployments"
+                
+                if [ $cleaned_count -gt 0 ]; then
+                    log_info "Cleaned up $cleaned_count orphaned deployment(s)"
+                fi
+            fi
+        fi
+    fi
+}
+
+# Get raw deployments without cleanup (for internal use)
+get_all_deployments_raw() {
+    init_deployment_registry
+    
+    if command_exists yq; then
+        yq eval ".deployments | to_entries | .[] | \"\(.key)|\(.value.app_name)|\(.value.vm_ip)|\(.value.contract_id // \"\")|\(.value.status)|\(.value.created_at)\"" "$DEPLOYMENT_REGISTRY"
+    else
+        # Fallback: show text registry
+        cat "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo ""
+    fi
+}
+
+export -f cleanup_orphaned_deployments
+export -f get_all_deployments_raw
 
 # Initialize on source
 if [ -z "$DEPLOYMENT_ID_INITIALIZED" ]; then
