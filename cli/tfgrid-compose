@@ -591,12 +591,12 @@ case "$COMMAND" in
             echo ""
             
             # Get deployment details for confirmation
-            local details=$(get_deployment_by_id "$APP_NAME" 2>/dev/null)
+            details=$(get_deployment_by_id "$APP_NAME" 2>/dev/null)
             if [ -n "$details" ]; then
-                local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
-                local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
-                local created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
-                local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
+                app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
+                vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
+                created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
+                age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
                 
                 log_success "Selected $APP_NAME $app_name"
                 log_info "VM: $vm_ip | Age: $age"

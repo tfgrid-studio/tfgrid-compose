@@ -258,6 +258,21 @@ reset_deployment_status() {
 # Returns 0 if deployment is healthy and should be included in context selection
 validate_deployment_for_context() {
     local deployment_name="$1"
+    
+    # First check if this is a Docker-style deployment with a valid contract
+    local deployment_details=$(get_deployment_by_id "$deployment_name" 2>/dev/null || echo "")
+    if [ -n "$deployment_details" ]; then
+        local contract_id=$(echo "$deployment_details" | grep -E "^\s*contract_id:" | awk '{print $2}' | tr -d '"' || echo "")
+        local app_name=$(echo "$deployment_details" | grep -E "^\s*app_name:" | awk '{print $2}' | tr -d '"' || echo "")
+        
+        # If deployment has a contract ID, it's valid regardless of status
+        if [ -n "$contract_id" ]; then
+            log_debug "Docker-style deployment '$deployment_name' ($app_name) has contract $contract_id, including in context"
+            return 0  # Include Docker-style deployments with contracts
+        fi
+    fi
+    
+    # Fallback to status-based validation for non-Docker deployments
     local status=$(check_deployment_status "$deployment_name")
     
     case "$status" in

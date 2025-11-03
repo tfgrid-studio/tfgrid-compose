@@ -89,7 +89,11 @@ get_deployment_by_id() {
     init_deployment_registry
     
     if command_exists yq; then
-        yq eval ".deployments.\"$deployment_id\" // null" "$DEPLOYMENT_REGISTRY"
+        # Use yq to extract deployment with better error handling
+        local result=$(yq eval ".deployments.\"$deployment_id\" // null" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "null")
+        if [ "$result" != "null" ] && [ -n "$result" ]; then
+            echo "$result"
+        fi
     else
         # Fallback: search in text registry
         local line=$(grep "^$deployment_id|" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
