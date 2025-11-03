@@ -116,15 +116,22 @@ get_active_deployment_for_app() {
     fi
 }
 
-# Get all deployments with cross-validation against grid contracts
+# Get all deployments (simplified for basic functionality)
 get_all_deployments() {
     init_deployment_registry
     
-    # First, clean up orphaned deployments (those without corresponding grid contracts)
-    cleanup_orphaned_deployments
-    
     if command_exists yq; then
-        yq eval ".deployments | to_entries | .[] | \"\(.key)|\(.value.app_name)|\(.value.vm_ip)|\(.value.contract_id // \"\")|\(.value.status)|\(.value.created_at)\"" "$DEPLOYMENT_REGISTRY"
+        # Use a simpler yq expression to avoid syntax errors
+        yq eval '.deployments | keys[]' "$DEPLOYMENT_REGISTRY" | while read -r deployment_id; do
+            if [ -n "$deployment_id" ]; then
+                local app_name=$(yq eval ".deployments.\"$deployment_id\".app_name // \"\"" "$DEPLOYMENT_REGISTRY")
+                local vm_ip=$(yq eval ".deployments.\"$deployment_id\".vm_ip // \"\"" "$DEPLOYMENT_REGISTRY")
+                local contract_id=$(yq eval ".deployments.\"$deployment_id\".contract_id // \"\"" "$DEPLOYMENT_REGISTRY")
+                local status=$(yq eval ".deployments.\"$deployment_id\".status // \"\"" "$DEPLOYMENT_REGISTRY")
+                local created_at=$(yq eval ".deployments.\"$deployment_id\".created_at // \"\"" "$DEPLOYMENT_REGISTRY")
+                echo "$deployment_id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+            fi
+        done
     else
         # Fallback: show text registry
         cat "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo ""
@@ -431,7 +438,17 @@ get_all_deployments_raw() {
     init_deployment_registry
     
     if command_exists yq; then
-        yq eval ".deployments | to_entries | .[] | \"\(.key)|\(.value.app_name)|\(.value.vm_ip)|\(.value.contract_id // \"\")|\(.value.status)|\(.value.created_at)\"" "$DEPLOYMENT_REGISTRY"
+        # Use a simpler yq expression to avoid syntax errors
+        yq eval '.deployments | keys[]' "$DEPLOYMENT_REGISTRY" | while read -r deployment_id; do
+            if [ -n "$deployment_id" ]; then
+                local app_name=$(yq eval ".deployments.\"$deployment_id\".app_name // \"\"" "$DEPLOYMENT_REGISTRY")
+                local vm_ip=$(yq eval ".deployments.\"$deployment_id\".vm_ip // \"\"" "$DEPLOYMENT_REGISTRY")
+                local contract_id=$(yq eval ".deployments.\"$deployment_id\".contract_id // \"\"" "$DEPLOYMENT_REGISTRY")
+                local status=$(yq eval ".deployments.\"$deployment_id\".status // \"\"" "$DEPLOYMENT_REGISTRY")
+                local created_at=$(yq eval ".deployments.\"$deployment_id\".created_at // \"\"" "$DEPLOYMENT_REGISTRY")
+                echo "$deployment_id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+            fi
+        done
     else
         # Fallback: show text registry
         cat "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo ""
