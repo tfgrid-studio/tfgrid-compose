@@ -137,7 +137,8 @@ list_deployed_apps() {
                         fi
                     fi
                 elif [ "$has_tfcmd" = true ] && [ -z "$contract_id" ]; then
-                    # Registry entry without contract ID - validate it doesn't exist on grid
+                    # Registry entry without contract ID - this is likely a legacy or corrupted deployment
+                    # Don't show it as it's not grid-authoritative
                     has_valid_contract=false
                 fi
                 
