@@ -409,7 +409,7 @@ case "$COMMAND" in
             i=1
             
             # Get all deployments from registry
-            local all_deployments=$(get_all_deployments 2>/dev/null || echo "")
+            all_deployments=$(get_all_deployments 2>/dev/null || echo "")
             
             if [ -n "$all_deployments" ] && command_exists yq; then
                 # Use enhanced deployment listing with timestamps
@@ -420,7 +420,7 @@ case "$COMMAND" in
                     fi
                     
                     # Check if deployment state exists
-                    local state_dir="$base_dir/$deployment_id"
+                    state_dir="$base_dir/$deployment_id"
                     if [ ! -d "$state_dir" ]; then
                         log_debug "Skipping deployment with missing state: $deployment_id"
                         continue
@@ -431,10 +431,10 @@ case "$COMMAND" in
                         DEPLOYMENTS+=("$deployment_id")
                         
                         # Calculate age for display
-                        local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
+                        age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
                         
                         # Format deployment option
-                        local option="$i) $deployment_id $app_name ($vm_ip) - $age"
+                        option="$i) $deployment_id $app_name ($vm_ip) - $age"
                         DEPLOYMENT_OPTIONS+=("$option")
                         
                         # Mark if currently selected
@@ -464,7 +464,7 @@ case "$COMMAND" in
                             # Get deployment status for display
                             status=$(check_deployment_status "$app")
                             
-                            local option="$i) $app ($vm_ip) [$status]"
+                            option="$i) $app ($vm_ip) [$status]"
                             DEPLOYMENT_OPTIONS+=("$option")
                             
                             # Check if currently selected

@@ -91,14 +91,15 @@ check_deployment_status() {
     echo "$status"
 }
 
-# Get deployment status from registry
+# Get deployment status from registry (Docker-style compatible)
 get_deployment_status_from_registry() {
     local deployment_id="$1"
     
     # Try to get status from deployment registry
     local deployment_details=$(get_deployment_by_id "$deployment_id" 2>/dev/null || echo "")
     if [ -n "$deployment_details" ]; then
-        echo "$deployment_details" | grep "status:" | awk '{print $2}' || echo "active"
+        # Extract status from YAML-like output
+        echo "$deployment_details" | grep -E "^\s*status:" | awk '{print $2}' | tr -d '"' || echo "active"
     else
         echo ""
     fi
