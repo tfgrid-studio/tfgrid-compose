@@ -56,6 +56,7 @@ register_deployment() {
         if [ ! -f "${DEPLOYMENT_REGISTRY}.backup" ]; then
             cp "$DEPLOYMENT_REGISTRY" "${DEPLOYMENT_REGISTRY}.backup" 2>/dev/null || true
         fi
+        mv "${DEPLOYMENT_REGISTRY}.tmp" "$DEPLOYMENT_REGISTRY"
     fi
 }
 
