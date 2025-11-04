@@ -355,27 +355,68 @@ case "$COMMAND" in
         ;;
     
     list)
-        # List deployed apps
+        # List deployed apps with Docker-style integration
         log_info "TFGrid Compose v$VERSION - Deployed Apps"
         echo ""
         
-        if ! list_deployed_apps; then
-            log_warning "No apps deployed"
+        # Try Docker-style listing first
+        if list_deployments_docker_style >/dev/null 2>&1; then
+            echo "Docker-style deployments:"
             echo ""
-            log_info "Deploy an app: tfgrid-compose up <app-name>"
-            log_info "Multi-deploy: tfgrid-compose up <app> --name=<suffix>"
-        else
+            list_deployments_docker_style
             echo ""
-            # Show smart context info
+            
+            # Show smart context info for Docker-style deployments
             SMART_CTX=$(get_smart_context)
             CURRENT=$(get_current_app)
             
             if [ -n "$SMART_CTX" ] && [ -z "$CURRENT" ]; then
-                log_info "Using '$SMART_CTX' as default (only app deployed)"
+                log_info "Using '$SMART_CTX' as default (only deployment active)"
             elif [ -n "$CURRENT" ]; then
                 log_info "Active context: $CURRENT"
                 log_info "Change with: tfgrid-compose select"
+            else
+                log_info "Select a deployment: tfgrid-compose select"
+                log_info "Run commands: tfgrid-compose <command> [args]"
             fi
+        else
+            # Fallback to legacy app-based listing
+            if ! list_deployed_apps; then
+                log_warning "No apps deployed"
+                echo ""
+                log_info "Deploy an app: tfgrid-compose up <app-name>"
+                log_info "Multi-deploy: tfgrid-compose up <app> --name=<suffix>"
+            else
+                echo ""
+                # Show smart context info
+                SMART_CTX=$(get_smart_context)
+                CURRENT=$(get_current_app)
+                
+                if [ -n "$SMART_CTX" ] && [ -z "$CURRENT" ]; then
+                    log_info "Using '$SMART_CTX' as default (only app deployed)"
+                elif [ -n "$CURRENT" ]; then
+                    log_info "Active context: $CURRENT"
+                    log_info "Change with: tfgrid-compose select"
+                fi
+            fi
+        fi
+        
+        ;;
+        
+    ps)
+        # Docker-style process listing
+        log_info "TFGrid Compose v$VERSION - Docker-Style Deployment Listing"
+        echo ""
+        
+        if list_deployments_docker_style >/dev/null 2>&1; then
+            list_deployments_docker_style
+            echo ""
+            log_info "Select deployment: tfgrid-compose select <deployment-id|app-name>"
+            log_info "Run commands: tfgrid-compose <command> [args]"
+        else
+            log_warning "No deployments found"
+            echo ""
+            log_info "Deploy an app: tfgrid-compose up <app-name>"
         fi
         
         exit 0
@@ -389,8 +430,11 @@ case "$COMMAND" in
             # Interactive selection
             base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
             
-            # Quick check: if no state directory exists, show error immediately
-            if [ ! -d "$base_dir" ] || [ -z "$(ls -A "$base_dir" 2>/dev/null)" ]; then
+            # Quick check: use Docker-style deployment registry instead of just state directories
+            local all_deployments=$(get_all_deployments 2>/dev/null || echo "")
+            
+            # Quick check: if no deployments in registry, show error immediately
+            if [ -z "$all_deployments" ]; then
                 echo ""
                 echo "📱 Select deployment:"
                 echo ""
@@ -486,10 +530,37 @@ case "$COMMAND" in
                 echo ""
                 echo "📱 Select deployment:"
                 echo ""
-                log_error "No deployments available for selection"
-                echo ""
-                log_info "Deployed apps are unhealthy or have no valid contracts"
-                log_info "Check status with: tfgrid-compose ps"
+                
+                # Check if there are any deployments in the registry at all
+                local any_deployments=$(get_all_deployments 2>/dev/null || echo "")
+                if [ -z "$any_deployments" ]; then
+                    log_error "No deployments found"
+                else
+                    # There are deployments but they failed validation - list them
+                    echo "⚠️  Some deployments exist but may be unhealthy:"
+                    echo ""
+                    
+                    # Show deployments from registry that failed validation
+                    if command_exists yq; then
+                        while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+                            if [ -n "$deployment_id" ]; then
+                                local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
+                                local status_emoji="❓"
+                                case "$status" in
+                                    "active") status_emoji="✅" ;;
+                                    "failed") status_emoji="❌" ;;
+                                    "deploying") status_emoji="⏳" ;;
+                                esac
+                                echo "$status_emoji $deployment_id $app_name ($vm_ip) - $age"
+                            fi
+                        done <<< "$any_deployments"
+                    fi
+                    
+                    echo ""
+                    log_info "These deployments failed health validation"
+                    log_info "Check status with: tfgrid-compose ps"
+                fi
+                
                 echo ""
                 log_info "Deploy an app: tfgrid-compose up <app-name>"
                 echo ""

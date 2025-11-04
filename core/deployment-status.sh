@@ -264,16 +264,30 @@ validate_deployment_for_context() {
     if [ -n "$deployment_details" ]; then
         local contract_id=$(echo "$deployment_details" | grep -E "^\s*contract_id:" | awk '{print $2}' | tr -d '"' || echo "")
         local app_name=$(echo "$deployment_details" | grep -E "^\s*app_name:" | awk '{print $2}' | tr -d '"' || echo "")
+        local status=$(echo "$deployment_details" | grep -E "^\s*status:" | awk '{print $2}' | tr -d '"' || echo "active")
+        local vm_ip=$(echo "$deployment_details" | grep -E "^\s*vm_ip:" | awk '{print $2}' | tr -d '"' || echo "")
+        
+        log_debug "Validating Docker-style deployment '$deployment_name':"
+        log_debug "  App: $app_name"
+        log_debug "  Status: $status"
+        log_debug "  Contract: $contract_id"
+        log_debug "  VM IP: $vm_ip"
         
         # If deployment has a contract ID, it's valid regardless of status
         if [ -n "$contract_id" ]; then
             log_debug "Docker-style deployment '$deployment_name' ($app_name) has contract $contract_id, including in context"
             return 0  # Include Docker-style deployments with contracts
+        elif [ -n "$vm_ip" ] && [ "$status" != "failed" ]; then
+            # Include deployments with VM IP and non-failed status (legacy deployments)
+            log_debug "Including legacy deployment '$deployment_name' with VM IP: $vm_ip"
+            return 0
         fi
     fi
     
     # Fallback to status-based validation for non-Docker deployments
     local status=$(check_deployment_status "$deployment_name")
+    
+    log_debug "Fallback status validation for '$deployment_name': $status"
     
     case "$status" in
         "active")

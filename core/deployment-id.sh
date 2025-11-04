@@ -91,7 +91,7 @@ get_deployment_by_id() {
     if command_exists yq; then
         # Use yq to extract deployment with better error handling
         local result=$(yq eval ".deployments.\"$deployment_id\" // null" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "null")
-        if [ "$result" != "null" ] && [ -n "$result" ]; then
+        if [ "$result" != "null" ] && [ -n "$result" ] && [ "$result" != "" ]; then
             echo "$result"
         fi
     else
@@ -170,8 +170,21 @@ calculate_deployment_age() {
         return
     fi
     
-    # Parse ISO 8601 timestamp
-    local created_timestamp=$(date -d "$created_at" +%s 2>/dev/null || echo 0)
+    # Handle "null" or empty values from registry
+    if [ "$created_at" = "null" ] || [ "$created_at" = "" ]; then
+        echo "unknown"
+        return
+    fi
+    
+    # Parse ISO 8601 timestamp with better error handling
+    local created_timestamp
+    if [[ "$created_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]]; then
+        created_timestamp=$(date -d "$created_at" +%s 2>/dev/null || echo 0)
+    else
+        # Try to parse as Unix timestamp
+        created_timestamp=$(date -d "@$created_at" +%s 2>/dev/null || echo 0)
+    fi
+    
     local current_timestamp=$(date -u +%s)
     
     if [ "$created_timestamp" -eq 0 ]; then
@@ -181,13 +194,15 @@ calculate_deployment_age() {
     
     local age_seconds=$((current_timestamp - created_timestamp))
     
-    if [ "$age_seconds" -lt 60 ]; then
+    if [ $age_seconds -lt 0 ]; then
+        echo "just now"
+    elif [ $age_seconds -lt 60 ]; then
         echo "${age_seconds}s ago"
-    elif [ "$age_seconds" -lt 3600 ]; then
+    elif [ $age_seconds -lt 3600 ]; then
         echo "$((age_seconds / 60))m ago"
-    elif [ "$age_seconds" -lt 86400 ]; then
+    elif [ $age_seconds -lt 86400 ]; then
         echo "$((age_seconds / 3600))h ago"
-    elif [ "$age_seconds" -lt 2592000 ]; then
+    elif [ $age_seconds -lt 2592000 ]; then
         echo "$((age_seconds / 86400))d ago"
     else
         echo "$((age_seconds / 2592000))mo ago"
