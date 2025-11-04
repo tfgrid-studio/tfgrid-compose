@@ -304,18 +304,26 @@ list_deployments_docker_style() {
         return 0
     fi
     
-    # Filter to show only deployments with contract IDs (exclude orphaned deployments)
+    # Filter to show only deployments with VALID contract IDs (must exist on grid)
     local valid_deployments=""
     if command_exists yq; then
         valid_deployments=$(echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+            # Check both existence AND validity against grid
             if [ -n "$contract_id" ] && [ "$contract_id" != "null" ]; then
-                echo "$deployment_id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+                # Validate contract exists on grid
+                if [ "$(validate_deployment_contracts "$deployment_id" 2>/dev/null)" = "true" ]; then
+                    echo "$deployment_id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+                fi
             fi
         done)
     else
         valid_deployments=$(echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+            # Check both existence AND validity against grid
             if [ -n "$contract_id" ] && [ "$contract_id" != "null" ]; then
-                echo "$deployment_id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+                # Validate contract exists on grid
+                if [ "$(validate_deployment_contracts "$deployment_id" 2>/dev/null)" = "true" ]; then
+                    echo "$deployment_id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+                fi
             fi
         done)
     fi

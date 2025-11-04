@@ -303,26 +303,18 @@ EOF
         node_ids=$(cd "$STATE_DIR" && terraform output node_ids 2>/dev/null | jq -r '.[]' 2>/dev/null | tr '\n' ',' | sed 's/,$//' || echo "")
     fi
     
-    # Query grid for contract IDs based on node IDs
+    # Extract contract ID from terraform state (grid_deployment resource ID)
     local contract_id=""
-    if [ -n "$node_ids" ] && command -v tfcmd >/dev/null 2>&1; then
-        # Load credentials for contract lookup
-        if [ -f "$SCRIPT_DIR/login.sh" ]; then
-            source "$SCRIPT_DIR/login.sh" 2>/dev/null
-            if load_credentials 2>/dev/null; then
-                # Get contracts and find one that matches our node IDs
-                local contracts_output=$(echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null || echo "")
-                
-                # Look for contracts that match our deployment name and node IDs
-                if echo "$contracts_output" | grep -q "$APP_NAME"; then
-                    # Get the most recent contract for this deployment
-                    contract_id=$(echo "$contracts_output" | grep "$APP_NAME" | tail -1 | awk '{print $1}' | head -1)
-                elif [ -n "$node_ids" ]; then
-                    # Alternative: look for contracts on our node IDs
-                    local first_node=$(echo "$node_ids" | cut -d',' -f1)
-                    contract_id=$(echo "$contracts_output" | grep "node.*$first_node" | tail -1 | awk '{print $1}' | head -1)
-                fi
-            fi
+    if [ -f "$STATE_DIR/terraform/terraform.tfstate" ]; then
+        # Extract directly from terraform state JSON
+        # The grid_deployment resource ID IS the contract ID
+        contract_id=$(jq -r '.resources[]? | select(.type == "grid_deployment" and .name == "vm") | .instances[0].attributes.id' "$STATE_DIR/terraform/terraform.tfstate" 2>/dev/null || echo "")
+        
+        if [ -n "$contract_id" ] && [ "$contract_id" != "null" ]; then
+            log_info "Contract ID extracted from terraform state: $contract_id"
+        else
+            log_warning "Could not extract contract ID from terraform state"
+            contract_id=""
         fi
     fi
     

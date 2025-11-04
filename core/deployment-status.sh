@@ -142,7 +142,9 @@ validate_deployment_contracts() {
     fi
     
     # Check if the expected contract ID exists in the contracts list
-    if echo "$contracts_output" | grep -q "^ID: $expected_contract_id"; then
+    # Format: "1632034    8          vm         vm              vm/vm"
+    # Contract ID is at the start of the line
+    if echo "$contracts_output" | grep -qE "^${expected_contract_id}[[:space:]]"; then
         echo "true"  # Contract found and active
     else
         echo "false" # Contract not found or cancelled

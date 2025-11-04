@@ -479,25 +479,28 @@ case "$COMMAND" in
                     # PRIORITY: Only include deployments with valid contracts in selection
                     # Skip orphaned deployments even if they have VM IPs
                     if [ -n "$contract_id" ] && [ "$contract_id" != "null" ] && [ "$contract_id" != "" ]; then
-                        # This deployment has a valid contract - include it
-                        DEPLOYMENTS+=("$deployment_id")
-                        
-                        # Calculate age for display
-                        age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
-                        
-                        # Format deployment option
-                        option="$i) $deployment_id $app_name ($vm_ip) - $age"
-                        DEPLOYMENT_OPTIONS+=("$option")
-                        
-                        # Mark if currently selected
-                        CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
-                        if [ -f "$CURRENT_APP_FILE" ] && [ "$(cat "$CURRENT_APP_FILE")" = "$deployment_id" ]; then
-                            DEPLOYMENT_OPTIONS[$((i-1))]="${DEPLOYMENT_OPTIONS[$((i-1))]} ← (currently selected)"
+                        # Validate contract exists on grid
+                        if [ "$(validate_deployment_contracts "$deployment_id" 2>/dev/null)" = "true" ]; then
+                            # This deployment has a valid contract - include it
+                            DEPLOYMENTS+=("$deployment_id")
+                            
+                            # Calculate age for display
+                            age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
+                            
+                            # Format deployment option
+                            option="$i) $deployment_id $app_name ($vm_ip) - $age"
+                            DEPLOYMENT_OPTIONS+=("$option")
+                            
+                            # Mark if currently selected
+                            CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
+                            if [ -f "$CURRENT_APP_FILE" ] && [ "$(cat "$CURRENT_APP_FILE")" = "$deployment_id" ]; then
+                                DEPLOYMENT_OPTIONS[$((i-1))]="${DEPLOYMENT_OPTIONS[$((i-1))]} ← (currently selected)"
+                            fi
+                            
+                            ((i++))
+                        else
+                            log_debug "Skipping deployment with invalid/cancelled contract: $deployment_id (contract: $contract_id)"
                         fi
-                        
-                        ((i++))
-                    else
-                        log_debug "Skipping orphaned deployment (no contract): $deployment_id"
                     fi
                 done <<< "$all_deployments"
             else
@@ -548,19 +551,22 @@ case "$COMMAND" in
                     echo "⚠️  Some deployments exist but may be unhealthy:"
                     echo ""
                     
-                    # Show deployments from registry that failed validation (only those with contracts)
+                    # Show deployments from registry that have active contracts but failed other validation
                     if command_exists yq; then
                         while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
-                            # Only show deployments with valid contracts in the unhealthy list
+                            # Only show deployments with ACTIVE contracts on the grid
                             if [ -n "$deployment_id" ] && [ -n "$contract_id" ] && [ "$contract_id" != "null" ] && [ "$contract_id" != "" ]; then
-                                age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
-                                status_emoji="❓"
-                                case "$status" in
-                                    "active") status_emoji="✅" ;;
-                                    "failed") status_emoji="❌" ;;
-                                    "deploying") status_emoji="⏳" ;;
-                                esac
-                                echo "$status_emoji $deployment_id $app_name ($vm_ip) - $age"
+                                # Validate contract exists on grid
+                                if [ "$(validate_deployment_contracts "$deployment_id" 2>/dev/null)" = "true" ]; then
+                                    age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
+                                    status_emoji="❓"
+                                    case "$status" in
+                                        "active") status_emoji="✅" ;;
+                                        "failed") status_emoji="❌" ;;
+                                        "deploying") status_emoji="⏳" ;;
+                                    esac
+                                    echo "$status_emoji $deployment_id $app_name ($vm_ip) - $age"
+                                fi
                             fi
                         done <<< "$any_deployments"
                     fi
