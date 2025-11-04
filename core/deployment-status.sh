@@ -122,32 +122,30 @@ validate_deployment_contracts() {
         return
     fi
     
-    # Get deployment details from state
-    local state_dir="$HOME/.config/tfgrid-compose/state/$deployment_id"
-    if [ ! -d "$state_dir" ] || [ ! -f "$state_dir/state.yaml" ]; then
-        echo "true"  # State not found, assume valid
-        return
-    fi
+    # Get actual contracts from tfcmd
+    local contracts_output=$(tfcmd get contracts 2>/dev/null || echo "")
     
-    local deployment_name=$(grep "^deployment_name:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
-    if [ -z "$deployment_name" ]; then
-        deployment_name="vm"  # Default fallback
-    fi
-    
-    # Check if any contracts exist for this mnemonic
-    local contracts_output=$(echo "$TFGRID_MNEMONIC" 2>/dev/null | tfcmd get contracts 2>/dev/null || echo "")
-    
-    # If no contracts found at all, deployment is invalid
-    if [ -z "$contracts_output" ] || ! echo "$contracts_output" | grep -q "node\|name"; then
+    # If no contracts found, deployment is invalid
+    if [ -z "$contracts_output" ]; then
         echo "false"
         return
     fi
     
-    # Look for contracts related to this deployment
-    if echo "$contracts_output" | grep -q "$deployment_name"; then
-        echo "true"  # Found matching contracts
+    # Get expected contract ID from deployment registry
+    local deployment_details=$(get_deployment_by_id "$deployment_id" 2>/dev/null || echo "")
+    local expected_contract_id=$(echo "$deployment_details" | grep -E "^\s*contract_id:" | awk '{print $2}' | tr -d '"' || echo "")
+    
+    # If no contract ID expected, this is an orphaned deployment
+    if [ -z "$expected_contract_id" ] || [ "$expected_contract_id" = "null" ]; then
+        echo "false"
+        return
+    fi
+    
+    # Check if the expected contract ID exists in the contracts list
+    if echo "$contracts_output" | grep -q "^ID: $expected_contract_id"; then
+        echo "true"  # Contract found and active
     else
-        echo "false" # No matching contracts found
+        echo "false" # Contract not found or cancelled
     fi
 }
 
