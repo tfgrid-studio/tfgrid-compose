@@ -111,14 +111,17 @@ validate_deployment_contracts() {
     
     # Load credentials
     if [ ! -f "$SCRIPT_DIR/login.sh" ]; then
-        echo "true"  # Can't validate, assume valid
+        echo "false"  # Can't validate, deployment is invalid
         return
     fi
     
-    source "$SCRIPT_DIR/login.sh" 2>/dev/null || return
+    source "$SCRIPT_DIR/login.sh" 2>/dev/null || {
+        echo "false"  # Can't load login script, deployment is invalid
+        return
+    }
     
     if ! load_credentials 2>/dev/null; then
-        echo "true"  # Can't validate, assume valid
+        echo "false"  # Can't validate, deployment is invalid
         return
     fi
     
