@@ -93,14 +93,19 @@ deploy_app() {
         return 1
     fi
     
-    # State directory already created by init_deployment_state in CLI
-    # Verify STATE_DIR is set
-    if [ -z "$STATE_DIR" ]; then
-        log_error "STATE_DIR not set - internal error"
-        return 1
+    # Ensure dedicated state directory exists (creates per-deployment isolation)
+    if [ -z "${DEPLOYMENT_ID:-}" ]; then
+        export DEPLOYMENT_ID=$(generate_deployment_id)
+        log_info "Generated deployment ID: $DEPLOYMENT_ID"
     fi
     
-    log_info "Using state directory: $STATE_DIR"
+    # Create dedicated state directory for this deployment
+    local dedicated_state_dir="$STATE_BASE_DIR/$DEPLOYMENT_ID"
+    mkdir -p "$dedicated_state_dir"
+    
+    # Update STATE_DIR to point to dedicated directory
+    export STATE_DIR="$dedicated_state_dir"
+    log_info "Using dedicated state directory: $STATE_DIR"
     
     # === Node & Resource Selection ===
     echo ""
@@ -318,7 +323,9 @@ EOF
         fi
     fi
     
-    register_deployment "$DEPLOYMENT_ID" "$APP_NAME" "$STATE_DIR" "$vm_ip" "$contract_id"
+    # Use dedicated state directory for perfect deployment isolation
+    local dedicated_state_dir="$STATE_BASE_DIR/$DEPLOYMENT_ID"
+    register_deployment "$DEPLOYMENT_ID" "$APP_NAME" "$dedicated_state_dir" "$vm_ip" "$contract_id"
     
     # Mark deployment as active
     mark_deployment_active "$APP_NAME"
