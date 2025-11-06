@@ -69,8 +69,14 @@ app_has_command() {
         return 1
     fi
     
+    # Convert deployment ID to app name if needed
+    local app_name=$(get_app_name_from_deployment "$current_app")
+    if [ -z "$app_name" ]; then
+        return 1
+    fi
+    
     # Resolve app path
-    local app_path=$(resolve_app_path "$current_app" "true")
+    local app_path=$(resolve_app_path "$app_name" "true")
     if [ -z "$app_path" ] || [ ! -f "$app_path/tfgrid-compose.yaml" ]; then
         return 1
     fi
@@ -79,6 +85,40 @@ app_has_command() {
     local script_path=$(get_app_command_script "$app_path" "$command")
     if [ -n "$script_path" ]; then
         return 0
+    fi
+    
+    return 1
+}
+# Get app name from deployment ID
+get_app_name_from_deployment() {
+    local deployment_id="$1"
+    
+    if [ -z "$deployment_id" ]; then
+        return 1
+    fi
+    
+    # Check if it's already an app name (doesn't exist as deployment ID)
+    local deployment_details=$(get_deployment_by_id "$deployment_id" 2>/dev/null || echo "")
+    if [ -z "$deployment_details" ]; then
+        # It's not a deployment ID, treat as app name
+        echo "$deployment_id"
+        return 0
+    fi
+    
+    # Extract app_name from deployment details
+    if command_exists yq; then
+        local app_name=$(echo "$deployment_details" | yq eval '.app_name // empty' - 2>/dev/null || echo "")
+        if [ -n "$app_name" ] && [ "$app_name" != "empty" ]; then
+            echo "$app_name"
+            return 0
+        fi
+    else
+        # Fallback: parse from text format
+        local app_name=$(echo "$deployment_details" | grep "app_name:" | awk '{print $2}' | tr -d '"' || echo "")
+        if [ -n "$app_name" ]; then
+            echo "$app_name"
+            return 0
+        fi
     fi
     
     return 1
@@ -104,10 +144,17 @@ execute_app_command() {
         return 1
     fi
     
+    # Convert deployment ID to app name if needed
+    APP_NAME=$(get_app_name_from_deployment "$CONTEXT_APP")
+    if [ -z "$APP_NAME" ]; then
+        log_error "Failed to resolve app name from context: $CONTEXT_APP"
+        return 1
+    fi
+    
     # Resolve app path
-    APP_PATH=$(resolve_app_path "$CONTEXT_APP")
+    APP_PATH=$(resolve_app_path "$APP_NAME")
     if [ -z "$APP_PATH" ]; then
-        log_error "Failed to resolve app: $CONTEXT_APP"
+        log_error "Failed to resolve app: $APP_NAME"
         return 1
     fi
     
@@ -116,13 +163,12 @@ execute_app_command() {
     
     if [ -z "$SCRIPT_PATH" ]; then
         log_error "Unknown command: $command"
-        log_info "App '$CONTEXT_APP' does not support command '$command'"
+        log_info "App '$APP_NAME' does not support command '$command'"
         echo ""
         log_info "Run 'tfgrid-compose help' to see available commands"
         return 1
     fi
     
-    APP_NAME=$(basename "$APP_PATH")
     export APP_NAME
     
     # Get VM IP from state
@@ -267,6 +313,13 @@ resolve_app_path() {
     if [[ "$app_input" == */* ]] || [[ "$app_input" == .* ]]; then
         echo "$app_input"
         return 0
+    fi
+    
+    # NEW: Check if it's a deployment ID - convert to app name first
+    local converted_name=$(get_app_name_from_deployment "$app_input")
+    if [ -n "$converted_name" ] && [ "$converted_name" != "$app_input" ]; then
+        # It was a deployment ID and we successfully converted it
+        app_input="$converted_name"
     fi
     
     # It's a registry app name - resolve to cached path
@@ -1485,6 +1538,12 @@ case "$COMMAND" in
                 log_error "No app specified and no app selected"
                 log_info "Usage: tfgrid-compose logs <app>"
                 log_info "   Or: tfgrid-compose select <app> && tfgrid-compose logs"
+                exit 1
+            fi
+            # Convert deployment ID to app name if needed
+            APP_INPUT=$(get_app_name_from_deployment "$APP_INPUT")
+            if [ -z "$APP_INPUT" ]; then
+                log_error "Failed to resolve app name from context"
                 exit 1
             fi
         fi
