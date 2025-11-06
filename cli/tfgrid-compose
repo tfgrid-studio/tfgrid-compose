@@ -160,7 +160,7 @@ execute_app_command() {
                     local created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
                     local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
                     
-                    echo "$((i+1))) $deployment_id $app_name ($vm_ip) - $age"
+                    echo "$((i+1))) $deployment_id ($vm_ip) - $age"
                     deployment_info+=("$deployment_id")
                 fi
             done
@@ -177,7 +177,14 @@ execute_app_command() {
             # Get selected deployment
             DEPLOYMENT_ID="${deployment_info[$((choice-1))]}"
             echo ""
-            log_info "Using deployment: $DEPLOYMENT_ID"
+            local details=$(get_deployment_by_id "$DEPLOYMENT_ID" 2>/dev/null)
+            if [ -n "$details" ]; then
+                local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
+                local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
+                log_success "✅ Selected $DEPLOYMENT_ID ($app_name) - VM: $vm_ip"
+            else
+                log_success "✅ Selected $DEPLOYMENT_ID"
+            fi
             ;;
         *)
             # No matches found
@@ -288,7 +295,27 @@ resolve_app_path() {
         fi
     fi
     
-    # Not a deployment ID or no state_dir - treat as registry app name
+    # Try to find existing deployment by app name
+    local deployment_id=$(get_active_deployment_for_app "$app_input" 2>/dev/null || echo "")
+    if [ -n "$deployment_id" ]; then
+        # Found deployment - get its state_dir
+        local deployment_details=$(get_deployment_by_id "$deployment_id" 2>/dev/null || echo "")
+        if [ -n "$deployment_details" ]; then
+            local state_dir=""
+            if command_exists yq; then
+                state_dir=$(echo "$deployment_details" | yq eval '.state_dir // empty' - 2>/dev/null || echo "")
+            else
+                state_dir=$(echo "$deployment_details" | grep "state_dir:" | awk '{print $2}' | tr -d '"' || echo "")
+            fi
+            
+            if [ -n "$state_dir" ] && [ "$state_dir" != "empty" ] && [ -d "$state_dir" ]; then
+                echo "$state_dir"
+                return 0
+            fi
+        fi
+    fi
+    
+    # No deployment found - treat as registry app name
     local app_name="$app_input"
     local cached_path="$APP_CACHE_DIR/$app_name"
     
@@ -306,6 +333,8 @@ resolve_app_path() {
     if [ -z "$repo_url" ]; then
         if [ "$quiet" != "true" ]; then
             log_error "App '$app_name' not found in registry"
+            log_info "Available deployments:"
+            list_deployments 2>/dev/null || true
         fi
         return 1
     fi
