@@ -106,17 +106,23 @@ get_deployment_by_id() {
     fi
 }
 
-# Get active deployment for app name
+# Get active deployment for app name (returns most recent)
 get_active_deployment_for_app() {
     local app_name="$1"
     
     init_deployment_registry
     
     if command_exists yq; then
-        yq eval ".deployments | to_entries | .[] | select(.value.app_name == \"$app_name\" and .value.status == \"active\") | .key" "$DEPLOYMENT_REGISTRY" | head -1
+        # Get deployments for this app, sort by created_at descending, and return the first (most recent)
+        yq eval ".deployments | to_entries | .[] | select(.value.app_name == \"$app_name\" and .value.status == \"active\") | select(.value.created_at != null) | .key" "$DEPLOYMENT_REGISTRY" | while read -r key; do
+            local created_at=$(yq eval ".deployments.\"$key\".created_at" "$DEPLOYMENT_REGISTRY" 2>/dev/null)
+            if [ "$created_at" != "null" ] && [ -n "$created_at" ]; then
+                echo "$key|$created_at"
+            fi
+        done | sort -t'|' -k2 -r | head -1 | cut -d'|' -f1
     else
-        # Fallback: search in text registry
-        local line=$(grep "|$app_name|.*|.*|active$" "$DEPLOYMENT_REGISTRY" 2>/dev/null | head -1 || echo "")
+        # Fallback: search in text registry, use tail to get most recent
+        local line=$(grep "|$app_name|.*|.*|active$" "$DEPLOYMENT_REGISTRY" 2>/dev/null | tail -1 || echo "")
         if [ -n "$line" ]; then
             echo "$line" | cut -d'|' -f1
         fi
@@ -269,7 +275,19 @@ resolve_deployment() {
         fi
     fi
     
-    # Try partial ID resolution
+    # Check if it looks like an app name (contains hyphens, not pure hex)
+    # This helps avoid unnecessary partial ID searches for app names
+    if [[ "$identifier" =~ ^[a-z0-9-]+$ ]] && [[ ! "$identifier" =~ ^[a-f0-9]{16}$ ]]; then
+        # Likely an app name, go directly to app resolution
+        local deployment_id=$(get_active_deployment_for_app "$identifier")
+        if [ -n "$deployment_id" ]; then
+            echo "$deployment_id"
+            return 0
+        fi
+        return 1
+    fi
+    
+    # Try partial ID resolution only for potential partial IDs (hex patterns)
     local partial_result=$(resolve_partial_deployment_id "$identifier" 2>/dev/null)
     local resolve_result=$?
     
@@ -286,7 +304,7 @@ resolve_deployment() {
             ;;
     esac
     
-    # Otherwise, search for active deployment with this app name
+    # If partial resolution didn't work, try app name as fallback
     local deployment_id=$(get_active_deployment_for_app "$identifier")
     if [ -n "$deployment_id" ]; then
         echo "$deployment_id"
