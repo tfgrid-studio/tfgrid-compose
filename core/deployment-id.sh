@@ -3,6 +3,9 @@
 
 set -e
 
+# Source common utilities
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+
 # Deployment registry file
 DEPLOYMENT_REGISTRY="$HOME/.config/tfgrid-compose/deployments.yaml"
 
