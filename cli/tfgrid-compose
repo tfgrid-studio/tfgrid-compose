@@ -227,7 +227,7 @@ execute_app_command() {
     if [ -n "$SAVE_TO_CONTEXT" ]; then
         # Capture output to save to context
         OUTPUT=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "$SCRIPT_PATH $args" 2>/dev/null)
+            root@$vm_ip "APP_NAME=$APP_NAME $SCRIPT_PATH $args" 2>/dev/null)
         RESULT=$?
         
         if [ $RESULT -eq 0 ] && [ -n "$OUTPUT" ]; then
@@ -252,11 +252,11 @@ execute_app_command() {
         if [ "$ALLOCATE_TTY" = "true" ]; then
             # Use -t to allocate TTY for interactive commands that need it
             ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-                root@$vm_ip "$SCRIPT_PATH $args"
+                root@$vm_ip "APP_NAME=$APP_NAME $SCRIPT_PATH $args"
         else
             # Don't allocate TTY for commands that start background services
             ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-                root@$vm_ip "$SCRIPT_PATH $args"
+                root@$vm_ip "APP_NAME=$APP_NAME $SCRIPT_PATH $args"
         fi
         
         return $?
