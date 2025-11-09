@@ -585,8 +585,8 @@ check_credentials() {
     return 0
 }
 
-# Login command
-cmd_login() {
+# Signin command
+cmd_signin() {
     local check_only=false
     
     # Parse arguments
@@ -716,8 +716,8 @@ cmd_login() {
     echo ""
 }
 
-# Logout command
-cmd_logout() {
+# Signout command
+cmd_signout() {
     if ! is_logged_in; then
         log_info "Not logged in"
         return 0

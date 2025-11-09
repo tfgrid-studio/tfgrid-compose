@@ -17,7 +17,7 @@ source "$DEPLOYER_ROOT/core/registry.sh"
 source "$DEPLOYER_ROOT/core/app-cache.sh"
 source "$DEPLOYER_ROOT/core/deployment-state.sh"
 source "$DEPLOYER_ROOT/core/deployment-status.sh"
-source "$DEPLOYER_ROOT/core/login.sh"
+source "$DEPLOYER_ROOT/core/signin.sh"
 source "$DEPLOYER_ROOT/core/deployment-id.sh"
 source "$DEPLOYER_ROOT/core/gitconfig.sh"
 source "$DEPLOYER_ROOT/core/config.sh"
@@ -1990,21 +1990,16 @@ EOF
         exit 0
         ;;
 
-    login)
-        # Login command - context-based precedence
-        # If app is selected and has 'login' command, use app version
-        if app_has_command "login"; then
-            execute_app_command "login" "$@"
-        else
-            # Use built-in login
-            cmd_login "$@"
-        fi
+    signin)
+        # Signin command - always use tfgrid-compose version
+        # Apps don't have signin commands, only login commands
+        cmd_signin "$@"
         ;;
 
 
-    logout)
-        # Logout command
-        cmd_logout
+    signout)
+        # Signout command
+        cmd_signout
         ;;
 
     config)
@@ -3188,7 +3183,7 @@ EOF
                 echo ""
                 echo "First time setup:"
                 echo "  1. tfgrid-compose tfcmd-install    # Install tfcmd"
-                echo "  2. tfgrid-compose login            # Set up credentials"
+                echo "  2. tfgrid-compose signin           # Set up credentials"
                 echo "  3. tfgrid-compose contracts list   # View contracts"
                 echo ""
                 echo "Usage: tfgrid-compose contracts <subcommand> [options]"
