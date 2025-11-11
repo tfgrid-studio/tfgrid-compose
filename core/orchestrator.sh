@@ -492,7 +492,7 @@ deploy_app_source() {
     # Copy app deployment hooks to VM (all files, not just .sh)
     log_info "Copying deployment hooks..."
     scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        "$APP_DEPLOYMENT_DIR"/* root@$vm_ip:/tmp/app-deployment/ > /dev/null 2>&1
+        "$APP_DIR"/src/* root@$vm_ip:/tmp/app-deployment/ > /dev/null 2>&1
     
     # Copy app source directory contents if it exists (for scripts, templates, etc.)
     if [ -d "$APP_DIR/src" ]; then
