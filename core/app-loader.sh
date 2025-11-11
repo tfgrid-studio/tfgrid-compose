@@ -26,11 +26,18 @@ load_app() {
     
     log_step "Loading application: $app_path"
     
-    # Handle relative vs absolute paths
-    if [[ "$app_path" = /* ]]; then
-        APP_DIR="$app_path"
+    # Check if app is cached and use cached version
+    if is_app_cached "$app_path"; then
+        APP_DIR=$(get_cached_app_path "$app_path")
+        APP_PATH="$APP_DIR"  # Also update APP_PATH for consistency
+        log_info "Using cached app: $app_path"
     else
-        APP_DIR="$(pwd)/$app_path"
+        # Handle relative vs absolute paths
+        if [[ "$app_path" = /* ]]; then
+            APP_DIR="$app_path"
+        else
+            APP_DIR="$(pwd)/$app_path"
+        fi
     fi
     
     if ! validate_directory "$APP_DIR" "Application"; then
