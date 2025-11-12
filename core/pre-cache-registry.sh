@@ -2,6 +2,11 @@
 # TFGrid Compose - Pre-Cache Registry Apps Module
 # Proactively cache all apps from registry for update/management without deployment
 
+# Rate limiting configuration
+GITHUB_DELAY=5   # Delay between GitHub requests (seconds)
+MAX_RETRIES=3    # Maximum retry attempts per app
+RETRY_DELAY=10   # Delay before retrying (seconds)
+
 # Get registry file path - prioritize config directory, then source directory
 get_registry_file() {
     local config_registry="$HOME/.config/tfgrid-compose/registry/apps.yaml"
@@ -53,7 +58,35 @@ get_all_registry_apps() {
     ' "$registry_file"
 }
 
-# Pre-cache all registry apps
+# Retry logic for caching apps with rate limiting
+cache_app_with_retry() {
+    local app_name="$1"
+    local clone_url="$2"
+    local attempt=1
+    
+    while [ $attempt -le $MAX_RETRIES ]; do
+        echo "📦 Caching $app_name (attempt $attempt/$MAX_RETRIES)..."
+        
+        if cache_app "$app_name" "$clone_url"; then
+            echo "  ✅ Cached $app_name"
+            return 0
+        else
+            echo "  ❌ Failed to cache $app_name (attempt $attempt)"
+            
+            if [ $attempt -lt $MAX_RETRIES ]; then
+                echo "  ⏳ Waiting ${RETRY_DELAY}s before retry..."
+                sleep $RETRY_DELAY
+            fi
+        fi
+        
+        attempt=$((attempt + 1))
+    done
+    
+    echo "  ❌ Failed to cache $app_name after $MAX_RETRIES attempts"
+    return 1
+}
+
+# Pre-cache all registry apps with rate limiting
 pre_cache_registry_apps() {
     log_info "Pre-caching all registry apps..."
     echo ""
@@ -67,23 +100,40 @@ pre_cache_registry_apps() {
     local cached_count=0
     local failed_count=0
     
-    # Use process substitution to avoid subshell issues (fixed from pipe)
+    # Convert apps data to array for processing
+    local apps_array=()
     while IFS='|' read -r app_name repo_url; do
         if [ -n "$app_name" ] && [ -n "$repo_url" ]; then
-            echo "📦 Caching $app_name..."
-            
+            apps_array+=("$app_name|$repo_url")
+        fi
+    done < <(echo "$apps_data")
+    
+    # Process apps with rate limiting
+    local total_apps=${#apps_array[@]}
+    local processed_apps=0
+    
+    for app_data in "${apps_array[@]}"; do
+        IFS='|' read -r app_name repo_url <<< "$app_data"
+        
+        if [ -n "$app_name" ] && [ -n "$repo_url" ]; then
             # Convert GitHub URL to Git clone URL
             local clone_url="https://$repo_url.git"
             
-            if cache_app "$app_name" "$clone_url"; then
-                echo "  ✅ Cached $app_name"
+            if cache_app_with_retry "$app_name" "$clone_url"; then
                 cached_count=$((cached_count + 1))
             else
-                echo "  ❌ Failed to cache $app_name"
                 failed_count=$((failed_count + 1))
             fi
+            
+            processed_apps=$((processed_apps + 1))
+            
+            # Add delay between apps (except for the last one)
+            if [ $processed_apps -lt $total_apps ]; then
+                echo "  ⏳ Rate limiting: waiting ${GITHUB_DELAY}s before next app..."
+                sleep $GITHUB_DELAY
+            fi
         fi
-    done < <(echo "$apps_data")
+    done
     
     echo ""
     if [ $cached_count -gt 0 ]; then
@@ -92,6 +142,8 @@ pre_cache_registry_apps() {
     
     if [ $failed_count -gt 0 ]; then
         log_warning "Failed to cache $failed_count apps"
+        log_info "This may be due to GitHub rate limiting or network issues"
+        log_info "Try again in a few minutes or run: t cache preload"
     fi
     
     if [ $cached_count -eq 0 ] && [ $failed_count -eq 0 ]; then

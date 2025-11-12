@@ -197,8 +197,15 @@ cache_app() {
         rm -rf "$app_dir"
     fi
     
-    # Clone repository
-    if git clone --quiet "$repo_url" "$app_dir" 2>/dev/null; then
+    # Clone repository with better error handling
+    local clone_output
+    local clone_exit_code
+    
+    # Try to clone without quiet flag to capture error messages
+    clone_output=$(git clone "$repo_url" "$app_dir" 2>&1)
+    clone_exit_code=$?
+    
+    if [ $clone_exit_code -eq 0 ]; then
         # Get Git commit hash and version info
         cd "$app_dir"
         local commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
@@ -233,7 +240,25 @@ EOF
         return 0
     else
         rm -rf "$app_dir"
-        log_error "Failed to download $app_name from $repo_url"
+        
+        # Check for specific error types and provide helpful messages
+        if echo "$clone_output" | grep -q "rate limit"; then
+            log_error "GitHub rate limiting detected for $app_name"
+            log_info "This usually means too many requests were made to GitHub"
+            log_info "Wait a few minutes and try again"
+        elif echo "$clone_output" | grep -q "Repository not found"; then
+            log_error "Repository not found: $repo_url"
+            log_info "Check if the repository exists and is accessible"
+        elif echo "$clone_output" | grep -q "Authentication failed"; then
+            log_error "Authentication failed for $repo_url"
+            log_info "Repository may be private or require authentication"
+        elif echo "$clone_output" | grep -q "Could not resolve host"; then
+            log_error "Network connectivity issue for $repo_url"
+            log_info "Check your internet connection and DNS settings"
+        else
+            log_error "Failed to download $app_name from $repo_url"
+            log_info "Error details: $clone_output"
+        fi
         return 1
     fi
 }
