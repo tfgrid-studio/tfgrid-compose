@@ -201,9 +201,32 @@ cache_app() {
     local clone_output
     local clone_exit_code
     
-    # Try to clone without quiet flag to capture error messages
-    clone_output=$(git clone "$repo_url" "$app_dir" 2>&1)
-    clone_exit_code=$?
+    # Handle existing directory gracefully
+    if [ -d "$app_dir" ]; then
+        if [ -d "$app_dir/.git" ]; then
+            # Directory exists with git repository - update existing
+            log_info "Updating existing cached app: $app_name"
+            cd "$app_dir"
+            if git pull --quiet origin main 2>/dev/null || git pull --quiet origin master 2>/dev/null; then
+                clone_exit_code=0
+                clone_output="Updated existing repository"
+            else
+                clone_exit_code=1
+                clone_output="Failed to update existing repository"
+            fi
+            cd - >/dev/null
+        else
+            # Directory exists but no git repository - remove and clone fresh
+            log_info "Removing corrupted cache directory: $app_name"
+            rm -rf "$app_dir"
+            clone_output=$(git clone "$repo_url" "$app_dir" 2>&1)
+            clone_exit_code=$?
+        fi
+    else
+        # Directory doesn't exist - clone fresh
+        clone_output=$(git clone "$repo_url" "$app_dir" 2>&1)
+        clone_exit_code=$?
+    fi
     
     if [ $clone_exit_code -eq 0 ]; then
         # Get Git commit hash and version info
@@ -211,6 +234,14 @@ cache_app() {
         local commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
         local manifest_version=$(yaml_get "$app_dir/tfgrid-compose.yaml" "version" 2>/dev/null || echo "unknown")
         cd - >/dev/null
+        
+        # Validate that we got valid data
+        if [ "$commit_hash" = "unknown" ] || [ "$manifest_version" = "unknown" ]; then
+            log_warning "Invalid repository data for $app_name, removing cache"
+            rm -rf "$app_dir"
+            log_error "Failed to get valid repository data from $repo_url"
+            return 1
+        fi
         
         # Check if migrating from old cache_version format
         local old_metadata=$(get_cache_metadata "$app_name")
@@ -236,10 +267,18 @@ EOF
         
         set_cache_metadata "$app_name" "$metadata"
         
-        log_success "Downloaded $app_name"
+        # Provide appropriate success message based on whether it was update or fresh clone
+        if echo "$clone_output" | grep -q "Updated existing repository"; then
+            log_success "Updated $app_name"
+        else
+            log_success "Downloaded $app_name"
+        fi
         return 0
     else
-        rm -rf "$app_dir"
+        # Only remove directory if it didn't exist before (fresh clone failure)
+        if [ ! -d "$app_dir" ]; then
+            rm -rf "$app_dir"
+        fi
         
         # Check for specific error types and provide helpful messages
         if echo "$clone_output" | grep -q "rate limit"; then
@@ -256,8 +295,11 @@ EOF
             log_error "Network connectivity issue for $repo_url"
             log_info "Check your internet connection and DNS settings"
         else
-            log_error "Failed to download $app_name from $repo_url"
+            log_error "Failed to update $app_name from $repo_url"
             log_info "Error details: $clone_output"
+            if [ -d "$app_dir/.git" ]; then
+                log_info "Keeping existing cached version due to update failure"
+            fi
         fi
         return 1
     fi

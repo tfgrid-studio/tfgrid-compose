@@ -185,6 +185,40 @@ get_app_info() {
     }'
 }
 
+# Update registry - comprehensive update of registry metadata and cached apps
+update_registry() {
+    echo ""
+    echo "🔄 TFGrid Compose - Unified Registry Update"
+    echo "==========================================="
+    echo ""
+    
+    # Step 1: Update registry metadata
+    echo "📡 Updating registry metadata..."
+    if fetch_registry; then
+        echo "✅ Registry metadata updated successfully"
+    else
+        echo "❌ Failed to update registry metadata"
+        return 1
+    fi
+    
+    echo ""
+    
+    # Step 2: Update all cached app repositories
+    echo "📦 Updating cached app repositories..."
+    if command -v pre_cache_registry_apps >/dev/null 2>&1; then
+        pre_cache_registry_apps
+        echo "✅ App repositories updated successfully"
+    else
+        echo "⚠️  pre_cache_registry_apps not available, skipping app updates"
+        echo "   You can run 't cache preload' to update app repositories manually"
+    fi
+    
+    echo ""
+    echo "🎉 Registry update complete!"
+    echo ""
+    return 0
+}
+
 # Get app repository URL
 get_app_repo() {
     local app_name="$1"
