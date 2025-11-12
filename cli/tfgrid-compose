@@ -2011,6 +2011,8 @@ EOF
                 log_success "✅ Successfully updated to latest version!"
                 echo ""
                 echo "🧪 Test with: tfgrid-compose --version"
+                echo ""
+                echo "💡 Tip: Use 't update registry' to update apps + registry data"
                 exit 0
                 ;;
                 
@@ -2033,16 +2035,17 @@ EOF
                 if [ -z "$APP_NAME" ]; then
                     log_error "Usage: tfgrid-compose update [registry|app-name|--all-apps]"
                     echo ""
-                    echo "Update tfgrid-compose only (fast):"
+                    echo "Update tfgrid-compose binary only (fast):"
                     echo "  tfgrid-compose update"
                     echo ""
-                    echo "Update specific app:"
+                    echo "🎉 COMPREHENSIVE UPDATE (recommended):"
+                    echo "  tfgrid-compose update registry"
+                    echo "     → Updates registry metadata + ALL cached apps"
+                    echo ""
+                    echo "Update specific app only:"
                     echo "  tfgrid-compose update tfgrid-ai-stack"
                     echo ""
-                    echo "Update registry data:"
-                    echo "  tfgrid-compose update registry"
-                    echo ""
-                    echo "Update all cached apps:"
+                    echo "Update all cached apps only:"
                     echo "  tfgrid-compose update --all-apps"
                     exit 1
                 fi
