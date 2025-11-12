@@ -15,6 +15,7 @@ source "$DEPLOYER_ROOT/core/app-loader.sh"
 source "$DEPLOYER_ROOT/core/orchestrator.sh"
 source "$DEPLOYER_ROOT/core/registry.sh"
 source "$DEPLOYER_ROOT/core/app-cache.sh"
+source "$DEPLOYER_ROOT/core/pre-cache-registry.sh"
 source "$DEPLOYER_ROOT/core/deployment-state.sh"
 source "$DEPLOYER_ROOT/core/deployment-status.sh"
 source "$DEPLOYER_ROOT/core/signin.sh"
@@ -2094,6 +2095,50 @@ EOF
                 log_info "Apps with [needs update] can be refreshed with 't update <app-name>'"
                 ;;
                 
+            registry)
+                # Show all registry apps status (cached and uncached)
+                log_info "TFGrid Compose v$VERSION - Registry Apps Status"
+                echo ""
+                
+                show_registry_apps_status
+                ;;
+                
+            preload)
+                # Pre-cache all registry apps
+                log_info "TFGrid Compose v$VERSION - Pre-Cache Registry Apps"
+                echo ""
+                
+                pre_cache_registry_apps
+                ;;
+                
+            monitor)
+                # Start cache monitoring dashboard
+                log_info "TFGrid Compose v$VERSION - Cache Monitor"
+                echo ""
+                
+                if [ -f "$DEPLOYER_ROOT/core/cache-dashboard.sh" ]; then
+                    source "$DEPLOYER_ROOT/core/cache-dashboard.sh"
+                    cache_dashboard_monitor "$@"
+                else
+                    log_error "Cache dashboard not found"
+                    exit 1
+                fi
+                ;;
+                
+            dashboard)
+                # Show cache health dashboard
+                log_info "TFGrid Compose v$VERSION - Cache Dashboard"
+                echo ""
+                
+                if [ -f "$DEPLOYER_ROOT/core/cache-dashboard.sh" ]; then
+                    source "$DEPLOYER_ROOT/core/cache-dashboard.sh"
+                    cache_dashboard_show
+                else
+                    log_error "Cache dashboard not found"
+                    exit 1
+                fi
+                ;;
+                
             outdated)
                 # List apps that need updates
                 log_info "TFGrid Compose v$VERSION - Outdated Apps"
@@ -2234,6 +2279,10 @@ EOF
                 echo "Subcommands:"
                 echo "  status, health      Show cache overview"
                 echo "  list               List all cached apps with status"
+                echo "  registry           Show all registry apps (cached/uncached)"
+                echo "  preload            Pre-cache all registry apps"
+                echo "  monitor            Start real-time cache monitoring dashboard"
+                echo "  dashboard          Show cache health analytics dashboard"
                 echo "  outdated           List apps needing updates"
                 echo "  refresh            Auto-refresh outdated apps"
                 echo "  validate           Validate cached apps"
@@ -2243,6 +2292,9 @@ EOF
                 echo "Examples:"
                 echo "  t cache status                     # Show cache overview"
                 echo "  t cache list                       # List all cached apps"
+                echo "  t cache registry                   # Show all registry apps"
+                echo "  t cache preload                    # Cache all registry apps"
+                echo "  t cache monitor                    # Start monitoring dashboard"
                 echo "  t cache outdated                   # Show apps needing updates"
                 echo "  t cache refresh                    # Auto-refresh outdated apps"
                 echo "  t cache validate tfgrid-ai-stack  # Validate specific app"

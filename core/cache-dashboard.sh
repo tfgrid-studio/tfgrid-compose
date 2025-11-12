@@ -547,4 +547,22 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
     else
         show_single_dashboard
     fi
+
+# Wrapper functions for CLI integration
+cache_dashboard_monitor() {
+    # Start the monitoring dashboard with auto-refresh
+    echo -e "${GREEN}🚀 Starting cache monitoring dashboard...${NC}"
+    echo -e "${BLUE}Press Ctrl+C to stop, 'h' for help, 'q' to quit${NC}"
+    echo ""
+    run_dashboard
+}
+
+cache_dashboard_show() {
+    # Show a single dashboard view (no auto-refresh)
+    show_single_dashboard
+}
+
+# Export wrapper functions
+export -f cache_dashboard_monitor
+export -f cache_dashboard_show
 fi
