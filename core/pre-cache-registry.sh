@@ -2,12 +2,30 @@
 # TFGrid Compose - Pre-Cache Registry Apps Module
 # Proactively cache all apps from registry for update/management without deployment
 
-# Determine the tfgrid-studio directory (parent of tfgrid-compose)
-TFGRID_STUDIO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Get registry file path - prioritize config directory, then source directory
+get_registry_file() {
+    local config_registry="$HOME/.config/tfgrid-compose/registry/apps.yaml"
+    local source_registry="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/app-registry/registry/apps.yaml"
+    
+    if [ -f "$config_registry" ]; then
+        echo "$config_registry"
+        return 0
+    elif [ -f "$source_registry" ]; then
+        echo "$source_registry"
+        return 0
+    else
+        return 1
+    fi
+}
 
 # Get all apps from registry
 get_all_registry_apps() {
-    local registry_file="$TFGRID_STUDIO_DIR/app-registry/registry/apps.yaml"
+    local registry_file=$(get_registry_file)
+    
+    if [ $? -ne 0 ] || [ -z "$registry_file" ]; then
+        log_error "Registry file not found in expected locations"
+        return 1
+    fi
     
     if [ ! -f "$registry_file" ]; then
         log_error "Registry file not found: $registry_file"
@@ -99,7 +117,12 @@ update_all_registry_apps() {
 
 # Show registry apps status (including non-cached)
 show_registry_apps_status() {
-    local registry_file="$TFGRID_STUDIO_DIR/app-registry/registry/apps.yaml"
+    local registry_file=$(get_registry_file)
+    
+    if [ $? -ne 0 ] || [ -z "$registry_file" ]; then
+        log_error "Registry file not found in expected locations"
+        return 1
+    fi
     
     if [ ! -f "$registry_file" ]; then
         log_error "Registry file not found: $registry_file"
