@@ -1945,49 +1945,319 @@ EOF
         ;;
         
     update)
-        # Update command - install latest version from GitHub
-        log_info "TFGrid Compose v$VERSION - Update"
-        echo ""
+        # Enhanced update command with hybrid strategy
+        UPDATE_SUBCOMMAND="${1:-}"
+        shift || true
+        
+        case "$UPDATE_SUBCOMMAND" in
+            registry)
+                # Update registry data only
+                log_info "TFGrid Compose v$VERSION - Update Registry"
+                echo ""
+                
+                log_info "Refreshing app registry..."
+                if update_registry; then
+                    echo ""
+                    log_success "✅ Registry updated successfully!"
+                    echo ""
+                    log_info "Use 't search' to see updated apps"
+                else
+                    log_error "Failed to update registry"
+                    exit 1
+                fi
+                ;;
+                
+            ""|"")
+                # Default update - update tfgrid-compose binary only
+                log_info "TFGrid Compose v$VERSION - Update"
+                echo ""
 
-        # Check if curl is available
-        if ! command -v curl >/dev/null 2>&1; then
-            log_error "curl is required for update. Please install curl first."
-            exit 1
-        fi
+                # Check if curl is available
+                if ! command -v curl >/dev/null 2>&1; then
+                    log_error "curl is required for update. Please install curl first."
+                    exit 1
+                fi
 
-        # Check if git is available
-        if ! command -v git >/dev/null 2>&1; then
-            log_error "git is required for update. Please install git first."
-            exit 1
-        fi
+                # Check if git is available
+                if ! command -v git >/dev/null 2>&1; then
+                    log_error "git is required for update. Please install git first."
+                    exit 1
+                fi
 
-        echo "🔄 Checking for updates..."
-        echo ""
+                echo "🔄 Checking for updates..."
+                echo ""
 
-        # Create temp directory
-        TEMP_DIR=$(mktemp -d)
-        trap "rm -rf '$TEMP_DIR'" EXIT
+                # Create temp directory
+                TEMP_DIR=$(mktemp -d)
+                trap "rm -rf '$TEMP_DIR'" EXIT
 
-        # Clone latest version
-        if ! git clone --depth 1 https://github.com/tfgrid-studio/tfgrid-compose.git "$TEMP_DIR/tfgrid-compose" >/dev/null 2>&1; then
-            log_error "Failed to download latest version from GitHub"
-            exit 1
-        fi
+                # Clone latest version
+                if ! git clone --depth 1 https://github.com/tfgrid-studio/tfgrid-compose.git "$TEMP_DIR/tfgrid-compose" >/dev/null 2>&1; then
+                    log_error "Failed to download latest version from GitHub"
+                    exit 1
+                fi
 
-        echo "📦 Installing latest version..."
+                echo "📦 Installing latest version..."
 
-        # Install the latest version
-        cd "$TEMP_DIR/tfgrid-compose"
-        if ! make install >/dev/null 2>&1; then
-            log_error "Failed to install latest version"
-            exit 1
-        fi
+                # Install the latest version
+                cd "$TEMP_DIR/tfgrid-compose"
+                if ! make install >/dev/null 2>&1; then
+                    log_error "Failed to install latest version"
+                    exit 1
+                fi
 
-        echo ""
-        log_success "✅ Successfully updated to latest version!"
-        echo ""
-        echo "🧪 Test with: tfgrid-compose --version"
-        exit 0
+                echo ""
+                log_success "✅ Successfully updated to latest version!"
+                echo ""
+                echo "🧪 Test with: tfgrid-compose --version"
+                exit 0
+                ;;
+                
+            --all-apps)
+                # Update all cached apps
+                log_info "TFGrid Compose v$VERSION - Update All Apps"
+                echo ""
+                
+                log_info "Updating all cached apps..."
+                refresh_outdated_apps
+                
+                echo ""
+                log_success "✅ App cache update complete!"
+                ;;
+                
+            *)
+                # Specific app update
+                APP_NAME="$UPDATE_SUBCOMMAND"
+                
+                if [ -z "$APP_NAME" ]; then
+                    log_error "Usage: tfgrid-compose update [registry|app-name|--all-apps]"
+                    echo ""
+                    echo "Update tfgrid-compose only (fast):"
+                    echo "  tfgrid-compose update"
+                    echo ""
+                    echo "Update specific app:"
+                    echo "  tfgrid-compose update tfgrid-ai-stack"
+                    echo ""
+                    echo "Update registry data:"
+                    echo "  tfgrid-compose update registry"
+                    echo ""
+                    echo "Update all cached apps:"
+                    echo "  tfgrid-compose update --all-apps"
+                    exit 1
+                fi
+                
+                log_info "TFGrid Compose v$VERSION - Update App: $APP_NAME"
+                echo ""
+                
+                # Check if app is cached
+                if ! is_app_cached "$APP_NAME"; then
+                    log_error "App '$APP_NAME' is not cached"
+                    log_info "Deploy the app first or install it from registry"
+                    exit 1
+                fi
+                
+                # Update the specific app
+                if update_cached_app "$APP_NAME"; then
+                    echo ""
+                    log_success "✅ Updated $APP_NAME successfully!"
+                else
+                    echo ""
+                    log_warning "⚠️  Update failed for $APP_NAME (using cached version)"
+                fi
+                ;;
+        esac
+        ;;
+        
+    cache)
+        # Cache management command
+        CACHE_SUBCOMMAND="${1:-status}"
+        shift || true
+        
+        case "$CACHE_SUBCOMMAND" in
+            status|health)
+                # Show cache status
+                log_info "TFGrid Compose v$VERSION - Cache Status"
+                echo ""
+                
+                list_cached_apps_enhanced
+                echo ""
+                log_info "Run 't cache list' for detailed status"
+                ;;
+                
+            list)
+                # List all cached apps with detailed status
+                log_info "TFGrid Compose v$VERSION - Cached Apps"
+                echo ""
+                
+                list_cached_apps_enhanced
+                echo ""
+                log_info "Apps with [needs update] can be refreshed with 't update <app-name>'"
+                ;;
+                
+            outdated)
+                # List apps that need updates
+                log_info "TFGrid Compose v$VERSION - Outdated Apps"
+                echo ""
+                
+                list_outdated_apps
+                ;;
+                
+            refresh)
+                # Refresh outdated apps automatically
+                log_info "TFGrid Compose v$VERSION - Refresh Outdated Apps"
+                echo ""
+                
+                refresh_outdated_apps
+                ;;
+                
+            validate)
+                # Validate cached apps
+                log_info "TFGrid Compose v$VERSION - Validate Cache"
+                echo ""
+                
+                local app_name="$1"
+                if [ -n "$app_name" ]; then
+                    # Validate specific app
+                    if validate_cached_app "$app_name"; then
+                        echo "✅ $app_name cache validation passed"
+                    else
+                        echo "❌ $app_name cache validation failed"
+                        exit 1
+                    fi
+                else
+                    # Validate all cached apps
+                    echo "Validating all cached apps..."
+                    echo ""
+                    
+                    local failed_count=0
+                    local total_count=0
+                    
+                    for app_dir in "$APPS_CACHE_DIR"/*; do
+                        if [ -d "$app_dir/.git" ] && [ -f "$app_dir/tfgrid-compose.yaml" ]; then
+                            local name=$(basename "$app_dir")
+                            ((total_count++))
+                            
+                            if validate_cached_app "$name"; then
+                                echo "✅ $name"
+                            else
+                                echo "❌ $name"
+                                ((failed_count++))
+                            fi
+                        fi
+                    done
+                    
+                    echo ""
+                    log_info "Validated $total_count apps, $failed_count failures"
+                    
+                    if [ $failed_count -gt 0 ]; then
+                        exit 1
+                    fi
+                fi
+                ;;
+                
+            clear)
+                # Clean cache
+                CACHE_TARGET="${1:-}"
+                
+                if [ -z "$CACHE_TARGET" ] || [ "$CACHE_TARGET" = "--all" ]; then
+                    # Clear all cache
+                    if [ "$CACHE_TARGET" = "--all" ]; then
+                        log_info "Clearing ALL cache..."
+                        clean_app_cache "" --force
+                        log_success "All cache cleared"
+                    else
+                        echo "⚠️  This will remove ALL cached apps"
+                        echo "Apps will need to be downloaded again"
+                        echo ""
+                        read -p "Continue? (y/N): " -n 1 -r
+                        echo
+                        if [[ $REPLY =~ ^[Yy]$ ]]; then
+                            clean_app_cache "" --force
+                            log_success "All cache cleared"
+                        else
+                            log_info "Cancelled"
+                        fi
+                    fi
+                else
+                    # Clear specific app
+                    clean_app_cache "$CACHE_TARGET"
+                fi
+                ;;
+                
+            info)
+                # Show cache information
+                log_info "TFGrid Compose v$VERSION - Cache Information"
+                echo ""
+                
+                echo "Cache Directory: $APPS_CACHE_DIR"
+                echo "Metadata Directory: $CACHE_METADATA_DIR"
+                echo ""
+                
+                # Show cache statistics
+                local total_apps=0
+                local healthy_apps=0
+                local stale_apps=0
+                local invalid_apps=0
+                
+                for app_dir in "$APPS_CACHE_DIR"/*; do
+                    if [ -d "$app_dir/.git" ] && [ -f "$app_dir/tfgrid-compose.yaml" ]; then
+                        local app_name=$(basename "$app_dir")
+                        local health=$(get_cache_health "$app_name")
+                        local status=$(echo "$health" | jq -r '.status')
+                        
+                        ((total_apps++))
+                        case "$status" in
+                            "healthy") ((healthy_apps++)) ;;
+                            "stale") ((stale_apps++)) ;;
+                            "invalid") ((invalid_apps++)) ;;
+                        esac
+                    fi
+                done
+                
+                echo "Cache Statistics:"
+                echo "  Total apps: $total_apps"
+                echo "  Healthy: $healthy_apps"
+                echo "  Stale: $stale_apps"
+                echo "  Invalid: $invalid_apps"
+                echo ""
+                
+                log_info "Use 't cache list' for detailed status"
+                ;;
+                
+            --help|-h|"")
+                # Show help
+                echo ""
+                echo "🔄 Cache Management"
+                echo ""
+                echo "Usage: tfgrid-compose cache <subcommand> [options]"
+                echo ""
+                echo "Subcommands:"
+                echo "  status, health      Show cache overview"
+                echo "  list               List all cached apps with status"
+                echo "  outdated           List apps needing updates"
+                echo "  refresh            Auto-refresh outdated apps"
+                echo "  validate           Validate cached apps"
+                echo "  clear [app-name]   Clear cache (specific app or all)"
+                echo "  info               Show cache information"
+                echo ""
+                echo "Examples:"
+                echo "  t cache status                     # Show cache overview"
+                echo "  t cache list                       # List all cached apps"
+                echo "  t cache outdated                   # Show apps needing updates"
+                echo "  t cache refresh                    # Auto-refresh outdated apps"
+                echo "  t cache validate tfgrid-ai-stack  # Validate specific app"
+                echo "  t cache clear tfgrid-ai-stack     # Remove specific app from cache"
+                echo "  t cache clear --all                # Clear ALL cache"
+                echo ""
+                exit 0
+                ;;
+                
+            *)
+                log_error "Unknown cache subcommand: $CACHE_SUBCOMMAND"
+                log_info "Use 'tfgrid-compose cache --help' to see available commands"
+                exit 1
+                ;;
+        esac
         ;;
 
     signin)
