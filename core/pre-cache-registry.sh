@@ -67,7 +67,8 @@ pre_cache_registry_apps() {
     local cached_count=0
     local failed_count=0
     
-    echo "$apps_data" | while IFS='|' read -r app_name repo_url; do
+    # Use process substitution to avoid subshell issues (fixed from pipe)
+    while IFS='|' read -r app_name repo_url; do
         if [ -n "$app_name" ] && [ -n "$repo_url" ]; then
             echo "📦 Caching $app_name..."
             
@@ -76,13 +77,13 @@ pre_cache_registry_apps() {
             
             if cache_app "$app_name" "$clone_url"; then
                 echo "  ✅ Cached $app_name"
-                ((cached_count++))
+                cached_count=$((cached_count + 1))
             else
                 echo "  ❌ Failed to cache $app_name"
-                ((failed_count++))
+                failed_count=$((failed_count + 1))
             fi
         fi
-    done
+    done < <(echo "$apps_data")
     
     echo ""
     if [ $cached_count -gt 0 ]; then
