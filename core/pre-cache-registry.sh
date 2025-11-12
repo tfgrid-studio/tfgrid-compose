@@ -2,6 +2,9 @@
 # TFGrid Compose - Pre-Cache Registry Apps Module
 # Proactively cache all apps from registry for update/management without deployment
 
+# Determine the tfgrid-studio directory (parent of tfgrid-compose)
+TFGRID_STUDIO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
 # Get all apps from registry
 get_all_registry_apps() {
     local registry_file="$TFGRID_STUDIO_DIR/app-registry/registry/apps.yaml"
@@ -12,21 +15,22 @@ get_all_registry_apps() {
     fi
     
     # Extract all app names and repos from registry
+    # Fixed parsing to correctly extract name and repo fields
     awk '
-    /^    - name:/ {
+    /^[[:space:]]*- name:/ {
+        # Extract name from "  - name: appname"
+        name = $3
+        gsub(/^[ \t]+|- name:[[:space:]]*/, "", name)
+        gsub(/[[:space:]]+$/, "", name)
+        
+        # Read next line and extract repo
         getline
-        while ($0 ~ /^[[:space:]]+repo:/) {
+        if ($0 ~ /^[[:space:]]+repo:/) {
             repo = $0
             gsub(/^[[:space:]]+repo:[[:space:]]*/, "", repo)
             gsub(/[[:space:]]+$/, "", repo)
             print name "|" repo
-            break
         }
-    }
-    
-    /^    - name:/ {
-        name = $3
-        gsub(/^[ \t]+|[ \t]+$/, "", name)
     }
     ' "$registry_file"
 }
@@ -116,15 +120,16 @@ show_registry_apps_status() {
     local cached_apps=0
     local updated_apps=0
     
-    echo "$apps_data" | while IFS='|' read -r app_name repo_url; do
+    # Use process substitution to avoid subshell issues
+    while IFS='|' read -r app_name repo_url; do
         if [ -n "$app_name" ] && [ -n "$repo_url" ]; then
-            ((total_apps++))
+            total_apps=$((total_apps + 1))
             
             if is_app_cached "$app_name"; then
-                ((cached_apps++))
-                local health=$(get_cache_health "$app_name")
-                local status=$(echo "$health" | jq -r '.status')
-                local needs_update=$(echo "$health" | jq -r '.needs_update')
+                cached_apps=$((cached_apps + 1))
+                local health=$(get_cache_health "$app_name" 2>/dev/null)
+                local status=$(echo "$health" | jq -r '.status' 2>/dev/null)
+                local needs_update=$(echo "$health" | jq -r '.needs_update' 2>/dev/null)
                 
                 case "$status" in
                     "healthy") icon="✅" ;;
@@ -136,7 +141,7 @@ show_registry_apps_status() {
                 local update_flag=""
                 if [ "$needs_update" = "true" ]; then
                     update_flag=" [needs update]"
-                    ((updated_apps++))
+                    updated_apps=$((updated_apps + 1))
                 fi
                 
                 echo "$icon $app_name$update_flag"
@@ -144,7 +149,7 @@ show_registry_apps_status() {
                 echo "📦 $app_name (not cached)"
             fi
         fi
-    done
+    done < <(echo "$apps_data")
     
     echo ""
     echo "📊 Summary: $cached_apps/$total_apps cached"
