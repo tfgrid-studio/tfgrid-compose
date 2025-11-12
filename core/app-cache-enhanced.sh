@@ -53,7 +53,7 @@ set_cache_metadata() {
     echo "$metadata" > "$metadata_file"
 }
 
-# Check if cached app needs update
+# Check if cached app needs update (Git-based)
 cache_needs_update() {
     local app_name="$1"
     local app_dir="$APPS_CACHE_DIR/$app_name"
@@ -69,15 +69,20 @@ cache_needs_update() {
         return 0
     fi
     
-    # Check cache version vs current version
-    local cached_version=$(get_cache_metadata "$app_name" | jq -r '.cache_version // "0.0.0"')
-    local current_version=$(yaml_get "$app_dir/tfgrid-compose.yaml" "cache_version" 2>/dev/null || echo "1.0.0")
+    # Get cached commit hash
+    local cached_commit=$(get_cache_metadata "$app_name" | jq -r '.commit_hash // "unknown"')
     
-    if [ "$cached_version" != "$current_version" ]; then
+    # Get current commit hash
+    cd "$app_dir"
+    local current_commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+    cd - >/dev/null
+    
+    # If commit hashes differ, update needed
+    if [ "$cached_commit" != "$current_commit" ]; then
         return 0
     fi
     
-    # Check if cache is stale (older than 24 hours)
+    # Check if cache is stale (older than 24 hours) - optional fallback
     local cache_age=$(( $(date +%s) - $(stat -c %Y "$metadata_file" 2>/dev/null || stat -f %m "$metadata_file" 2>/dev/null || echo 0) ))
     local max_age=86400  # 24 hours
     
@@ -166,7 +171,7 @@ get_cache_health() {
 EOF
 }
 
-# Clone app repository to cache with version tracking
+# Clone app repository to cache with Git-based version tracking
 cache_app() {
     local app_name="$1"
     local repo_url="$2"
@@ -183,14 +188,16 @@ cache_app() {
     
     # Clone repository
     if git clone --quiet "$repo_url" "$app_dir" 2>/dev/null; then
-        # Create cache metadata
-        local cache_version=$(yaml_get "$app_dir/tfgrid-compose.yaml" "cache_version" 2>/dev/null || echo "1.0.0")
+        # Get Git commit hash and version info
+        cd "$app_dir"
+        local commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
         local manifest_version=$(yaml_get "$app_dir/tfgrid-compose.yaml" "version" 2>/dev/null || echo "unknown")
+        cd - >/dev/null
         
         local metadata=$(cat << EOF | jq -c '.'
 {
   "app_name": "$app_name",
-  "cache_version": "$cache_version",
+  "commit_hash": "$commit_hash",
   "manifest_version": "$manifest_version",
   "repo_url": "$repo_url",
   "cached_at": $(date +%s),
@@ -209,7 +216,7 @@ EOF
     fi
 }
 
-# Update cached app with version tracking
+# Update cached app with Git-based version tracking
 update_cached_app() {
     local app_name="$1"
     local app_dir="$APPS_CACHE_DIR/$app_name"
@@ -223,14 +230,14 @@ update_cached_app() {
     
     cd "$app_dir"
     if git pull --quiet origin main 2>/dev/null || git pull --quiet origin master 2>/dev/null; then
-        # Update cache metadata
-        local cache_version=$(yaml_get "$app_dir/tfgrid-compose.yaml" "cache_version" 2>/dev/null || echo "1.0.0")
+        # Get new commit hash and version info
+        local commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
         local manifest_version=$(yaml_get "$app_dir/tfgrid-compose.yaml" "version" 2>/dev/null || echo "unknown")
         
         local metadata=$(cat << EOF | jq -c '.'
 {
   "app_name": "$app_name",
-  "cache_version": "$cache_version",
+  "commit_hash": "$commit_hash",
   "manifest_version": "$manifest_version",
   "cached_at": $(get_cache_metadata "$app_name" | jq -r '.cached_at // 0'),
   "last_updated": $(date +%s)
@@ -317,7 +324,7 @@ list_cached_apps_enhanced() {
     done
 }
 
-# List apps that need updates
+# List apps that need updates (Git-based)
 list_outdated_apps() {
     ensure_cache_dir
     
@@ -327,10 +334,14 @@ list_outdated_apps() {
             local app_name=$(basename "$app_dir")
             if cache_needs_update "$app_name"; then
                 local health=$(get_cache_health "$app_name")
-                local cache_version=$(echo "$health" | jq -r '.metadata.cache_version // "unknown"')
-                local current_version=$(yaml_get "$app_dir/tfgrid-compose.yaml" "cache_version" 2>/dev/null || echo "unknown")
+                local cached_commit=$(echo "$health" | jq -r '.metadata.commit_hash // "unknown"')
                 
-                echo "📦 $app_name: cache=$cache_version, latest=$current_version"
+                # Get current commit hash
+                cd "$app_dir"
+                local current_commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+                cd - >/dev/null
+                
+                echo "📦 $app_name: cache=$cached_commit, latest=$current_commit"
                 found=true
             fi
         fi
@@ -472,7 +483,7 @@ get_app_cache_version() {
     fi
 }
 
-# Update cached app with version tracking and registry sync
+# Update cached app with Git-based version tracking and registry sync
 update_cached_app_with_registry_sync() {
     local app_name="$1"
     local app_dir="$APPS_CACHE_DIR/$app_name"
@@ -482,22 +493,20 @@ update_cached_app_with_registry_sync() {
         return 1
     fi
     
-    log_info "Updating $app_name with registry sync..."
+    log_info "Updating $app_name with Git-based version tracking..."
     
     cd "$app_dir"
     if git pull --quiet origin main 2>/dev/null || git pull --quiet origin master 2>/dev/null; then
         # Get version information
-        local cache_version=$(yaml_get "$app_dir/tfgrid-compose.yaml" "cache_version" 2>/dev/null || echo "1.0.0")
+        local commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
         local manifest_version=$(yaml_get "$app_dir/tfgrid-compose.yaml" "version" 2>/dev/null || echo "unknown")
-        local registry_cache_version=$(get_registry_app_cache_version "$app_name" 2>/dev/null || echo "")
         
-        # Update cache metadata with registry sync
+        # Update cache metadata with Git-based tracking
         local metadata=$(cat << EOF | jq -c '.'
 {
   "app_name": "$app_name",
-  "cache_version": "$cache_version",
+  "commit_hash": "$commit_hash",
   "manifest_version": "$manifest_version",
-  "registry_cache_version": "$registry_cache_version",
   "cached_at": $(get_cache_metadata "$app_name" | jq -r '.cached_at // 0'),
   "last_updated": $(date +%s)
 }
@@ -505,12 +514,7 @@ EOF
 )
         set_cache_metadata "$app_name" "$metadata"
         
-        # If manifest cache_version differs from registry, log it
-        if [ "$cache_version" != "$registry_cache_version" ] && [ -n "$registry_cache_version" ]; then
-            log_info "Registry sync: $app_name has cache_version=$cache_version, registry has $registry_cache_version"
-        fi
-        
-        log_success "Updated $app_name with registry sync"
+        log_success "Updated $app_name to commit $commit_hash"
         cd - >/dev/null
         return 0
     else
