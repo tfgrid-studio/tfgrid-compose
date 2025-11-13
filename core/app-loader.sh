@@ -75,8 +75,33 @@ load_app() {
     APP_DEPLOYMENT_DIR="$APP_DIR/deployment"
     APP_SRC_DIR="$APP_DIR/src"
     
-    # Log app info
+    # Log app info with enhanced version information
     log_success "Application loaded: $APP_NAME v$APP_VERSION"
+    
+    # Show Git commit information if app is cached
+    if is_app_cached "$APP_NAME"; then
+        local git_info=$(get_cached_app_git_info "$APP_NAME" 2>/dev/null)
+        if [ -n "$git_info" ] && [ "$git_info" != "{}" ]; then
+            local short_commit=$(echo "$git_info" | jq -r '.short_commit // "unknown"')
+            local formatted_date=$(echo "$git_info" | jq -r '.formatted_date // "unknown"')
+            local branch=$(echo "$git_info" | jq -r '.branch // "unknown"')
+            local repo_url=$(echo "$git_info" | jq -r '.repo_url // "unknown"')
+            
+            if [ "$short_commit" != "unknown" ]; then
+                log_info "Git commit: $short_commit"
+            fi
+            if [ "$formatted_date" != "unknown" ]; then
+                log_info "Last updated: $formatted_date"
+            fi
+            if [ "$branch" != "unknown" ]; then
+                log_info "Branch: $branch"
+            fi
+            if [ "$repo_url" != "unknown" ]; then
+                log_info "Repository: $repo_url"
+            fi
+        fi
+    fi
+    
     log_info "Description: $APP_DESCRIPTION"
     
     if [ -n "$APP_RECOMMENDED_PATTERN" ]; then

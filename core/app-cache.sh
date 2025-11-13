@@ -104,11 +104,12 @@ cache_needs_update() {
     return 1
 }
 
-# Validate cached app integrity
+# Validate cached app integrity with enhanced error reporting
 validate_cached_app() {
     local app_name="$1"
     local app_dir="$APPS_CACHE_DIR/$app_name"
     local issues=()
+    local syntax_errors=()
     
     # Check required files exist
     [ -f "$app_dir/tfgrid-compose.yaml" ] || issues+=("Missing manifest file")
@@ -120,10 +121,26 @@ validate_cached_app() {
         [ -f "$app_dir/deployment/configure.sh" ] || issues+=("Missing configure hook")
         [ -f "$app_dir/deployment/healthcheck.sh" ] || issues+=("Missing healthcheck hook")
         
-        # Syntax validation for shell scripts
+        # Enhanced syntax validation for shell scripts
         for hook in setup.sh configure.sh healthcheck.sh; do
             if [ -f "$app_dir/deployment/$hook" ]; then
-                bash -n "$app_dir/deployment/$hook" || issues+=("Syntax error in $hook")
+                # Run syntax check and capture detailed output
+                local syntax_output
+                syntax_output=$(bash -n "$app_dir/deployment/$hook" 2>&1)
+                local syntax_exit_code=$?
+                
+                if [ $syntax_exit_code -ne 0 ]; then
+                    # Parse syntax error to get line number and message
+                    local error_line=$(echo "$syntax_output" | grep -o 'line [0-9]*' | grep -o '[0-9]*' | head -1)
+                    local error_message=$(echo "$syntax_output" | grep -v '^line [0-9]*' | head -1)
+                    
+                    if [ -n "$error_line" ] && [ -n "$error_message" ]; then
+                        syntax_errors+=("$hook: line $error_line - $error_message")
+                    else
+                        syntax_errors+=("$hook: $syntax_output")
+                    fi
+                    issues+=("Syntax error in $hook")
+                fi
             fi
         done
     else
@@ -132,8 +149,17 @@ validate_cached_app() {
     
     # Check manifest syntax
     if [ -f "$app_dir/tfgrid-compose.yaml" ]; then
-        # Basic YAML validation
-        python3 -c "import yaml; yaml.safe_load(open('$app_dir/tfgrid-compose.yaml'))" 2>/dev/null || issues+=("Invalid YAML in manifest")
+        # Enhanced YAML validation with error details
+        local yaml_output
+        yaml_output=$(python3 -c "import yaml; yaml.safe_load(open('$app_dir/tfgrid-compose.yaml'))" 2>&1)
+        if [ $? -ne 0 ]; then
+            issues+=("Invalid YAML in manifest")
+            # Show first line of YAML error for debugging
+            local first_error=$(echo "$yaml_output" | head -1)
+            if [ -n "$first_error" ]; then
+                log_debug "YAML error details: $first_error"
+            fi
+        fi
     fi
     
     # Return issues
@@ -144,6 +170,18 @@ validate_cached_app() {
         for issue in "${issues[@]}"; do
             log_warning "  - $issue"
         done
+        
+        # Show detailed syntax errors if any
+        if [ ${#syntax_errors[@]} -gt 0 ]; then
+            log_info "Detailed syntax errors:"
+            for error in "${syntax_errors[@]}"; do
+                log_info "  💥 $error"
+            done
+            log_info ""
+            log_info "🔧 To fix: Clear cache and re-download fresh version"
+            log_info "   Run: t cache clear $app_name && t update $app_name"
+        fi
+        
         return 1
     fi
 }
@@ -388,7 +426,7 @@ get_app() {
     fi
 }
 
-# Enhanced list cached apps with status
+# Enhanced list cached apps with status and commit information
 list_cached_apps_enhanced() {
     ensure_cache_dir
     
@@ -418,7 +456,19 @@ list_cached_apps_enhanced() {
                 update_flag=" [needs update]"
             fi
             
-            echo "$icon $app_name$update_flag"
+            # Get commit hash for display
+            local git_info=$(get_cached_app_git_info "$app_name" 2>/dev/null)
+            local short_commit=$(echo "$git_info" | jq -r '.short_commit // "unknown"')
+            local formatted_date=$(echo "$git_info" | jq -r '.formatted_date // "unknown"')
+            
+            if [ "$short_commit" != "unknown" ]; then
+                echo "$icon $app_name ($short_commit)$update_flag"
+                if [ "$formatted_date" != "unknown" ]; then
+                    echo "    Last updated: $formatted_date"
+                fi
+            else
+                echo "$icon $app_name$update_flag"
+            fi
         fi
     done
 }
@@ -566,6 +616,47 @@ get_app_cache_version() {
     fi
 }
 
+# Get Git information from cached app
+get_cached_app_git_info() {
+    local app_name="$1"
+    local app_dir="$APPS_CACHE_DIR/$app_name"
+    
+    if [ ! -d "$app_dir/.git" ]; then
+        echo "{}"
+        return 1
+    fi
+    
+    cd "$app_dir"
+    
+    # Get Git information
+    local commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+    local short_commit=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+    local branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+    local commit_date=$(git log -1 --format=%ct 2>/dev/null || echo "0")
+    local commit_message=$(git log -1 --format=%s 2>/dev/null || echo "unknown")
+    local repo_url=$(git config --get remote.origin.url 2>/dev/null || echo "unknown")
+    
+    cd - >/dev/null
+    
+    # Format date
+    local formatted_date=""
+    if [ "$commit_date" != "0" ] && [ "$commit_date" != "unknown" ]; then
+        formatted_date=$(date -d "@$commit_date" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "unknown")
+    fi
+    
+    cat << EOF | jq -c '.'
+{
+  "commit_hash": "$commit_hash",
+  "short_commit": "$short_commit", 
+  "branch": "$branch",
+  "commit_date": "$commit_date",
+  "formatted_date": "$formatted_date",
+  "commit_message": "$commit_message",
+  "repo_url": "$repo_url"
+}
+EOF
+}
+
 # Export functions for use in other scripts
 export APPS_CACHE_DIR
 export CACHE_METADATA_DIR
@@ -586,3 +677,4 @@ export -f get_cache_health
 export -f get_registry_app_cache_version
 export -f get_app_cache_version
 export -f cache_needs_update
+export -f get_cached_app_git_info
