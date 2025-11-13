@@ -2018,11 +2018,11 @@ EOF
                 # Check each cached app for updates
                 for app_dir in "$APPS_CACHE_DIR"/*; do
                     if [ -d "$app_dir/.git" ] && [ -f "$app_dir/tfgrid-compose.yaml" ]; then
-                        local app_name=$(basename "$app_dir")
+                        app_name=$(basename "$app_dir")
                         
                         # Get current cached commit
                         cd "$app_dir"
-                        local cached_commit=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+                        cached_commit=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
                         cd - >/dev/null
                         
                         # Check if update is needed
@@ -2031,7 +2031,7 @@ EOF
                             
                             # Get latest commit from remote
                             cd "$app_dir"
-                            local latest_commit=$(git fetch --quiet origin main 2>/dev/null && git rev-parse --short=7 origin/main 2>/dev/null || echo "unknown")
+                            latest_commit=$(git fetch --quiet origin main 2>/dev/null && git rev-parse --short=7 origin/main 2>/dev/null || echo "unknown")
                             cd - >/dev/null
                             
                             if [ "$latest_commit" != "unknown" ] && [ "$cached_commit" != "$latest_commit" ]; then
@@ -2206,9 +2206,9 @@ EOF
                 fi
                 
                 # Get app information before update
-                local app_dir="$APPS_CACHE_DIR/$APP_NAME"
+                app_dir="$APPS_CACHE_DIR/$APP_NAME"
                 cd "$app_dir" 2>/dev/null || true
-                local current_commit=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+                current_commit=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
                 cd - >/dev/null
                 
                 echo "📊 Current Status:"
@@ -2219,7 +2219,7 @@ EOF
                 # Fetch latest commit from remote for comparison
                 echo "🔄 Fetching latest commits..."
                 cd "$app_dir"
-                local fetch_result="unknown"
+                fetch_result="unknown"
                 if git fetch --quiet origin main 2>/dev/null; then
                     fetch_result=$(git rev-parse --short=7 origin/main 2>/dev/null || echo "unknown")
                 elif git fetch --quiet origin master 2>/dev/null; then
@@ -2255,9 +2255,9 @@ EOF
                     echo ""
                     
                     # Show new commit after successful update
-                    local new_app_dir="$APPS_CACHE_DIR/$APP_NAME"
+                    new_app_dir="$APPS_CACHE_DIR/$APP_NAME"
                     cd "$new_app_dir" 2>/dev/null || true
-                    local new_commit=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+                    new_commit=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
                     cd - >/dev/null
                     
                     if [ "$new_commit" != "unknown" ]; then
@@ -2373,7 +2373,7 @@ EOF
                 log_info "TFGrid Compose v$VERSION - Validate Cache"
                 echo ""
                 
-                local app_name="$1"
+                app_name="$1"
                 if [ -n "$app_name" ]; then
                     # Validate specific app
                     if validate_cached_app "$app_name"; then
@@ -2387,12 +2387,12 @@ EOF
                     echo "Validating all cached apps..."
                     echo ""
                     
-                    local failed_count=0
-                    local total_count=0
+                    failed_count=0
+                    total_count=0
                     
                     for app_dir in "$APPS_CACHE_DIR"/*; do
                         if [ -d "$app_dir/.git" ] && [ -f "$app_dir/tfgrid-compose.yaml" ]; then
-                            local name=$(basename "$app_dir")
+                            name=$(basename "$app_dir")
                             ((total_count++))
                             
                             if validate_cached_app "$name"; then
@@ -2452,16 +2452,16 @@ EOF
                 echo ""
                 
                 # Show cache statistics
-                local total_apps=0
-                local healthy_apps=0
-                local stale_apps=0
-                local invalid_apps=0
+                total_apps=0
+                healthy_apps=0
+                stale_apps=0
+                invalid_apps=0
                 
                 for app_dir in "$APPS_CACHE_DIR"/*; do
                     if [ -d "$app_dir/.git" ] && [ -f "$app_dir/tfgrid-compose.yaml" ]; then
-                        local app_name=$(basename "$app_dir")
-                        local health=$(get_cache_health "$app_name")
-                        local status=$(echo "$health" | jq -r '.status')
+                        app_name=$(basename "$app_dir")
+                        health=$(get_cache_health "$app_name")
+                        status=$(echo "$health" | jq -r '.status')
                         
                         ((total_apps++))
                         case "$status" in
