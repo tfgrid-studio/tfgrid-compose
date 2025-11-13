@@ -2002,9 +2002,9 @@ EOF
                 echo "📊 Checking app cache status..."
                 
                 # Check for outdated apps and show commit comparisons
-                local outdated_apps_found=false
-                local updated_count=0
-                local skipped_count=0
+                outdated_apps_found=false
+                updated_count=0
+                skipped_count=0
                 
                 # Get current tfgrid-compose version for reference
                 CURRENT_VERSION_INFO=$(get_tfgrid_compose_version)
