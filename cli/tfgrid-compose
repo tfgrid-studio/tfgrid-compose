@@ -2016,7 +2016,33 @@ EOF
                     exit 1
                 fi
 
-                echo "🔄 Checking for updates..."
+                echo "🔄 Fetching latest version from GitHub..."
+                echo ""
+
+                # Get latest commit hash from GitHub
+                LATEST_COMMIT=$(get_latest_tfgrid_compose_version)
+                if [ "$LATEST_COMMIT" = "unknown" ]; then
+                    log_error "Failed to fetch latest commit from GitHub"
+                    exit 1
+                fi
+
+                # Check if we're already at the latest commit
+                CURRENT_VERSION_FILE="$HOME/.config/tfgrid-compose/VERSION"
+                CURRENT_COMMIT=""
+                if [ -f "$CURRENT_VERSION_FILE" ]; then
+                    CURRENT_COMMIT=$(head -c 7 "$CURRENT_VERSION_FILE" 2>/dev/null || echo "")
+                fi
+
+                if [ "$CURRENT_COMMIT" = "$LATEST_COMMIT" ]; then
+                    echo "✨ Already at latest version: $LATEST_COMMIT"
+                    echo ""
+                    echo "🧪 Test with: tfgrid-compose --version"
+                    echo ""
+                    exit 0
+                fi
+
+                log_info "Latest commit: $LATEST_COMMIT"
+                log_info "Current version: $CURRENT_COMMIT"
                 echo ""
 
                 # Create temp directory
@@ -2030,6 +2056,9 @@ EOF
                 fi
 
                 echo "📦 Installing latest version..."
+
+                # Update VERSION file with latest commit
+                echo "$LATEST_COMMIT" > "$CURRENT_VERSION_FILE"
 
                 # Install the latest version
                 cd "$TEMP_DIR/tfgrid-compose"
@@ -2942,135 +2971,6 @@ EOF
         display_version
         echo ""
         show_help
-        ;;
-    update)
-        # Update tfgrid-compose and download tfgrid-sdk-go binary
-        log_info "TFGrid Compose v$VERSION - Update"
-        echo ""
-
-        # Parse options
-        FORCE=false
-        DOWNLOAD_SDK=true
-
-        while [[ $# -gt 0 ]]; do
-            case "$1" in
-                --force)
-                    FORCE=true
-                    ;;
-                --no-sdk)
-                    DOWNLOAD_SDK=false
-                    ;;
-                *)
-                    log_error "Unknown option: $1"
-                    echo ""
-                    echo "Usage: tfgrid-compose update [options]"
-                    echo ""
-                    echo "Options:"
-                    echo "  --force    Force update even if already up to date"
-                    echo "  --no-sdk   Skip downloading tfgrid-sdk-go binary"
-                    exit 1
-                    ;;
-            esac
-            shift
-        done
-
-        # Create installation directories
-        mkdir -p "$HOME/.local/share/tfgrid-compose/bin"
-        mkdir -p "$HOME/.local/share/tfgrid-compose/tmp"
-
-        log_info "Updating tfgrid-compose..."
-
-        # For now, just check if tfgrid-sdk-go binary exists and download if needed
-        if [ "$DOWNLOAD_SDK" = true ]; then
-            if [ ! -f "$TFGRID_SDK_BINARY" ] || [ "$FORCE" = true ]; then
-                log_info "Downloading tfgrid-sdk-go binary..."
-
-                # Determine platform
-                case "$(uname -s)" in
-                    Linux)
-                        PLATFORM="linux"
-                        ;;
-                    Darwin)
-                        PLATFORM="darwin"
-                        ;;
-                    *)
-                        log_error "Unsupported platform: $(uname -s)"
-                        exit 1
-                        ;;
-                esac
-
-                case "$(uname -m)" in
-                    x86_64)
-                        ARCH="amd64"
-                        ;;
-                    aarch64|arm64)
-                        ARCH="arm64"
-                        ;;
-                    *)
-                        log_error "Unsupported architecture: $(uname -m)"
-                        exit 1
-                        ;;
-                esac
-
-                # Get latest release version
-                log_info "Checking for latest tfgrid-sdk-go release..."
-                LATEST_RELEASE_URL="https://api.github.com/repos/threefoldtech/tfgrid-sdk-go/releases/latest"
-
-                if command_exists curl; then
-                    LATEST_VERSION=$(curl -s "$LATEST_RELEASE_URL" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' 2>/dev/null)
-                elif command_exists wget; then
-                    LATEST_VERSION=$(wget -q -O - "$LATEST_RELEASE_URL" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' 2>/dev/null)
-                fi
-
-                if [ -z "$LATEST_VERSION" ]; then
-                    log_warning "Could not determine latest version, using fallback URL"
-                    SDK_URL="https://github.com/threefoldtech/tfgrid-sdk-go/releases/download/v0.17.0/tfgrid-sdk-go_${PLATFORM}_${ARCH}.tar.gz"
-                else
-                    log_info "Latest version: $LATEST_VERSION"
-                    SDK_URL="https://github.com/threefoldtech/tfgrid-sdk-go/releases/download/${LATEST_VERSION}/tfgrid-sdk-go_${PLATFORM}_${ARCH}.tar.gz"
-                fi
-
-                TMP_DIR="$HOME/.local/share/tfgrid-compose/tmp"
-                TMP_FILE="$TMP_DIR/tfgrid-sdk-go.tar.gz"
-
-                log_info "Downloading from: $SDK_URL"
-
-                if command_exists curl; then
-                    if ! curl -L -o "$TMP_FILE" "$SDK_URL" 2>/dev/null; then
-                        log_error "Failed to download tfgrid-sdk-go binary"
-                        exit 1
-                    fi
-                elif command_exists wget; then
-                    if ! wget -O "$TMP_FILE" "$SDK_URL" 2>/dev/null; then
-                        log_error "Failed to download tfgrid-sdk-go binary"
-                        exit 1
-                    fi
-                else
-                    log_error "Neither curl nor wget available for downloading"
-                    exit 1
-                fi
-
-                # Extract binary
-                log_info "Extracting binary..."
-                if ! tar -xzf "$TMP_FILE" -C "$HOME/.local/share/tfgrid-compose/bin/" 2>/dev/null; then
-                    log_error "Failed to extract tfgrid-sdk-go binary"
-                    rm -f "$TMP_FILE"
-                    exit 1
-                fi
-
-                # Make executable
-                chmod +x "$TFGRID_SDK_BINARY"
-
-                # Cleanup
-                rm -f "$TMP_FILE"
-
-                log_success "tfgrid-sdk-go binary downloaded successfully"
-            else
-                log_info "tfgrid-sdk-go binary already exists (use --force to re-download)"
-            fi
-        fi
-
-        log_success "Update complete"
         ;;
     tfcmd-install)
         # Install tfcmd from GitHub releases

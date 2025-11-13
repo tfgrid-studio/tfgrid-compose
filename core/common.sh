@@ -213,6 +213,30 @@ get_tfgrid_compose_git_commit() {
     fi
 }
 
+# Get latest tfgrid-compose version from GitHub
+get_latest_tfgrid_compose_version() {
+    local latest_commit=""
+    
+    # Try to get latest commit from GitHub API
+    if command_exists curl; then
+        latest_commit=$(curl -s "https://api.github.com/repos/tfgrid-studio/tfgrid-compose/commits/main" 2>/dev/null | \
+            grep '"sha"' | sed 's/.*"sha": *"\([^"]*\)".*/\1/' | head -c 7)
+    elif command_exists wget; then
+        latest_commit=$(wget -q -O - "https://api.github.com/repos/tfgrid-studio/tfgrid-compose/commits/main" 2>/dev/null | \
+            grep '"sha"' | sed 's/.*"sha": *"\([^"]*\)".*/\1/' | head -c 7)
+    fi
+    
+    # Fallback: try raw file
+    if [ -z "$latest_commit" ] && command_exists curl; then
+        latest_commit=$(curl -s "https://raw.githubusercontent.com/tfgrid-studio/tfgrid-compose/main/VERSION" 2>/dev/null | head -c 7 || echo "")
+    fi
+    
+    if [ -z "$latest_commit" ]; then
+        echo "unknown"
+    else
+        echo "$latest_commit"
+    fi
+}
 # Get comprehensive tfgrid-compose version info
 get_tfgrid_compose_version() {
     local version_file="$(get_deployer_root)/VERSION"
