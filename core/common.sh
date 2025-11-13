@@ -214,13 +214,12 @@ get_tfgrid_compose_git_commit() {
         fi
     fi
     
-    # Fallback: try to get from VERSION file (for backwards compatibility)
+    # Execute VERSION script (for backwards compatibility and dynamic detection)
     local version_file="$deployer_root/VERSION"
-    if [ -f "$version_file" ]; then
-        # Check if VERSION file has a valid commit hash (not comments)
-        local file_content=$(head -n 1 "$version_file" 2>/dev/null || echo "")
-        if [[ "$file_content" =~ ^[a-f0-9]{7}$ ]]; then
-            echo "$file_content"
+    if [ -f "$version_file" ] && [ -x "$version_file" ]; then
+        local script_result=$(bash "$version_file" 2>/dev/null || echo "unknown")
+        if [[ "$script_result" =~ ^[a-f0-9]{7}$ ]]; then
+            echo "$script_result"
             return 0
         fi
     fi
@@ -257,20 +256,22 @@ get_tfgrid_compose_version() {
     local deployer_root="$(get_deployer_root)"
     local version_file="$deployer_root/VERSION"
     
+    # Get Git commit (primary method)
+    local git_commit=$(get_tfgrid_compose_git_commit)
+    
     # Get semantic version from VERSION file (fallback)
     local semantic_version="unknown"
     if [ -f "$version_file" ]; then
-        # Try to extract semantic version from VERSION file (first non-comment line)
-        local first_line=$(head -n 1 "$version_file" 2>/dev/null || echo "")
-        if [[ "$first_line" =~ ^[a-f0-9]{7}$ ]]; then
+        # Try to execute VERSION script to get result, but also check for semantic version
+        local script_result=$(bash "$version_file" 2>/dev/null || echo "unknown")
+        
+        # If script returns a commit hash, we don't have semantic version
+        if [[ "$script_result" =~ ^[a-f0-9]{7}$ ]]; then
             semantic_version="unknown"  # It's a commit hash, not semantic version
-        elif [[ "$first_line" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            semantic_version="$first_line"
+        elif [[ "$script_result" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            semantic_version="$script_result"
         fi
     fi
-    
-    # Get Git commit (primary method)
-    local git_commit=$(get_tfgrid_compose_git_commit)
     
     # Determine what to display
     local display_version="$git_commit"

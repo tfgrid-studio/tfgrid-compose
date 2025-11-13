@@ -106,6 +106,7 @@ install:
 	@echo "📋 Copying files..."
 	@cp -r cli core patterns "$$HOME/.local/share/tfgrid-compose/"
 	@cp VERSION "$$HOME/.local/share/tfgrid-compose/"
+	@chmod +x "$$HOME/.local/share/tfgrid-compose/VERSION"
 	@echo "#!/usr/bin/env bash" > "$$HOME/.local/bin/tfgrid-compose"
 	@echo "exec \"$$HOME/.local/share/tfgrid-compose/cli/tfgrid-compose\" \"\$$@\"" >> "$$HOME/.local/bin/tfgrid-compose"
 	@chmod +x "$$HOME/.local/bin/tfgrid-compose"
