@@ -75,10 +75,7 @@ load_app() {
     APP_DEPLOYMENT_DIR="$APP_DIR/deployment"
     APP_SRC_DIR="$APP_DIR/src"
     
-    # Log app info with enhanced version information
-    log_success "Application loaded: $APP_NAME v$APP_VERSION"
-    
-    # Show Git commit information if app is cached
+    # Log app info with Git commit as primary version
     if is_app_cached "$APP_NAME"; then
         local git_info=$(get_cached_app_git_info "$APP_NAME" 2>/dev/null)
         if [ -n "$git_info" ] && [ "$git_info" != "{}" ]; then
@@ -87,19 +84,36 @@ load_app() {
             local branch=$(echo "$git_info" | jq -r '.branch // "unknown"')
             local repo_url=$(echo "$git_info" | jq -r '.repo_url // "unknown"')
             
+            # Show Git commit as primary version
             if [ "$short_commit" != "unknown" ]; then
-                log_info "Git commit: $short_commit"
+                log_success "Application loaded: $APP_NAME $short_commit"
+                
+                # Show manifest version as secondary info (for compatibility)
+                if [ -n "$APP_VERSION" ] && [ "$APP_VERSION" != "unknown" ]; then
+                    log_info "Manifest version: $APP_VERSION"
+                fi
+                
+                # Show other Git information
+                if [ "$formatted_date" != "unknown" ]; then
+                    log_info "Last updated: $formatted_date"
+                fi
+                if [ "$branch" != "unknown" ]; then
+                    log_info "Branch: $branch"
+                fi
+                if [ "$repo_url" != "unknown" ]; then
+                    log_info "Repository: $repo_url"
+                fi
+            else
+                # Fallback to manifest version if no Git info
+                log_success "Application loaded: $APP_NAME v$APP_VERSION"
             fi
-            if [ "$formatted_date" != "unknown" ]; then
-                log_info "Last updated: $formatted_date"
-            fi
-            if [ "$branch" != "unknown" ]; then
-                log_info "Branch: $branch"
-            fi
-            if [ "$repo_url" != "unknown" ]; then
-                log_info "Repository: $repo_url"
-            fi
+        else
+            # No Git info available, use manifest version
+            log_success "Application loaded: $APP_NAME v$APP_VERSION"
         fi
+    else
+        # Not cached, use manifest version
+        log_success "Application loaded: $APP_NAME v$APP_VERSION"
     fi
     
     log_info "Description: $APP_DESCRIPTION"

@@ -27,11 +27,41 @@ source "$DEPLOYER_ROOT/core/update-git-config.sh"
 source "$DEPLOYER_ROOT/core/contract-manager.sh"
 source "$DEPLOYER_ROOT/core/preferences.sh"
 
-# Version (read from VERSION file)
-VERSION=$(cat "$DEPLOYER_ROOT/VERSION" 2>/dev/null || echo "unknown")
+# Version (enhanced with Git commit support)
+# Load common functions
+source "$DEPLOYER_ROOT/core/common.sh"
+
+# Get enhanced version info
+ENHANCED_VERSION=$(get_tfgrid_compose_version)
+VERSION=$(echo "$ENHANCED_VERSION" | jq -r '.display // "unknown"')
+SEMANTIC_VERSION=$(echo "$ENHANCED_VERSION" | jq -r '.semantic // "unknown"')
+GIT_COMMIT=$(echo "$ENHANCED_VERSION" | jq -r '.git_commit // "unknown"')
 
 # Context file support
 CONTEXT_FILE=".tfgrid-compose.yaml"
+
+# Enhanced version display function
+display_version() {
+    if [ "$GIT_COMMIT" != "unknown" ]; then
+        echo "TFGrid Compose $VERSION"
+        if [ "$SEMANTIC_VERSION" != "unknown" ] && [ "$GIT_COMMIT" != "$SEMANTIC_VERSION" ]; then
+            echo "Semantic version: v$SEMANTIC_VERSION"
+        fi
+    else
+        echo "TFGrid Compose v$VERSION"
+    fi
+}
+
+# Enhanced log function for commands with version
+log_command() {
+    local command_name="$1"
+    if [ "$GIT_COMMIT" != "unknown" ]; then
+        log_info "TFGrid Compose $VERSION - $command_name"
+    else
+        log_info "TFGrid Compose v$VERSION - $command_name"
+    fi
+    echo ""
+}
 
 # Default manifest file
 MANIFEST_FILE="tfgrid-compose.yaml"
@@ -372,14 +402,16 @@ shift || true
 # Handle commands
 case "$COMMAND" in
     --version|version|-v)
-        echo "TFGrid Compose v$VERSION"
+        echo "TFGrid Compose $VERSION"
+        if [ "$GIT_COMMIT" != "unknown" ] && [ "$SEMANTIC_VERSION" != "unknown" ] && [ "$GIT_COMMIT" != "$SEMANTIC_VERSION" ]; then
+            echo "Semantic version: $SEMANTIC_VERSION"
+        fi
         exit 0
         ;;
     
     search)
         # Search registry
-        log_info "TFGrid Compose v$VERSION - Search Registry"
-        echo ""
+        log_command "Search Registry"
         
         QUERY="${1:-}"
         TAG="${2:-}"
@@ -858,8 +890,7 @@ case "$COMMAND" in
         
     up)
         # Deploy command
-        log_info "TFGrid Compose v$VERSION"
-        echo ""
+        log_command "Deploy Application"
         
         # Validate prerequisites
         if ! validate_prerequisites; then
@@ -2907,6 +2938,9 @@ EOF
 
     help|--help|-h|"")
         # Help command
+        echo ""
+        display_version
+        echo ""
         show_help
         ;;
     update)

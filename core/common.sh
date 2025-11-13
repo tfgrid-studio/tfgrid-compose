@@ -199,6 +199,47 @@ get_deployer_root() {
     echo "$(pwd)"
 }
 
+# Get tfgrid-compose Git commit hash
+get_tfgrid_compose_git_commit() {
+    local deployer_root="$(get_deployer_root)"
+    
+    if [ -d "$deployer_root/.git" ]; then
+        cd "$deployer_root"
+        local commit_hash=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+        cd - >/dev/null
+        echo "$commit_hash"
+    else
+        echo "unknown"
+    fi
+}
+
+# Get comprehensive tfgrid-compose version info
+get_tfgrid_compose_version() {
+    local version_file="$(get_deployer_root)/VERSION"
+    local semantic_version=$(cat "$version_file" 2>/dev/null || echo "unknown")
+    local git_commit=$(get_tfgrid_compose_git_commit)
+    
+    if [ "$git_commit" != "unknown" ]; then
+        # Return JSON with both versions
+        cat << EOF | jq -c '.'
+{
+  "semantic": "$semantic_version",
+  "git_commit": "$git_commit",
+  "display": "$git_commit"
+}
+EOF
+    else
+        # No Git info, return semantic version
+        cat << EOF | jq -c '.'
+{
+  "semantic": "$semantic_version",
+  "git_commit": "unknown",
+  "display": "$semantic_version"
+}
+EOF
+    fi
+}
+
 # Note: STATE_DIR is now set dynamically per app, not globally
 # Use STATE_BASE_DIR from deployment-state.sh
 
@@ -473,3 +514,7 @@ export -f state_save
 export -f state_get
 export -f state_clear
 export -f deployment_exists
+
+# Export Git version functions
+export -f get_tfgrid_compose_git_commit
+export -f get_tfgrid_compose_version
