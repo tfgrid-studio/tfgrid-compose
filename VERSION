@@ -1,1 +1,47 @@
-aace5d9
+#!/usr/bin/env bash
+# TFGrid Compose - Dynamic Git commit detection
+# This file dynamically detects the current Git commit hash instead of using hardcoded values
+
+set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# Check if we're in a Git repository
+if [ -d ".git" ]; then
+    # Get current commit hash
+    CURRENT_COMMIT=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+    
+    # If we got a valid commit, output it and exit
+    if [ "$CURRENT_COMMIT" != "unknown" ]; then
+        echo "$CURRENT_COMMIT"
+        exit 0
+    fi
+fi
+
+# Fallback: try to get commit from parent directory (if this is in a subdirectory)
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+if [ -d "$PARENT_DIR/.git" ]; then
+    cd "$PARENT_DIR"
+    CURRENT_COMMIT=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+    
+    if [ "$CURRENT_COMMIT" != "unknown" ]; then
+        echo "$CURRENT_COMMIT"
+        exit 0
+    fi
+fi
+
+# Final fallback: check if there's a cached VERSION file in home config
+CACHED_VERSION="$HOME/.config/tfgrid-compose/VERSION"
+if [ -f "$CACHED_VERSION" ]; then
+    # Validate that cached version looks like a commit hash
+    CACHED_HASH=$(head -c 7 "$CACHED_VERSION" 2>/dev/null || echo "")
+    if [[ "$CACHED_HASH" =~ ^[0-9a-f]{7}$ ]]; then
+        echo "$CACHED_HASH"
+        exit 0
+    fi
+fi
+
+# Ultimate fallback: return unknown
+echo "unknown"

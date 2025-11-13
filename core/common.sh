@@ -199,18 +199,33 @@ get_deployer_root() {
     echo "$(pwd)"
 }
 
-# Get tfgrid-compose Git commit hash
+# Get tfgrid-compose Git commit hash (enhanced with dynamic detection)
 get_tfgrid_compose_git_commit() {
     local deployer_root="$(get_deployer_root)"
     
+    # Try dynamic Git detection first
     if [ -d "$deployer_root/.git" ]; then
         cd "$deployer_root"
         local commit_hash=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
         cd - >/dev/null
-        echo "$commit_hash"
-    else
-        echo "unknown"
+        if [ "$commit_hash" != "unknown" ]; then
+            echo "$commit_hash"
+            return 0
+        fi
     fi
+    
+    # Fallback: try to get from VERSION file (for backwards compatibility)
+    local version_file="$deployer_root/VERSION"
+    if [ -f "$version_file" ]; then
+        # Check if VERSION file has a valid commit hash (not comments)
+        local file_content=$(head -n 1 "$version_file" 2>/dev/null || echo "")
+        if [[ "$file_content" =~ ^[a-f0-9]{7}$ ]]; then
+            echo "$file_content"
+            return 0
+        fi
+    fi
+    
+    echo "unknown"
 }
 
 # Get latest tfgrid-compose version from GitHub
@@ -237,11 +252,31 @@ get_latest_tfgrid_compose_version() {
         echo "$latest_commit"
     fi
 }
-# Get comprehensive tfgrid-compose version info
+# Get comprehensive tfgrid-compose version info (enhanced with dynamic detection)
 get_tfgrid_compose_version() {
-    local version_file="$(get_deployer_root)/VERSION"
-    local semantic_version=$(cat "$version_file" 2>/dev/null || echo "unknown")
+    local deployer_root="$(get_deployer_root)"
+    local version_file="$deployer_root/VERSION"
+    
+    # Get semantic version from VERSION file (fallback)
+    local semantic_version="unknown"
+    if [ -f "$version_file" ]; then
+        # Try to extract semantic version from VERSION file (first non-comment line)
+        local first_line=$(head -n 1 "$version_file" 2>/dev/null || echo "")
+        if [[ "$first_line" =~ ^[a-f0-9]{7}$ ]]; then
+            semantic_version="unknown"  # It's a commit hash, not semantic version
+        elif [[ "$first_line" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            semantic_version="$first_line"
+        fi
+    fi
+    
+    # Get Git commit (primary method)
     local git_commit=$(get_tfgrid_compose_git_commit)
+    
+    # Determine what to display
+    local display_version="$git_commit"
+    if [ "$git_commit" = "unknown" ]; then
+        display_version="$semantic_version"
+    fi
     
     if [ "$git_commit" != "unknown" ]; then
         # Return JSON with both versions
@@ -249,7 +284,8 @@ get_tfgrid_compose_version() {
 {
   "semantic": "$semantic_version",
   "git_commit": "$git_commit",
-  "display": "$git_commit"
+  "display": "$display_version",
+  "detection_method": "dynamic_git"
 }
 EOF
     else
@@ -258,7 +294,8 @@ EOF
 {
   "semantic": "$semantic_version",
   "git_commit": "unknown",
-  "display": "$semantic_version"
+  "display": "$display_version",
+  "detection_method": "fallback_file"
 }
 EOF
     fi

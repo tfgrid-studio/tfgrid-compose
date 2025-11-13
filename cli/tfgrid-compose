@@ -1983,25 +1983,100 @@ EOF
         
         case "$UPDATE_SUBCOMMAND" in
             registry)
-                # Update registry data only
-                log_info "TFGrid Compose v$VERSION - Update Registry"
+                # Update registry data with commit comparison
+                log_info "TFGrid Compose $VERSION - Update Registry + Apps"
                 echo ""
                 
-                log_info "Refreshing app registry..."
+                log_info "🔄 Updating registry data and checking all app commits..."
+                echo ""
+                
+                # First update registry data
                 if update_registry; then
-                    echo ""
-                    log_success "✅ Registry updated successfully!"
-                    echo ""
-                    log_info "Use 't search' to see updated apps"
+                    log_success "✅ Registry data updated successfully!"
                 else
-                    log_error "Failed to update registry"
+                    log_error "❌ Failed to update registry data"
                     exit 1
+                fi
+                
+                echo ""
+                echo "📊 Checking app cache status..."
+                
+                # Check for outdated apps and show commit comparisons
+                local outdated_apps_found=false
+                local updated_count=0
+                local skipped_count=0
+                
+                # Get current tfgrid-compose version for reference
+                CURRENT_VERSION_INFO=$(get_tfgrid_compose_version)
+                CURRENT_COMMIT=$(echo "$CURRENT_VERSION_INFO" | jq -r '.git_commit // "unknown"')
+                
+                echo ""
+                echo "🔍 App Cache Status:"
+                echo "  TFGrid Compose: $CURRENT_COMMIT"
+                echo ""
+                
+                # Check each cached app for updates
+                for app_dir in "$APPS_CACHE_DIR"/*; do
+                    if [ -d "$app_dir/.git" ] && [ -f "$app_dir/tfgrid-compose.yaml" ]; then
+                        local app_name=$(basename "$app_dir")
+                        
+                        # Get current cached commit
+                        cd "$app_dir"
+                        local cached_commit=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+                        cd - >/dev/null
+                        
+                        # Check if update is needed
+                        if cache_needs_update "$app_name"; then
+                            outdated_apps_found=true
+                            
+                            # Get latest commit from remote
+                            cd "$app_dir"
+                            local latest_commit=$(git fetch --quiet origin main 2>/dev/null && git rev-parse --short=7 origin/main 2>/dev/null || echo "unknown")
+                            cd - >/dev/null
+                            
+                            if [ "$latest_commit" != "unknown" ] && [ "$cached_commit" != "$latest_commit" ]; then
+                                echo "🔄 $app_name:"
+                                echo "    Cached: $cached_commit"
+                                echo "    Latest: $latest_commit"
+                                
+                                # Update the app
+                                if update_cached_app "$app_name"; then
+                                    ((updated_count++))
+                                    echo "    ✅ Updated successfully"
+                                else
+                                    echo "    ⚠️  Update failed, using cached version"
+                                fi
+                            else
+                                ((skipped_count++))
+                                echo "⏭️  $app_name: No updates available ($cached_commit)"
+                            fi
+                        else
+                            echo "✅ $app_name: Up to date ($cached_commit)"
+                        fi
+                    fi
+                done
+                
+                echo ""
+                if [ "$outdated_apps_found" = "true" ]; then
+                    echo "📈 Update Summary:"
+                    echo "  Apps updated: $updated_count"
+                    echo "  Apps skipped: $skipped_count"
+                    echo "  Total cached apps checked"
+                    echo ""
+                    log_success "✅ Registry + app cache update complete!"
+                    echo ""
+                    echo "🧪 Test with: tfgrid-compose cache list"
+                    echo "📱 Browse updated apps: tfgrid-compose search"
+                else
+                    log_success "✅ All apps are already up to date!"
+                    echo ""
+                    echo "🧪 Check cache status: tfgrid-compose cache status"
                 fi
                 ;;
                 
             ""|"")
                 # Default update - update tfgrid-compose binary only
-                log_info "TFGrid Compose v$VERSION - Update"
+                log_info "TFGrid Compose $VERSION - Update"
                 echo ""
 
                 # Check if curl is available
@@ -2026,23 +2101,31 @@ EOF
                     exit 1
                 fi
 
-                # Check if we're already at the latest commit
-                CURRENT_VERSION_FILE="$HOME/.config/tfgrid-compose/VERSION"
-                CURRENT_COMMIT=""
-                if [ -f "$CURRENT_VERSION_FILE" ]; then
-                    CURRENT_COMMIT=$(head -c 7 "$CURRENT_VERSION_FILE" 2>/dev/null || echo "")
-                fi
+                # Get current commit from our enhanced version detection
+                CURRENT_VERSION_INFO=$(get_tfgrid_compose_version)
+                CURRENT_COMMIT=$(echo "$CURRENT_VERSION_INFO" | jq -r '.git_commit // "unknown"')
+                
+                # Show detailed comparison
+                echo "📊 Version Comparison:"
+                echo "  Current commit: $CURRENT_COMMIT"
+                echo "  Latest commit:  $LATEST_COMMIT"
+                echo ""
 
-                if [ "$CURRENT_COMMIT" = "$LATEST_COMMIT" ]; then
-                    echo "✨ Already at latest version: $LATEST_COMMIT"
+                if [ "$CURRENT_COMMIT" = "$LATEST_COMMIT" ] || [ "$CURRENT_COMMIT" = "unknown" ] && [ -n "$LATEST_COMMIT" ]; then
+                    if [ "$CURRENT_COMMIT" = "unknown" ]; then
+                        echo "⚠️  Current version detection failed, but update available"
+                    else
+                        echo "✨ Already at latest version: $LATEST_COMMIT"
+                    fi
                     echo ""
                     echo "🧪 Test with: tfgrid-compose --version"
                     echo ""
                     exit 0
                 fi
 
-                log_info "Latest commit: $LATEST_COMMIT"
-                log_info "Current version: $CURRENT_COMMIT"
+                echo "📋 Update Summary:"
+                echo "  → Current: $CURRENT_COMMIT"
+                echo "  → Latest:  $LATEST_COMMIT"
                 echo ""
 
                 # Create temp directory
@@ -2057,7 +2140,8 @@ EOF
 
                 echo "📦 Installing latest version..."
 
-                # Update VERSION file with latest commit
+                # Update VERSION file with latest commit (maintain backwards compatibility)
+                CURRENT_VERSION_FILE="$HOME/.config/tfgrid-compose/VERSION"
                 echo "$LATEST_COMMIT" > "$CURRENT_VERSION_FILE"
 
                 # Install the latest version
@@ -2070,6 +2154,7 @@ EOF
                 echo ""
                 log_success "✅ Successfully updated to latest version!"
                 echo ""
+                echo "🔍 Detection Method: Dynamic Git commit detection"
                 echo "🧪 Test with: tfgrid-compose --version"
                 echo ""
                 echo "💡 Tip: Use 't update registry' to update apps + registry data"
@@ -2110,7 +2195,7 @@ EOF
                     exit 1
                 fi
                 
-                log_info "TFGrid Compose v$VERSION - Update App: $APP_NAME"
+                log_info "TFGrid Compose $VERSION - Update App: $APP_NAME"
                 echo ""
                 
                 # Check if app is cached
@@ -2120,13 +2205,78 @@ EOF
                     exit 1
                 fi
                 
+                # Get app information before update
+                local app_dir="$APPS_CACHE_DIR/$APP_NAME"
+                cd "$app_dir" 2>/dev/null || true
+                local current_commit=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+                cd - >/dev/null
+                
+                echo "📊 Current Status:"
+                echo "  App: $APP_NAME"
+                echo "  Current commit: $current_commit"
+                echo ""
+                
+                # Fetch latest commit from remote for comparison
+                echo "🔄 Fetching latest commits..."
+                cd "$app_dir"
+                local fetch_result="unknown"
+                if git fetch --quiet origin main 2>/dev/null; then
+                    fetch_result=$(git rev-parse --short=7 origin/main 2>/dev/null || echo "unknown")
+                elif git fetch --quiet origin master 2>/dev/null; then
+                    fetch_result=$(git rev-parse --short=7 origin/master 2>/dev/null || echo "unknown")
+                fi
+                cd - >/dev/null
+                
+                if [ "$fetch_result" != "unknown" ]; then
+                    echo "  Latest commit:  $fetch_result"
+                    echo ""
+                    
+                    if [ "$current_commit" = "$fetch_result" ]; then
+                        echo "✨ Already at latest version: $current_commit"
+                        echo ""
+                        echo "🧪 Test with: tfgrid-compose cache list"
+                        exit 0
+                    else
+                        echo "📋 Update Available:"
+                        echo "  → Current: $current_commit"
+                        echo "  → Latest:  $fetch_result"
+                        echo ""
+                    fi
+                else
+                    echo "  Latest commit: Unable to fetch"
+                    echo ""
+                    log_warning "Could not fetch latest commits, attempting update anyway..."
+                fi
+                
                 # Update the specific app
                 if update_cached_app "$APP_NAME"; then
                     echo ""
                     log_success "✅ Updated $APP_NAME successfully!"
+                    echo ""
+                    
+                    # Show new commit after successful update
+                    local new_app_dir="$APPS_CACHE_DIR/$APP_NAME"
+                    cd "$new_app_dir" 2>/dev/null || true
+                    local new_commit=$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown")
+                    cd - >/dev/null
+                    
+                    if [ "$new_commit" != "unknown" ]; then
+                        echo "🔍 New commit: $new_commit"
+                        echo "🔍 Detection Method: Git-based commit tracking"
+                    fi
+                    
+                    echo ""
+                    echo "🧪 Test with: tfgrid-compose cache list"
+                    echo "📱 Deploy updated app: tfgrid-compose up $APP_NAME"
                 else
                     echo ""
                     log_warning "⚠️  Update failed for $APP_NAME (using cached version)"
+                    echo ""
+                    echo "🔧 Troubleshooting:"
+                    echo "  • Check network connectivity"
+                    echo "  • Verify repository access: git ls-remote origin"
+                    echo "  • Clear cache: tfgrid-compose cache clear $APP_NAME"
+                    echo "  • Try manual update: cd ~/.config/tfgrid-compose/apps/$APP_NAME && git pull"
                 fi
                 ;;
         esac
