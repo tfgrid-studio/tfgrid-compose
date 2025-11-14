@@ -83,16 +83,24 @@ load_app() {
             local formatted_date=$(echo "$git_info" | jq -r '.formatted_date // "unknown"')
             local branch=$(echo "$git_info" | jq -r '.branch // "unknown"')
             local repo_url=$(echo "$git_info" | jq -r '.repo_url // "unknown"')
-            
+
             # Show Git commit as primary version
             if [ "$short_commit" != "unknown" ]; then
                 log_success "Application loaded: $APP_NAME $short_commit"
-                
+
+                # Show registry version for verification
+                local registry_version=$(get_registry_version "$APP_NAME" 2>/dev/null || echo "unknown")
+                if [ "$registry_version" != "unknown" ] && [ "$registry_version" != "$short_commit" ]; then
+                    log_warning "⚠️  Version mismatch: cached=$short_commit, registry=$registry_version"
+                elif [ "$registry_version" != "unknown" ]; then
+                    log_info "✅ Registry version matches: $registry_version"
+                fi
+
                 # Show manifest version as secondary info (for compatibility)
                 if [ -n "$APP_VERSION" ] && [ "$APP_VERSION" != "unknown" ]; then
                     log_info "Manifest version: $APP_VERSION"
                 fi
-                
+
                 # Show other Git information
                 if [ "$formatted_date" != "unknown" ]; then
                     log_info "Last updated: $formatted_date"

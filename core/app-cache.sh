@@ -53,54 +53,91 @@ set_cache_metadata() {
     echo "$metadata" > "$metadata_file"
 }
 
-# Check if cached app needs update (Git-based with migration support)
+# Get registry version for an app
+get_registry_version() {
+    local app_name="$1"
+
+    local registry=$(get_registry 2>/dev/null)
+    if [ -z "$registry" ]; then
+        echo "unknown"
+        return 1
+    fi
+
+    # Extract version from registry (supports nested apps.official/apps.verified format)
+    echo "$registry" | awk -v app="$app_name" '
+    /^  - name:/ {
+        current_app = $3
+        gsub(/^[ \t]+|[ \t]+$/, "", current_app)
+        if (current_app == app) {
+            in_app = 1
+        } else {
+            in_app = 0
+        }
+    }
+
+    in_app && /^    version:/ {
+        version = substr($0, index($0, "version:") + 8)
+        gsub(/^[ \t]+|[ \t]+$/, "", version)
+        print version
+        exit
+    }'
+}
+
+# Check if cached app needs update (Git-based with registry version checking)
 cache_needs_update() {
     local app_name="$1"
     local app_dir="$APPS_CACHE_DIR/$app_name"
     local metadata_file=$(get_cache_metadata_file "$app_name")
-    
+
     # If no metadata, needs update
     if [ ! -f "$metadata_file" ]; then
         return 0
     fi
-    
+
     # If app not cached, needs update
     if [ ! -d "$app_dir/.git" ]; then
         return 0
     fi
-    
+
     # Get cached metadata
     local metadata=$(get_cache_metadata "$app_name")
     local cached_commit=$(echo "$metadata" | jq -r '.commit_hash // "unknown"')
-    
+
     # Migration check: If old cache format (has cache_version but no commit_hash)
     local has_cache_version=$(echo "$metadata" | jq -r '.cache_version // empty' | grep -v '^empty' | wc -l)
     local has_commit_hash=$(echo "$metadata" | jq -r '.commit_hash // empty' | grep -v '^unknown' | grep -v '^empty' | wc -l)
-    
+
     # If has cache_version but no commit_hash, needs migration to Git-based
     if [ "$has_cache_version" -gt 0 ] && [ "$has_commit_hash" -eq 0 ]; then
         log_info "Migrating $app_name from cache_version to Git-based tracking..."
         return 0
     fi
-    
+
+    # NEW: Check if registry version differs from cached commit
+    local registry_version=$(get_registry_version "$app_name")
+    if [ "$registry_version" != "unknown" ] && [ "$registry_version" != "$cached_commit" ]; then
+        log_info "Registry version ($registry_version) differs from cached ($cached_commit) - update needed"
+        return 0
+    fi
+
     # Get current commit hash
     cd "$app_dir"
     local current_commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
     cd - >/dev/null
-    
+
     # If commit hashes differ, update needed
     if [ "$cached_commit" != "$current_commit" ] || [ "$cached_commit" = "unknown" ]; then
         return 0
     fi
-    
+
     # Check if cache is stale (older than 24 hours) - optional fallback
     local cache_age=$(( $(date +%s) - $(stat -c %Y "$metadata_file" 2>/dev/null || stat -f %m "$metadata_file" 2>/dev/null || echo 0) ))
     local max_age=86400  # 24 hours
-    
+
     if [ $cache_age -gt $max_age ]; then
         return 0
     fi
-    
+
     return 1
 }
 
