@@ -91,7 +91,7 @@ search_registry() {
         app_tags = ""
     }
     
-    /^    - name:/ {
+    /^  - name:/ {
         # Print previous app if matches
         if (in_app && app_name != "") {
             match_found = 0
@@ -105,7 +105,7 @@ search_registry() {
                 printf "%-20s %s\n", app_name, app_desc
             }
         }
-        
+
         # Start new app
         in_app = 1
         app_name = $3
@@ -113,13 +113,13 @@ search_registry() {
         app_desc = ""
         app_tags = ""
     }
-    
-    /^      description:/ {
+
+    /^    description:/ {
         app_desc = substr($0, index($0, "description:") + 12)
         gsub(/^[ \t]+|[ \t]+$/, "", app_desc)
     }
-    
-    /^        - / && in_app {
+
+    /^      - / && in_app {
         tag_value = $2
         gsub(/^[ \t]+|[ \t]+$/, "", tag_value)
         app_tags = app_tags " " tag_value
@@ -158,7 +158,7 @@ get_app_info() {
         found = 0
     }
     
-    /^    - name:/ {
+    /^  - name:/ {
         current_app = $3
         gsub(/^[ \t]+|[ \t]+$/, "", current_app)
         if (current_app == app) {
@@ -169,12 +169,12 @@ get_app_info() {
             in_app = 0
         }
     }
-    
-    in_app && /^      / {
+
+    in_app && /^    / {
         print
     }
-    
-    /^    - name:/ && in_app && current_app != app {
+
+    /^  - name:/ && in_app && current_app != app {
         in_app = 0
     }
     
@@ -230,7 +230,7 @@ get_app_repo() {
     
     # Extract repo URL directly
     echo "$registry" | awk -v app="$app_name" '
-    /^    - name:/ {
+    /^  - name:/ {
         current_app = $3
         gsub(/^[ \t]+|[ \t]+$/, "", current_app)
         if (current_app == app) {
@@ -239,8 +239,8 @@ get_app_repo() {
             in_app = 0
         }
     }
-    
-    in_app && /^      repo:/ {
+
+    in_app && /^    repo:/ {
         repo = substr($0, index($0, "repo:") + 5)
         gsub(/^[ \t]+|[ \t]+$/, "", repo)
         # Convert github.com/org/repo to https://
