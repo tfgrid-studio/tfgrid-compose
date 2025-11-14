@@ -90,8 +90,9 @@ load_app() {
 
                 # Show registry version for verification
                 local registry_version=$(get_registry_version "$APP_NAME" 2>/dev/null || echo "unknown")
-                if [ "$registry_version" != "unknown" ] && [ "$registry_version" != "$short_commit" ]; then
-                    log_warning "⚠️  Version mismatch: cached=$short_commit, registry=$registry_version"
+                local full_commit=$(echo "$git_info" | jq -r '.commit_hash // "unknown"')
+                if [ "$registry_version" != "unknown" ] && [ "$registry_version" != "$full_commit" ]; then
+                    log_warning "⚠️  Version mismatch: cached=$full_commit, registry=$registry_version"
                 elif [ "$registry_version" != "unknown" ]; then
                     log_info "✅ Registry version matches: $registry_version"
                 fi
