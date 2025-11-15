@@ -3165,7 +3165,6 @@ EOF
         echo ""
 
         # Download the correct tarball containing tfcmd
-        LATEST_VERSION="v0.17.0"  # Use known working version
         DOWNLOAD_URL="https://github.com/threefoldtech/tfgrid-sdk-go/releases/download/${LATEST_VERSION}/tfgrid-sdk-go_Linux_x86_64.tar.gz"
         
         echo "Downloading from: tfgrid-sdk-go_Linux_x86_64.tar.gz"
