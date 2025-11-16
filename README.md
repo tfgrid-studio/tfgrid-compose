@@ -2,8 +2,6 @@
 
 **Universal deployment orchestrator for ThreeFold Grid applications.**
 
-> **Note:** This repository was renamed from `tfgrid-deployer` to `tfgrid-compose` on Oct 9, 2025 as part of the TFGrid Studio rebrand.
-
 [![Status](https://img.shields.io/badge/status-production--ready-green)]() 
 [![Version](https://img.shields.io/badge/version-0.13.4-blue)]() 
 [![Patterns](https://img.shields.io/badge/patterns-3%2F3-success)]()
