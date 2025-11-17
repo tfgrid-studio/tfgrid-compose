@@ -508,11 +508,15 @@ generate_terraform_config() {
 # Deploy app source code to VM
 deploy_app_source() {
     log_step "Deploying application source code..."
-    
-    local vm_ip=$(state_get "vm_ip")
-    
+
+    # Use network-aware IP resolution that respects global preferences
+    local DEPLOYMENT_ID=$(basename "$STATE_DIR")
+    source "$DEPLOYER_ROOT/core/common.sh"
+    source "$DEPLOYER_ROOT/core/network.sh"
+    local vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
+
     if [ -z "$vm_ip" ]; then
-        log_error "No VM IP found"
+        log_error "No VM IP found for preferred network"
         return 1
     fi
     
@@ -539,11 +543,15 @@ deploy_app_source() {
 # Run app deployment hooks
 run_app_hooks() {
     log_step "Running application deployment hooks..."
-    
-    local vm_ip=$(state_get "vm_ip")
-    
+
+    # Use network-aware IP resolution that respects global preferences
+    local DEPLOYMENT_ID=$(basename "$STATE_DIR")
+    source "$DEPLOYER_ROOT/core/common.sh"
+    source "$DEPLOYER_ROOT/core/network.sh"
+    local vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
+
     if [ -z "$vm_ip" ]; then
-        log_error "No VM IP found"
+        log_error "No VM IP found for preferred network"
         return 1
     fi
     
@@ -679,14 +687,18 @@ run_app_hooks() {
 # Verify deployment
 verify_deployment() {
     log_step "Verifying deployment..."
-    
-    local vm_ip=$(state_get "vm_ip")
-    
+
+    # Use network-aware IP resolution that respects global preferences
+    local DEPLOYMENT_ID=$(basename "$STATE_DIR")
+    source "$DEPLOYER_ROOT/core/common.sh"
+    source "$DEPLOYER_ROOT/core/network.sh"
+    local vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
+
     if [ -z "$vm_ip" ]; then
-        log_error "No VM IP found"
+        log_error "No VM IP found for preferred network"
         return 1
     fi
-    
+
     # Check if VM is accessible
     log_info "Checking VM accessibility..."
     if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
@@ -696,7 +708,7 @@ verify_deployment() {
         log_warning "VM is not yet accessible via SSH"
         return 1
     fi
-    
+
     # Check if app service exists
     log_info "Checking application service..."
     if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
@@ -705,7 +717,7 @@ verify_deployment() {
     else
         log_warning "Application service not found"
     fi
-    
+
     log_success "Deployment verified"
     return 0
 }
