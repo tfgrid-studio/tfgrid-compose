@@ -187,13 +187,22 @@ get_app_info() {
 
 # Update registry - comprehensive update of registry metadata and cached apps
 update_registry() {
+    local force="${1:-false}"
     echo ""
-    echo "🔄 TFGrid Compose - Unified Registry Update"
+    if [ "$force" = true ]; then
+        echo "🔄 TFGrid Compose - Unified Registry Update (Forced)"
+    else
+        echo "🔄 TFGrid Compose - Unified Registry Update"
+    fi
     echo "==========================================="
     echo ""
-    
+
     # Step 1: Update registry metadata
     echo "📡 Updating registry metadata..."
+    if [ "$force" = true ]; then
+        # Force update: clear cache first
+        rm -f "$REGISTRY_FILE"
+    fi
     if fetch_registry; then
         echo "✅ Registry metadata updated successfully"
     else

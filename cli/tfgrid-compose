@@ -1986,15 +1986,33 @@ EOF
         
         case "$UPDATE_SUBCOMMAND" in
             registry)
+                # Parse --force flag
+                FORCE_UPDATE=false
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        --force|-f)
+                            FORCE_UPDATE=true
+                            shift
+                            ;;
+                        *)
+                            break
+                            ;;
+                    esac
+                done
+
                 # Update registry data with commit comparison
-                log_info "TFGrid Compose $VERSION - Update Registry + Apps"
+                if [ "$FORCE_UPDATE" = true ]; then
+                    log_info "TFGrid Compose $VERSION - Update Registry + Apps (Forced)"
+                else
+                    log_info "TFGrid Compose $VERSION - Update Registry + Apps"
+                fi
                 echo ""
-                
+
                 log_info "🔄 Updating registry data and checking all app commits..."
                 echo ""
-                
-                # First update registry data
-                if update_registry; then
+
+                # First update registry data (force if requested)
+                if update_registry "$FORCE_UPDATE"; then
                     log_success "✅ Registry data updated successfully!"
                 else
                     log_error "❌ Failed to update registry data"
