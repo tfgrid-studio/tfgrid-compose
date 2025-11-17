@@ -126,10 +126,8 @@ list_deployed_apps() {
                     if [ -f "$SCRIPT_DIR/login.sh" ]; then
                         source "$SCRIPT_DIR/login.sh" 2>/dev/null
                         if load_credentials 2>/dev/null; then
-                            # Check if this contract exists on the grid using tfgrid-compose contracts
-                            local contracts_output=$(tfgrid-compose contracts list 2>/dev/null || echo "")
-                            
-                            if ! echo "$contracts_output" | grep -q "$contract_id"; then
+                            # Check if this contract exists on the grid using tfgrid-compose contracts (with timeout)
+                            if ! timeout 5 bash -c "tfgrid-compose contracts list 2>/dev/null | grep -q '$contract_id'" 2>/dev/null; then
                                 has_valid_contract=false
                             fi
                         fi
