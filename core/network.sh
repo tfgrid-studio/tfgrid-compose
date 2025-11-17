@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 # TFGrid Compose - Network Management Module
 
+# Guard against multiple sourcing
+[ -n "${_TFGRID_NETWORK_SH_SOURCED:-}" ] && return 0
+readonly _TFGRID_NETWORK_SH_SOURCED=1
+
 # Source required modules
 source "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh"
 
-# Network preference constants
-readonly NETWORK_WIREGUARD="wireguard"
-readonly NETWORK_MYCELIUM="mycelium"
-readonly DEFAULT_NETWORK="$NETWORK_WIREGUARD"
-readonly GLOBAL_NETWORK_FILE="$HOME/.config/tfgrid-compose/network-preference"
+# Network preference constants - only define if not already set
+if [ -z "${NETWORK_WIREGUARD:-}" ]; then
+    readonly NETWORK_WIREGUARD="wireguard"
+    readonly NETWORK_MYCELIUM="mycelium"
+    readonly DEFAULT_NETWORK="$NETWORK_WIREGUARD"
+    readonly GLOBAL_NETWORK_FILE="$HOME/.config/tfgrid-compose/network-preference"
+fi
 
 # Get network preference (deployment-specific or global fallback)
 get_network_preference() {

@@ -511,8 +511,6 @@ deploy_app_source() {
 
     # Use network-aware IP resolution that respects global preferences
     local DEPLOYMENT_ID=$(basename "$STATE_DIR")
-    source "$DEPLOYER_ROOT/core/common.sh"
-    source "$DEPLOYER_ROOT/core/network.sh"
     local vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
 
     if [ -z "$vm_ip" ]; then
@@ -546,8 +544,6 @@ run_app_hooks() {
 
     # Use network-aware IP resolution that respects global preferences
     local DEPLOYMENT_ID=$(basename "$STATE_DIR")
-    source "$DEPLOYER_ROOT/core/common.sh"
-    source "$DEPLOYER_ROOT/core/network.sh"
     local vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
 
     if [ -z "$vm_ip" ]; then
@@ -690,8 +686,6 @@ verify_deployment() {
 
     # Use network-aware IP resolution that respects global preferences
     local DEPLOYMENT_ID=$(basename "$STATE_DIR")
-    source "$DEPLOYER_ROOT/core/common.sh"
-    source "$DEPLOYER_ROOT/core/network.sh"
     local vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
 
     if [ -z "$vm_ip" ]; then
