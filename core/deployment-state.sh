@@ -57,7 +57,7 @@ get_current_app() {
     fi
 }
 
-# Get smart context: use current app, or auto-detect if only one deployed
+# Get smart context: use current app, or auto-detect if only one deployment
 get_smart_context() {
     # First try explicit context
     local current=$(get_current_app)
@@ -65,27 +65,20 @@ get_smart_context() {
         echo "$current"
         return 0
     fi
-    
-    # Count deployed apps
-    local count=0
-    local only_app=""
-    
-    if [ -d "$STATE_BASE_DIR" ]; then
-        for state_dir in "$STATE_BASE_DIR"/*; do
-            if [ -d "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
-                count=$((count + 1))
-                only_app=$(basename "$state_dir")
-            fi
-        done
+
+    # Count active deployments from registry
+    local deployments=$(get_all_deployments 2>/dev/null | wc -l)
+
+    # If exactly one deployment, return its deployment ID
+    if [ "$deployments" -eq 1 ]; then
+        local deployment_id=$(get_all_deployments 2>/dev/null | head -1 | cut -d'|' -f1)
+        if [ -n "$deployment_id" ]; then
+            echo "$deployment_id"
+            return 0
+        fi
     fi
-    
-    # If exactly one app, use it
-    if [ $count -eq 1 ]; then
-        echo "$only_app"
-        return 0
-    fi
-    
-    # Multiple or no apps
+
+    # Multiple or no deployments
     return 1
 }
 
