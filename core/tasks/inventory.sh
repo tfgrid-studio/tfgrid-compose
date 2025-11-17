@@ -43,14 +43,8 @@ if [ -z "$ansible_ip" ]; then
     exit 1
 fi
 
-# Format IP for Ansible (add brackets for IPv6)
-if [[ "$ansible_ip" == *":"* ]]; then
-    # IPv6 address (Mycelium)
-    ansible_host="[$ansible_ip]"
-else
-    # IPv4 address (WireGuard)
-    ansible_host="$ansible_ip"
-fi
+# Format IP for Ansible (IPv6 addresses use brackets for specific use cases, but SSH connection doesn't need them)
+ansible_host="$ansible_ip"
 
 # Create inventory file using network-preferred IP
 cat > "$STATE_DIR/inventory.ini" << EOF
