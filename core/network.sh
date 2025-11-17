@@ -5,24 +5,69 @@
 readonly NETWORK_WIREGUARD="wireguard"
 readonly NETWORK_MYCELIUM="mycelium"
 readonly DEFAULT_NETWORK="$NETWORK_WIREGUARD"
+readonly GLOBAL_NETWORK_FILE="$HOME/.config/tfgrid-compose/network-preference"
 
-# Get network preference from deployment state
+# Get network preference (deployment-specific or global fallback)
 get_network_preference() {
     local app_name="$1"
-    local state_dir=$(get_app_state_dir "$app_name")
-    local state_file="$state_dir/state.yaml"
 
-    if [ ! -f "$state_file" ]; then
-        echo "$DEFAULT_NETWORK"
-        return 0
+    # If app name provided, check deployment-specific preference first
+    if [ -n "$app_name" ]; then
+        local state_dir=$(get_app_state_dir "$app_name")
+        local state_file="$state_dir/state.yaml"
+
+        if [ -f "$state_file" ]; then
+            # Use yq if available, fallback to grep
+            if command_exists yq; then
+                local pref=$(yq eval '.preferred_network // empty' "$state_file")
+                if [ -n "$pref" ] && [ "$pref" != "empty" ]; then
+                    echo "$pref"
+                    return 0
+                fi
+            else
+                local pref=$(grep "^preferred_network:" "$state_file" | awk '{print $2}')
+                if [ -n "$pref" ]; then
+                    echo "$pref"
+                    return 0
+                fi
+            fi
+        fi
     fi
 
-    # Use yq if available, fallback to grep
-    if command_exists yq; then
-        yq eval '.preferred_network // "'$DEFAULT_NETWORK'"' "$state_file"
+    # Fall back to global network preference
+    get_global_network_preference
+}
+
+# Get global network preference
+get_global_network_preference() {
+    if [ -f "$GLOBAL_NETWORK_FILE" ]; then
+        cat "$GLOBAL_NETWORK_FILE" 2>/dev/null || echo "$DEFAULT_NETWORK"
     else
-        grep "^preferred_network:" "$state_file" | awk '{print $2}' || echo "$DEFAULT_NETWORK"
+        echo "$DEFAULT_NETWORK"
     fi
+}
+
+# Set global network preference
+set_global_network_preference() {
+    local network="$1"
+
+    # Validate network type
+    case "$network" in
+        "$NETWORK_WIREGUARD"|"$NETWORK_MYCELIUM")
+            ;;
+        *)
+            log_error "Invalid network: $network. Must be '$NETWORK_WIREGUARD' or '$NETWORK_MYCELIUM'"
+            return 1
+            ;;
+    esac
+
+    # Ensure directory exists
+    mkdir -p "$(dirname "$GLOBAL_NETWORK_FILE")"
+
+    # Set global preference
+    echo "$network" > "$GLOBAL_NETWORK_FILE"
+    log_success "Global network preference set to: $network"
+    return 0
 }
 
 # Set network preference in deployment state
@@ -147,43 +192,60 @@ network_subcommand() {
             local app_name=$(get_smart_context)
             local network="$1"
 
-            if [ -z "$app_name" ]; then
-                log_error "No deployment selected. Run 'tfgrid-compose select <app>' first."
-                return 1
-            fi
-
             if [ -z "$network" ]; then
-                log_error "Usage: tfgrid-compose network set <wireguard|mycelium>"
+                echo ""
+                echo "Usage: tfgrid-compose network set <wireguard|mycelium>"
+                echo ""
+                echo "This sets the global network preference for all deployments."
+                echo "You can also set per-deployment preferences using:"
+                echo "  tfgrid-compose select <app> && tfgrid-compose network set <network>"
+                echo ""
                 return 1
             fi
 
-            set_network_preference "$app_name" "$network"
+            # If we have a deployment context, set per-deployment preference
+            if [ -n "$app_name" ]; then
+                set_network_preference "$app_name" "$network"
+            else
+                # No deployment context - set global preference
+                set_global_network_preference "$network"
+            fi
             ;;
 
         get|show|current)
             local app_name=$(get_smart_context)
 
-            if [ -z "$app_name" ]; then
-                log_error "No deployment selected."
-                return 1
+            if [ -n "$app_name" ]; then
+                # Deployment-specific network preference
+                local current=$(get_network_preference "$app_name")
+                echo ""
+                echo "Deployment: $app_name"
+                echo "Current network: $current"
+                echo ""
+
+                # Show current IP being used
+                local current_ip=$(get_deployment_ip "$app_name")
+                case "$current" in
+                    "$NETWORK_WIREGUARD")
+                        echo "Active IP: $current_ip (WireGuard)"
+                        ;;
+                    "$NETWORK_MYCELIUM")
+                        echo "Active IP: $current_ip (Mycelium)"
+                        ;;
+                esac
+            else
+                # No deployment context - show global preference
+                local current=$(get_global_network_preference)
+                echo ""
+                echo "Global Network Preference"
+                echo "========================"
+                echo "Current network: $current"
+                echo ""
+                echo "This applies to all deployments that don't have specific preferences set."
+                echo ""
+                log_info "To set deployment-specific preferences:"
+                echo "  tfgrid-compose select <app> && tfgrid-compose network set <network>"
             fi
-
-            local current=$(get_network_preference "$app_name")
-            echo ""
-            echo "Deployment: $app_name"
-            echo "Current network: $current"
-            echo ""
-
-            # Show current IP being used
-            local current_ip=$(get_deployment_ip "$app_name")
-            case "$current" in
-                "$NETWORK_WIREGUARD")
-                    echo "Active IP: $current_ip (WireGuard)"
-                    ;;
-                "$NETWORK_MYCELIUM")
-                    echo "Active IP: $current_ip (Mycelium)"
-                    ;;
-            esac
             ;;
 
         list|available)
