@@ -587,6 +587,11 @@ run_app_hooks() {
         env_vars="$env_vars export TFGRID_GIT_EMAIL='$TFGRID_GIT_EMAIL';"
         log_info "Passing git email to deployment: $TFGRID_GIT_EMAIL"
     fi
+
+    # Pass network preference to deployment hooks
+    local network_preference=$(get_network_preference "$DEPLOYMENT_ID")
+    env_vars="$env_vars export NETWORK_PREFERENCE='$network_preference';"
+    log_info "Passing network preference to deployment hooks: $network_preference"
     
     # Check if Ansible playbook exists (Option B: Ansible deployment)
     if [ -f "$APP_DIR/deployment/playbook.yml" ]; then
