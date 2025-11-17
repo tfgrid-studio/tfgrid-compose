@@ -189,7 +189,7 @@ network_subcommand() {
 
     case "$subcommand" in
         set)
-            local app_name=$(get_smart_context)
+            # Always allow global network preference setting regardless of deployment context
             local network="$1"
 
             if [ -z "$network" ]; then
@@ -198,25 +198,21 @@ network_subcommand() {
                 echo ""
                 echo "This sets the global network preference for all deployments."
                 echo "You can also set per-deployment preferences using:"
-                echo "  tfgrid-compose select <app> && tfgrid-compose network set <network>"
+                echo "  tfgrid-compose select <deployment-id> && tfgrid-compose network set <network>"
                 echo ""
                 return 1
             fi
 
-            # If we have a deployment context, set per-deployment preference
-            if [ -n "$app_name" ]; then
-                set_network_preference "$app_name" "$network"
-            else
-                # No deployment context - set global preference
-                set_global_network_preference "$network"
-            fi
+            # Set global preference for all deployments
+            set_global_network_preference "$network"
             ;;
 
         get|show|current)
+            # Try to get deployment context, but fall back to global if none found
             local app_name=$(get_smart_context)
 
-            if [ -n "$app_name" ]; then
-                # Deployment-specific network preference
+            if [ -n "$app_name" ] && [ -d "$HOME/.config/tfgrid-compose/state/$app_name" ] && [ -f "$HOME/.config/tfgrid-compose/state/$app_name/state.yaml" ]; then
+                # Valid deployment context exists - show deployment-specific preference
                 local current=$(get_network_preference "$app_name")
                 echo ""
                 echo "Deployment: $app_name"
@@ -234,7 +230,7 @@ network_subcommand() {
                         ;;
                 esac
             else
-                # No deployment context - show global preference
+                # No valid deployment context - show global preference
                 local current=$(get_global_network_preference)
                 echo ""
                 echo "Global Network Preference"
@@ -243,8 +239,14 @@ network_subcommand() {
                 echo ""
                 echo "This applies to all deployments that don't have specific preferences set."
                 echo ""
+                if [ -n "$app_name" ]; then
+                    echo "Note: Detected context '$app_name' but no valid deployment found with that name."
+                    echo "You may have selected a deployment that no longer exists."
+                fi
+                echo ""
                 log_info "To set deployment-specific preferences:"
-                echo "  tfgrid-compose select <app> && tfgrid-compose network set <network>"
+                echo "  tfgrid-compose select <deployment-id> && tfgrid-compose network set <network>"
+                echo "  (use 't ps' to see deployment IDs)"
             fi
             ;;
 
