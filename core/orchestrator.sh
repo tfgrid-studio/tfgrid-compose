@@ -250,7 +250,39 @@ EOF
         log_error "Terraform deployment failed"
         return 1
     fi
-    
+
+    # Step 2.4: Capture real IP addresses from terraform outputs
+    log_step "Capturing deployment IP addresses..."
+    if [ -d "$STATE_DIR/terraform" ] && [ -f "$STATE_DIR/terraform/terraform.tfstate" ]; then
+        cd "$STATE_DIR/terraform" || return 1
+
+        # Capture primary (WireGuard) IP and write as vm_ip
+        local real_primary_ip=""
+        real_primary_ip=$(terraform output -raw primary_ip 2>/dev/null || echo "")
+
+        if [ -n "$real_primary_ip" ] && [ "$real_primary_ip" != "null" ]; then
+            # Write vm_ip to state.yaml
+            echo "vm_ip: $real_primary_ip" >> "$STATE_DIR/state.yaml"
+            log_success "Captured WireGuard IP: $real_primary_ip"
+        else
+            log_warning "Could not extract WireGuard IP from terraform output"
+        fi
+
+        # Capture Mycelium IPv6 and write as mycelium_ip
+        local real_mycelium_ip=""
+        real_mycelium_ip=$(terraform output -raw mycelium_ip 2>/dev/null || echo "")
+
+        if [ -n "$real_mycelium_ip" ] && [ "$real_mycelium_ip" != "null" ] && [ "$real_mycelium_ip" != "<nil>" ]; then
+            # Write mycelium_ip to state.yaml
+            echo "mycelium_ip: $real_mycelium_ip" >> "$STATE_DIR/state.yaml"
+            log_success "Captured Mycelium IPv6: $real_mycelium_ip"
+        else
+            log_debug "Mycelium IP not available (normal if mycelium not enabled)"
+        fi
+
+        cd - >/dev/null
+    fi
+
     # Step 2.5: Setup WireGuard (if needed)
     if ! bash "$DEPLOYER_ROOT/core/tasks/wireguard.sh"; then
         log_error "WireGuard setup failed"
@@ -790,8 +822,8 @@ destroy_deployment() {
 # Display deployment URLs after successful deployment
 display_deployment_urls() {
     # Get deployment information from state file
-    local primary_ip=$(state_get "primary_ip")
-    local primary_ip_type=$(state_get "primary_ip_type")
+    local primary_ip=$(state_get "vm_ip") # WireGuard IP stored as vm_ip
+    local primary_ip_type="wireguard"    # Always WireGuard for now
     local mycelium_ip=$(state_get "mycelium_ip")
 
     # Check if app has custom launch command
