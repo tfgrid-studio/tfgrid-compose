@@ -48,13 +48,20 @@ VM_IP=$(echo "$VM_IP" | cut -d'/' -f1)
 log_step "Waiting for SSH to be ready..."
 log_info "Network: $NETWORK_TYPE"
 log_info "IP: $VM_IP"
-log_info "Timeout: 300 seconds (5 minutes)"
+
+# Mycelium takes longer to converge, give it more time
+if [ "$NETWORK_TYPE" = "Mycelium" ]; then
+    MAX_ATTEMPTS=60  # 10 minutes for mycelium
+    SLEEP_TIME=10
+    log_info "Timeout: 600 seconds (10 minutes) - Mycelium network needs more time to converge"
+else
+    MAX_ATTEMPTS=30  # 5 minutes for wireguard
+    SLEEP_TIME=10
+    log_info "Timeout: 300 seconds (5 minutes)"
+fi
 echo ""
 
-# Wait parameters
-MAX_ATTEMPTS=30
 ATTEMPT=0
-SLEEP_TIME=10
 
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
     ATTEMPT=$((ATTEMPT + 1))

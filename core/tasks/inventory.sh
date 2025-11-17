@@ -58,7 +58,7 @@ cat > "$STATE_DIR/inventory.ini" << EOF
 # Network preference: $network_preference ($network_type)
 
 [all]
-$APP_NAME ansible_host=$ansible_host ansible_user=root ansible_ssh_extra_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR'
+$APP_NAME ansible_host=$ansible_host ansible_user=root ansible_connection=ssh ansible_ssh_extra_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30'
 
 [app]
 $APP_NAME
