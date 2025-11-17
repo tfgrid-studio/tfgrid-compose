@@ -467,9 +467,8 @@ cleanup_orphaned_deployments() {
                         local contract_exists="false"
                         
                         # Query tfgrid-compose contracts to get active contracts
-                        local contracts_output=$(tfgrid-compose contracts list 2>/dev/null || echo "")
-                        
-                        if echo "$contracts_output" | grep -q "$contract_id"; then
+                        # Check if this specific contract exists on the grid (with timeout)
+                        if timeout 5 bash -c "tfgrid-compose contracts list 2>/dev/null | grep -q '$contract_id'" 2>/dev/null; then
                             contract_exists="true"
                         fi
                         
