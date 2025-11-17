@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # TFGrid Compose - Network Management Module
 
+# Source required modules
+source "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh"
+
 # Network preference constants
 readonly NETWORK_WIREGUARD="wireguard"
 readonly NETWORK_MYCELIUM="mycelium"
@@ -19,8 +22,8 @@ get_network_preference() {
         if [ -f "$state_file" ]; then
             # Use yq if available, fallback to grep
             if command_exists yq; then
-                local pref=$(yq eval '.preferred_network // empty' "$state_file")
-                if [ -n "$pref" ] && [ "$pref" != "empty" ]; then
+                local pref=$(yq eval '.preferred_network' "$state_file" 2>/dev/null || echo "")
+                if [ -n "$pref" ] && [ "$pref" != "null" ] && [ "$pref" != "" ]; then
                     echo "$pref"
                     return 0
                 fi
@@ -116,8 +119,8 @@ get_deployment_ip() {
     if [ "$preferred_network" = "$NETWORK_MYCELIUM" ]; then
         # Try mycelium IP first
         if command_exists yq; then
-            local myc_ip=$(yq eval '.mycelium_ip // empty' "$state_file")
-            if [ -n "$myc_ip" ] && [ "$myc_ip" != "null" ] && [ "$myc_ip" != "empty" ]; then
+            local myc_ip=$(yq eval '.mycelium_ip' "$state_file" 2>/dev/null)
+            if [ -n "$myc_ip" ] && [ "$myc_ip" != "null" ]; then
                 echo "$myc_ip"
                 return 0
             fi
@@ -134,7 +137,7 @@ get_deployment_ip() {
 
     # Default to wireguard IP
     if command_exists yq; then
-        yq eval '.vm_ip // empty' "$state_file"
+        yq eval '.vm_ip' "$state_file" 2>/dev/null
     else
         grep "^vm_ip:" "$state_file" | awk '{print $2}' || echo ""
     fi
@@ -154,8 +157,8 @@ test_network_connectivity() {
     local myc_ip=""
 
     if command_exists yq; then
-        wg_ip=$(yq eval '.vm_ip // empty' "$state_file")
-        myc_ip=$(yq eval '.mycelium_ip // empty' "$state_file")
+        wg_ip=$(yq eval '.vm_ip' "$state_file" 2>/dev/null)
+        myc_ip=$(yq eval '.mycelium_ip' "$state_file" 2>/dev/null)
     else
         wg_ip=$(grep "^vm_ip:" "$state_file" | awk '{print $2}' || echo "")
         myc_ip=$(grep "^mycelium_ip:" "$state_file" | awk '{print $2}' || echo "")
