@@ -49,15 +49,15 @@ log_step "Waiting for SSH to be ready..."
 log_info "Network: $NETWORK_TYPE"
 log_info "IP: $VM_IP"
 
-# Mycelium takes longer to converge, give it more time
+# Mycelium takes longer to converge, give it more time between attempts
 if [ "$NETWORK_TYPE" = "Mycelium" ]; then
-    MAX_ATTEMPTS=60  # 10 minutes for mycelium
-    SLEEP_TIME=10
-    log_info "Timeout: 600 seconds (10 minutes) - Mycelium network needs more time to converge"
+    MAX_ATTEMPTS=15  # 15 tries total
+    SLEEP_TIME=20   # 20 seconds between attempts = ~5 minutes total
+    log_info "Timeout: ~300 seconds (15 attempts × 20 seconds) - Mycelium allows longer convergence time"
 else
-    MAX_ATTEMPTS=30  # 5 minutes for wireguard
-    SLEEP_TIME=10
-    log_info "Timeout: 300 seconds (5 minutes)"
+    MAX_ATTEMPTS=30  # 30 tries total
+    SLEEP_TIME=10   # 10 seconds between attempts = 5 minutes total
+    log_info "Timeout: 300 seconds (30 attempts × 10 seconds)"
 fi
 echo ""
 
