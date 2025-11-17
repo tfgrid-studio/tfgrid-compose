@@ -5,6 +5,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
+source "$SCRIPT_DIR/network.sh"
 
 # Use STATE_DIR from environment (absolute path)
 STATE_DIR="${STATE_DIR:-.tfgrid-compose}"
@@ -15,23 +16,26 @@ if [ ! -f "$STATE_DIR/state.yaml" ]; then
     exit 1
 fi
 
-# Detect connectivity network type from state
-CONNECTIVITY_TYPE=$(grep "^primary_ip_type:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "wireguard")
+# Get deployment ID from STATE_DIR path
+# STATE_DIR path follows: /home/user/.config/tfgrid-compose/state/DEPLOYMENT_ID
+DEPLOYMENT_ID=$(basename "$STATE_DIR")
 
-# Get appropriate IP based on connectivity type
-if [ "$CONNECTIVITY_TYPE" = "mycelium" ]; then
-    VM_IP=$(grep "^mycelium_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
-    NETWORK_TYPE="Mycelium"
-else
-    VM_IP=$(grep "^primary_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
-    NETWORK_TYPE="WireGuard"
-fi
+# Use network-aware IP resolution that respects global preferences
+VM_IP=$(get_deployment_ip "$DEPLOYMENT_ID")
 
-# Fallback to vm_ip if others not found
-if [ -z "$VM_IP" ]; then
-    VM_IP=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" | awk '{print $2}')
-    NETWORK_TYPE="Unknown"
-fi
+# Determine network type for logging
+PREFERRED_NETWORK=$(get_network_preference "$DEPLOYMENT_ID")
+case "$PREFERRED_NETWORK" in
+    "mycelium")
+        NETWORK_TYPE="Mycelium"
+        ;;
+    "wireguard"|"")
+        NETWORK_TYPE="WireGuard"
+        ;;
+    *)
+        NETWORK_TYPE="Unknown"
+        ;;
+esac
 
 if [ -z "$VM_IP" ]; then
     log_error "No VM IP found in state"
