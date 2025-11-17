@@ -26,6 +26,7 @@ source "$DEPLOYER_ROOT/core/node-browser.sh"
 source "$DEPLOYER_ROOT/core/update-git-config.sh"
 source "$DEPLOYER_ROOT/core/contract-manager.sh"
 source "$DEPLOYER_ROOT/core/preferences.sh"
+source "$DEPLOYER_ROOT/core/network.sh"
 
 # Version (enhanced with Git commit support)
 # Load common functions
@@ -158,13 +159,13 @@ execute_app_command() {
     
     export APP_NAME
     
-    # Get VM IP from state
+    # Get VM IP from state using network-aware resolution
     base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
-    
+
     # Resolve app name to deployment ID via registry with enhanced resolution
     RESOLVED_DEPLOYMENT=$(resolve_deployment "$APP_NAME" 2>/dev/null)
     RESOLVE_RESULT=$?
-    
+
     case $RESOLVE_RESULT in
         0)
             # Single match found
@@ -175,36 +176,36 @@ execute_app_command() {
             echo ""
             echo "📱 Multiple deployments found for: $APP_NAME"
             echo ""
-            
+
             # Parse ambiguous results and show options
             local IFS=$'\n'
             local options=($RESOLVED_DEPLOYMENT)
             local deployment_info=()
-            
+
             for i in "${!options[@]}"; do
                 local deployment_id="${options[$i]}"
                 local details=$(get_deployment_by_id "$deployment_id" 2>/dev/null)
-                
+
                 if [ -n "$details" ]; then
                     local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
                     local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
                     local created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
                     local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
-                    
-                    echo "$((i+1))) $deployment_id ($vm_ip) - $age"
+
+                    echo "$((i+1))) $deployment_id $app_name ($vm_ip) - $age"
                     deployment_info+=("$deployment_id")
                 fi
             done
-            
+
             echo ""
             read -p "Select deployment [1-${#options[@]}]: " choice
-            
+
             # Validate choice
             if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#options[@]} ]; then
                 log_error "Invalid choice"
                 return 1
             fi
-            
+
             # Get selected deployment
             DEPLOYMENT_ID="${deployment_info[$((choice-1))]}"
             echo ""
@@ -225,19 +226,20 @@ execute_app_command() {
             return 1
             ;;
     esac
-    
+
     state_dir="$base_dir/$DEPLOYMENT_ID"
-    
+
     if [ ! -d "$state_dir" ]; then
         log_error "Deployment state not found (inconsistent state)"
         log_info "Try redeploying: tfgrid-compose up $APP_NAME --force"
         return 1
     fi
-    
-    vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
-    
+
+    # Use network-aware IP resolution instead of direct vm_ip lookup
+    vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
+
     if [ -z "$vm_ip" ]; then
-        log_error "No VM IP found in state for $APP_NAME"
+        log_error "No IP found in state for $APP_NAME"
         return 1
     fi
     
@@ -1939,17 +1941,18 @@ EOF
         fi
         
         state_dir="$base_dir/$DEPLOYMENT_ID"
-        
+
         if [ ! -d "$state_dir" ]; then
             log_error "Deployment state not found (inconsistent state)"
             log_info "Try redeploying: tfgrid-compose up $APP_NAME --force"
             exit 1
         fi
-        
-        vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
-        
+
+        # Use network-aware IP resolution
+        vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
+
         if [ -z "$vm_ip" ]; then
-            log_error "No VM IP found in state for $APP_NAME"
+            log_error "No IP found in state for $APP_NAME"
             exit 1
         fi
         
@@ -3076,10 +3079,18 @@ EOF
         esac
         ;;
 
+    network)
+        # Network management command
+        log_command "Network Management"
+
+        network_subcommand "$@"
+        exit $?
+        ;;
+
     nodes)
         # Interactive node browser with farm filtering support
         NODES_FARM=""
-        
+
         # Parse --farm parameter for nodes command
         while [[ $# -gt 0 ]]; do
             case $1 in
@@ -3097,10 +3108,10 @@ EOF
                     ;;
             esac
         done
-        
+
         # Export farm filter for nodes_command
         export NODES_FARM_FILTER="$NODES_FARM"
-        
+
         # Call nodes_command with remaining arguments
         nodes_command "$@"
         ;;
