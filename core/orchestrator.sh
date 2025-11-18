@@ -39,15 +39,18 @@ get_vm_ip_from_state() {
 cleanup_on_error() {
     local app_name="$1"
     local error_message="${2:-Deployment failed}"
-    
+
+    # Prefer deployment ID for all tracking if available
+    local deployment_identifier="${DEPLOYMENT_ID:-$app_name}"
+
     log_warning "Deployment failed: $error_message"
-    
-    # Mark deployment as failed
-    mark_deployment_failed "$app_name" "$error_message"
-    
+
+    # Mark deployment as failed using deployment ID when possible
+    mark_deployment_failed "$deployment_identifier" "$error_message"
+
     # Unregister from Docker-style ID system if we had an ID
     if [ -n "${DEPLOYMENT_ID:-}" ] && [ "${DEPLOYMENT_ID:-}" != "false" ]; then
-        unregister_deployment "$app_name" || true
+        unregister_deployment "$DEPLOYMENT_ID" || true
     fi
     
     # Don't clean if user wants to debug
@@ -56,8 +59,8 @@ cleanup_on_error() {
         return 0
     fi
     
-    # Clean stale state to allow retry
-    clean_stale_state "$app_name"
+    # Clean stale state to allow retry (state directory is keyed by deployment ID)
+    clean_stale_state "$deployment_identifier"
     log_info "State cleaned. You can retry deployment."
 }
 
@@ -72,11 +75,11 @@ deploy_app() {
         log_info "Generated deployment ID: $DEPLOYMENT_ID"
     fi
     
-    # Mark deployment as deploying
-    mark_deployment_deploying "$APP_NAME"
+    # Mark deployment as deploying (track by deployment ID)
+    mark_deployment_deploying "$DEPLOYMENT_ID"
     
     # Setup error trap
-    trap 'cleanup_on_error "$APP_NAME" "$ERROR_MESSAGE"' ERR
+    trap 'cleanup_on_error "$DEPLOYMENT_ID" "$ERROR_MESSAGE"' ERR
     
     # Source .env from app directory if it exists
     if [ -f "$APP_DIR/.env" ]; then
@@ -359,14 +362,14 @@ EOF
     local dedicated_state_dir="$STATE_BASE_DIR/$DEPLOYMENT_ID"
     register_deployment "$DEPLOYMENT_ID" "$APP_NAME" "$dedicated_state_dir" "$vm_ip" "$contract_id"
     
-    # Mark deployment as active
-    mark_deployment_active "$APP_NAME"
+    # Mark deployment as active (tracked by deployment ID)
+    mark_deployment_active "$DEPLOYMENT_ID"
     
     # Perform health check to verify deployment
     log_info "Performing health check..."
-    if ! perform_deployment_health_check "$APP_NAME" "$PATTERN_NAME"; then
+    if ! perform_deployment_health_check "$DEPLOYMENT_ID" "$PATTERN_NAME"; then
         log_warning "Health check failed - deployment may not be fully functional"
-        mark_deployment_failed "$APP_NAME" "Health check failed after deployment"
+        mark_deployment_failed "$DEPLOYMENT_ID" "Health check failed after deployment"
     fi
     
     log_info "App: $APP_NAME v$APP_VERSION"

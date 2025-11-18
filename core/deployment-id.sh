@@ -185,11 +185,79 @@ get_all_deployments() {
             fi
         done
     else
-        # Fallback: show text registry (ensure it's not the YAML format)
-        if grep -q "^deployments:" "$DEPLOYMENT_REGISTRY" 2>/dev/null; then
-            return 0  # Don't parse YAML if no yq
+        # Fallback when yq is not available
+        # If registry is plain text (legacy format), just cat it
+        if ! grep -q "^deployments:" "$DEPLOYMENT_REGISTRY" 2>/dev/null; then
+            cat "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo ""
+            return 0
         fi
-        cat "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo ""
+
+        # Minimal YAML parser for deployments: { id: {app_name, vm_ip, contract_id, status, created_at} }
+        local id="" app_name="" vm_ip="" contract_id="" status="" created_at="" in_vm_ip_block=false
+
+        while IFS= read -r line; do
+            # Detect new deployment block: two-space indented 16-hex key ending with ':'
+            if [[ "$line" =~ ^[[:space:]]{2}([a-f0-9]{16}):[[:space:]]*$ ]]; then
+                # Flush previous record if any
+                if [ -n "$id" ]; then
+                    echo "$id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+                fi
+
+                id="${BASH_REMATCH[1]}"
+                app_name="" vm_ip="" contract_id="" status="" created_at=""
+                in_vm_ip_block=false
+                continue
+            fi
+
+            # Inside a deployment block, parse simple key: value pairs
+            if [ -n "$id" ]; then
+                # vm_ip scalar or block start
+                if [[ "$line" =~ ^[[:space:]]{4}vm_ip:[[:space:]]*(.*)$ ]]; then
+                    local rhs="${BASH_REMATCH[1]}"
+                    in_vm_ip_block=false
+                    # Handle simple scalar on same line
+                    if [ -n "$rhs" ] && [ "$rhs" != "|-" ]; then
+                        vm_ip="${rhs//\"/}"
+                    elif [ "$rhs" = "|-" ]; then
+                        # Start of multiline block, capture next non-empty scalar line
+                        in_vm_ip_block=true
+                    fi
+                    continue
+                fi
+
+                # Capture first non-empty line of vm_ip block
+                if [ "$in_vm_ip_block" = true ]; then
+                    if [[ "$line" =~ ^[[:space:]]{6}([0-9.]+).* ]]; then
+                        vm_ip="${BASH_REMATCH[1]}"
+                        in_vm_ip_block=false
+                    fi
+                    continue
+                fi
+
+                # Other scalar fields
+                if [[ "$line" =~ ^[[:space:]]{4}app_name:[[:space:]]*(.*)$ ]]; then
+                    app_name="${BASH_REMATCH[1]//\"/}"
+                    continue
+                fi
+                if [[ "$line" =~ ^[[:space:]]{4}contract_id:[[:space:]]*(.*)$ ]]; then
+                    contract_id="${BASH_REMATCH[1]//\"/}"
+                    continue
+                fi
+                if [[ "$line" =~ ^[[:space:]]{4}status:[[:space:]]*(.*)$ ]]; then
+                    status="${BASH_REMATCH[1]//\"/}"
+                    continue
+                fi
+                if [[ "$line" =~ ^[[:space:]]{4}created_at:[[:space:]]*(.*)$ ]]; then
+                    created_at="${BASH_REMATCH[1]//\"/}"
+                    continue
+                fi
+            fi
+        done < "$DEPLOYMENT_REGISTRY"
+
+        # Flush last record
+        if [ -n "$id" ]; then
+            echo "$id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+        fi
     fi
 }
 

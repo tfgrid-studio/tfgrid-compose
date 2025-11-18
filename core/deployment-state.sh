@@ -57,24 +57,42 @@ get_current_app() {
     fi
 }
 
-# Get smart context: use current app, or auto-detect if only one deployment
+# Get smart context: use current app/deployment, or auto-detect if only one deployment
 get_smart_context() {
     # First try explicit context
     local current=$(get_current_app)
     if [ -n "$current" ]; then
-        echo "$current"
-        return 0
+        # Resolve current value, which may be an app name or deployment ID
+        local resolved=""
+        resolved=$(resolve_deployment "$current" 2>/dev/null)
+        local res_code=$?
+
+        if [ $res_code -eq 0 ] && [ -n "$resolved" ]; then
+            echo "$resolved"
+            return 0
+        fi
+
+        # If current already looks like a deployment ID and has a state directory, accept it
+        if [[ "$current" =~ ^[a-f0-9]{16}$ ]] && [ -d "$STATE_BASE_DIR/$current" ]; then
+            echo "$current"
+            return 0
+        fi
+        # Otherwise fall through to auto-detection
     fi
 
-    # Count active deployments from registry
-    local deployments=$(get_all_deployments 2>/dev/null | wc -l)
-
-    # If exactly one deployment, return its deployment ID
-    if [ "$deployments" -eq 1 ]; then
-        local deployment_id=$(get_all_deployments 2>/dev/null | head -1 | cut -d'|' -f1)
-        if [ -n "$deployment_id" ]; then
-            echo "$deployment_id"
-            return 0
+    # Auto-detect when there's exactly one deployment in the registry
+    local deployments
+    deployments=$(get_all_deployments 2>/dev/null || echo "")
+    if [ -n "$deployments" ]; then
+        local count
+        count=$(echo "$deployments" | sed '/^$/d' | wc -l)
+        if [ "$count" -eq 1 ]; then
+            local deployment_id
+            deployment_id=$(echo "$deployments" | head -1 | cut -d'|' -f1)
+            if [ -n "$deployment_id" ]; then
+                echo "$deployment_id"
+                return 0
+            fi
         fi
     fi
 
