@@ -16,6 +16,7 @@ const execAsync = util.promisify(exec);
 
 const DASHBOARD_ROOT = __dirname;
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || '';
+const CONFIG_DIR = path.join(HOME_DIR, '.config', 'tfgrid-compose');
 const TFGRID_COMPOSE_BIN = process.env.TFGRID_COMPOSE_BIN || 'tfgrid-compose';
 const PORT_FILE = path.join(DASHBOARD_ROOT, 'dashboard-port');
 
@@ -366,6 +367,12 @@ function writePortFile(port) {
 function startServer(port, remainingTries) {
   const server = app.listen(port, () => {
     log(`Dashboard server started on http://localhost:${port}`);
+    log(`Config directory: ${CONFIG_DIR}`);
+    log(`TFGRID_COMPOSE_BIN: ${TFGRID_COMPOSE_BIN}`);
+    const registryPath = getRegistryPath();
+    const deploymentsPath = getDeploymentsRegistryPath();
+    log(`Registry path: ${registryPath || 'not found'}`);
+    log(`Deployments registry path: ${deploymentsPath || 'not found'}`);
     writePortFile(port);
   });
 
