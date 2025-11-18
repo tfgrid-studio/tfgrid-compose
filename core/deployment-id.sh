@@ -38,32 +38,57 @@ register_deployment() {
     local state_dir="$3"
     local vm_ip="$4"
     local contract_id="${5:-}"  # Optional contract ID from grid
-    
+
+    # Validate inputs
+    if [ -z "$deployment_id" ] || [ -z "$app_name" ] || [ -z "$vm_ip" ]; then
+        log_error "register_deployment: missing required parameters"
+        return 1
+    fi
+
+    # Validate deployment ID format (16 hex chars)
+    if ! [[ "$deployment_id" =~ ^[a-f0-9]{16}$ ]]; then
+        log_error "register_deployment: invalid deployment ID format: $deployment_id"
+        return 1
+    fi
+
+    # Validate contract ID format if provided
+    if [ -n "$contract_id" ] && ! [[ "$contract_id" =~ ^[0-9]+$ ]]; then
+        log_error "register_deployment: invalid contract ID format: $contract_id"
+        return 1
+    fi
+
     init_deployment_registry
-    
+
     local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    
+
     # Use yq if available, otherwise use simple sed/awk
     if command_exists yq; then
+        # Construct the JSON object safely
+        local json_obj="{\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"vm_ip\": \"$vm_ip\", \"created_at\": \"$timestamp\", \"status\": \"active\"}"
+
         if [ -n "$contract_id" ]; then
-            yq eval ".deployments.\"$deployment_id\" = {\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"vm_ip\": \"$vm_ip\", \"contract_id\": \"$contract_id\", \"created_at\": \"$timestamp\", \"status\": \"active\"}" "$DEPLOYMENT_REGISTRY" > "${DEPLOYMENT_REGISTRY}.tmp"
-        else
-            yq eval ".deployments.\"$deployment_id\" = {\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"vm_ip\": \"$vm_ip\", \"created_at\": \"$timestamp\", \"status\": \"active\"}" "$DEPLOYMENT_REGISTRY" > "${DEPLOYMENT_REGISTRY}.tmp"
+            json_obj=$(echo "$json_obj" | sed 's/}$/, "contract_id": "'$contract_id'"}/')
         fi
-        mv "${DEPLOYMENT_REGISTRY}.tmp" "$DEPLOYMENT_REGISTRY"
+
+        # Set the deployment entry
+        if yq eval ".deployments.\"$deployment_id\" = $json_obj" "$DEPLOYMENT_REGISTRY" > "${DEPLOYMENT_REGISTRY}.tmp" 2>/dev/null; then
+            mv "${DEPLOYMENT_REGISTRY}.tmp" "$DEPLOYMENT_REGISTRY"
+            log_info "Registered deployment: $deployment_id ($app_name)"
+        else
+            rm -f "${DEPLOYMENT_REGISTRY}.tmp"
+            log_error "Failed to register deployment: $deployment_id"
+            return 1
+        fi
     else
         # Fallback for systems without yq
-        echo "Warning: yq not available, using basic YAML registry" >&2
-        # For now, create a simple text-based registry
+        log_warning "yq not available, using basic text registry"
+        local line=""
         if [ -n "$contract_id" ]; then
-            echo "$deployment_id|$app_name|$state_dir|$vm_ip|$contract_id|$timestamp|active" >> "${DEPLOYMENT_REGISTRY}.tmp"
+            line="$deployment_id|$app_name|$state_dir|$vm_ip|$contract_id|$timestamp|active"
         else
-            echo "$deployment_id|$app_name|$state_dir|$vm_ip|||$timestamp|active" >> "${DEPLOYMENT_REGISTRY}.tmp"
+            line="$deployment_id|$app_name|$state_dir|$vm_ip||$timestamp|active"
         fi
-        if [ ! -f "${DEPLOYMENT_REGISTRY}.backup" ]; then
-            cp "$DEPLOYMENT_REGISTRY" "${DEPLOYMENT_REGISTRY}.backup" 2>/dev/null || true
-        fi
-        mv "${DEPLOYMENT_REGISTRY}.tmp" "$DEPLOYMENT_REGISTRY"
+        echo "$line" >> "$DEPLOYMENT_REGISTRY"
     fi
 }
 
@@ -132,21 +157,38 @@ get_active_deployment_for_app() {
 # Get all deployments (simplified for basic functionality)
 get_all_deployments() {
     init_deployment_registry
-    
+
     if command_exists yq; then
-        # Use a simpler yq expression to avoid syntax errors
-        yq eval '.deployments | keys[]' "$DEPLOYMENT_REGISTRY" | while read -r deployment_id; do
-            if [ -n "$deployment_id" ]; then
-                local app_name=$(yq eval ".deployments.\"$deployment_id\".app_name // \"\"" "$DEPLOYMENT_REGISTRY")
-                local vm_ip=$(yq eval ".deployments.\"$deployment_id\".vm_ip // \"\"" "$DEPLOYMENT_REGISTRY")
-                local contract_id=$(yq eval ".deployments.\"$deployment_id\".contract_id // \"\"" "$DEPLOYMENT_REGISTRY")
-                local status=$(yq eval ".deployments.\"$deployment_id\".status // \"\"" "$DEPLOYMENT_REGISTRY")
-                local created_at=$(yq eval ".deployments.\"$deployment_id\".created_at // \"\"" "$DEPLOYMENT_REGISTRY")
+        # Use a robust yq expression with error handling
+        local deployment_ids=$(yq eval '.deployments | keys[] // empty' "$DEPLOYMENT_REGISTRY" 2>/dev/null)
+        if [ "$deployment_ids" = "empty" ] || [ -z "$deployment_ids" ]; then
+            return 0
+        fi
+
+        echo "$deployment_ids" | while read -r deployment_id; do
+            if [ -n "$deployment_id" ] && [[ "$deployment_id" =~ ^[a-f0-9]{16}$ ]]; then
+                # Safely extract fields with proper escaping
+                local app_name=$(yq eval ".deployments.\"$deployment_id\".app_name // \"unknown\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "unknown")
+                local vm_ip=$(yq eval ".deployments.\"$deployment_id\".vm_ip // \"unknown\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "unknown")
+                local contract_id=$(yq eval ".deployments.\"$deployment_id\".contract_id // \"\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
+                local status=$(yq eval ".deployments.\"$deployment_id\".status // \"unknown\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "unknown")
+                local created_at=$(yq eval ".deployments.\"$deployment_id\".created_at // \"\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
+
+                # Sanitize fields (remove quotes that might cause parsing issues)
+                app_name=$(echo "$app_name" | sed 's/^"\|"$//g')
+                vm_ip=$(echo "$vm_ip" | sed 's/^"\|"$//g')
+                contract_id=$(echo "$contract_id" | sed 's/^"\|"$//g')
+                status=$(echo "$status" | sed 's/^"\|"$//g')
+                created_at=$(echo "$created_at" | sed 's/^"\|"$//g')
+
                 echo "$deployment_id|$app_name|$vm_ip|$contract_id|$status|$created_at"
             fi
         done
     else
-        # Fallback: show text registry
+        # Fallback: show text registry (ensure it's not the YAML format)
+        if grep -q "^deployments:" "$DEPLOYMENT_REGISTRY" 2>/dev/null; then
+            return 0  # Don't parse YAML if no yq
+        fi
         cat "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo ""
     fi
 }
@@ -314,55 +356,40 @@ resolve_deployment() {
     return 1
 }
 
-# List deployments in Docker-style format with contract linkage (auto-filtered)
+# List deployments in Docker-style format
 list_deployments_docker_style() {
     echo "Deployments (Docker-style):"
     echo ""
-    
+
     local deployments=$(get_all_deployments)
+
+    # Show header only if there are deployments to display
     if [ -z "$deployments" ]; then
         echo "(no deployments found)"
         return 0
     fi
-    
-    # Filter to show only deployments with VALID contract IDs (must exist on grid)
-    local valid_deployments=""
-    if command_exists yq; then
-        valid_deployments=$(echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
-            # Check both existence AND validity against grid
-            if [ -n "$contract_id" ] && [ "$contract_id" != "null" ]; then
-                # Validate contract exists on grid
-                if [ "$(validate_deployment_contracts "$deployment_id" 2>/dev/null)" = "true" ]; then
-                    echo "$deployment_id|$app_name|$vm_ip|$contract_id|$status|$created_at"
-                fi
-            fi
-        done)
-    else
-        valid_deployments=$(echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
-            # Check both existence AND validity against grid
-            if [ -n "$contract_id" ] && [ "$contract_id" != "null" ]; then
-                # Validate contract exists on grid
-                if [ "$(validate_deployment_contracts "$deployment_id" 2>/dev/null)" = "true" ]; then
-                    echo "$deployment_id|$app_name|$vm_ip|$contract_id|$status|$created_at"
-                fi
-            fi
-        done)
-    fi
-    
-    # Show header only if there are valid deployments
-    if [ -z "$valid_deployments" ]; then
-        echo "(no active deployments with contracts)"
-        return 0
-    fi
-    
-    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS    CONTRACT    AGE"
-    echo "───────────────────────────────────────────────────────────────────────────"
-    
-    # Display filtered deployments
-    echo "$valid_deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+
+    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS      CONTRACT    AGE"
+    echo "────────────────────────────────────────────────────────────────────────────"
+
+    # Display all deployments
+    echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
         local age=$(calculate_deployment_age "$created_at")
-        
-        printf "%-16s %-19s %-9s %-12s %-9s %s\n" "$deployment_id" "$app_name" "$status" "${vm_ip:-N/A}" "$contract_id" "$age"
+
+        # Format contract_id - show "N/A" if empty, truncate if too long
+        if [ -z "$contract_id" ] || [ "$contract_id" = "unknown" ]; then
+            contract_id="N/A"
+        elif [ ${#contract_id} -gt 9 ]; then
+            contract_id="${contract_id:0:9}..."
+        fi
+
+        printf "%-16s %-19s %-9s %-12s %-9s %s\n" \
+               "$deployment_id" \
+               "${app_name:0:19}" \
+               "${status:0:9}" \
+               "${vm_ip:0:12}" \
+               "$contract_id" \
+               "$age"
     done
 }
 
