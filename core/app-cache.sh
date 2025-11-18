@@ -262,20 +262,23 @@ cache_app() {
     local app_name="$1"
     local repo_url="$2"
     local app_dir="$APPS_CACHE_DIR/$app_name"
-    
+
     ensure_cache_dir
-    
+
     log_info "Downloading $app_name..."
-    
+
     # Remove existing if corrupted
     if [ -d "$app_dir" ] && [ ! -d "$app_dir/.git" ]; then
         rm -rf "$app_dir"
     fi
-    
+
+    # Get registry version (commit hash) to check out specific version
+    local registry_version=$(get_registry_version "$app_name")
+
     # Clone repository with better error handling
     local clone_output
     local clone_exit_code
-    
+
     # Handle existing directory gracefully
     if [ -d "$app_dir" ]; then
         if [ -d "$app_dir/.git" ]; then
@@ -302,14 +305,28 @@ cache_app() {
         clone_output=$(git clone "$repo_url" "$app_dir" 2>&1)
         clone_exit_code=$?
     fi
-    
+
     if [ $clone_exit_code -eq 0 ]; then
-        # Get Git commit hash and version info
-        cd "$app_dir"
-        local commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        # Check out specific registry version if available
+        if [ "$registry_version" != "unknown" ] && [ -n "$registry_version" ]; then
+            cd "$app_dir"
+            if git checkout --quiet "$registry_version" 2>/dev/null; then
+                log_info "Checked out registry version $registry_version for $app_name"
+                local commit_hash="$registry_version"
+            else
+                log_warning "Failed to checkout registry version $registry_version, using HEAD"
+                local commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+            fi
+            cd - >/dev/null
+        else
+            # Get current Git commit hash
+            cd "$app_dir"
+            local commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+            cd - >/dev/null
+        fi
+
         local manifest_version=$(yaml_get "$app_dir/tfgrid-compose.yaml" "version" 2>/dev/null || echo "unknown")
-        cd - >/dev/null
-        
+
         # Validate that we got valid data
         if [ "$commit_hash" = "unknown" ] || [ "$manifest_version" = "unknown" ]; then
             log_warning "Invalid repository data for $app_name, removing cache"
@@ -317,11 +334,11 @@ cache_app() {
             log_error "Failed to get valid repository data from $repo_url"
             return 1
         fi
-        
+
         # Check if migrating from old cache_version format
         local old_metadata=$(get_cache_metadata "$app_name")
         local has_cache_version=$(echo "$old_metadata" | jq -r '.cache_version // empty' | grep -v '^empty' | wc -l)
-        
+
         local metadata=$(cat << EOF | jq -c '.'
 {
   "app_name": "$app_name",
@@ -333,18 +350,23 @@ cache_app() {
 }
 EOF
 )
-        
+
+        # Store registry version for future reference
+        if [ "$registry_version" != "unknown" ]; then
+            metadata=$(echo "$metadata" | jq ".registry_version = \"$registry_version\"")
+        fi
+
         # Remove old cache_version from metadata if it exists
         if [ "$has_cache_version" -gt 0 ]; then
             log_info "Migrating $app_name from cache_version to Git-based tracking"
             metadata=$(echo "$metadata" | jq 'del(.cache_version)')
         fi
-        
+
         set_cache_metadata "$app_name" "$metadata"
-        
+
         # Provide appropriate success message based on whether it was update or fresh clone
         if echo "$clone_output" | grep -q "Updated existing repository"; then
-            log_success "Updated $app_name"
+            log_success "Updated $app_name to registry version"
         else
             log_success "Downloaded $app_name"
         fi
@@ -354,7 +376,7 @@ EOF
         if [ ! -d "$app_dir" ]; then
             rm -rf "$app_dir"
         fi
-        
+
         # Check for specific error types and provide helpful messages
         if echo "$clone_output" | grep -q "rate limit"; then
             log_error "GitHub rate limiting detected for $app_name"
@@ -384,20 +406,35 @@ EOF
 update_cached_app() {
     local app_name="$1"
     local app_dir="$APPS_CACHE_DIR/$app_name"
-    
+
     if [ ! -d "$app_dir/.git" ]; then
         log_error "App $app_name is not cached"
         return 1
     fi
-    
+
     log_info "Updating $app_name..."
-    
+
     cd "$app_dir"
     if git pull --quiet origin main 2>/dev/null || git pull --quiet origin master 2>/dev/null; then
-        # Get new commit hash and version info
-        local commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        # Get registry version to check out if available
+        local registry_version=$(get_registry_version "$app_name")
+
+        # Check out registry version if available
+        local commit_hash
+        if [ "$registry_version" != "unknown" ] && [ -n "$registry_version" ]; then
+            if git checkout --quiet "$registry_version" 2>/dev/null; then
+                log_info "Checked out registry version $registry_version for $app_name"
+                commit_hash="$registry_version"
+            else
+                log_warning "Failed to checkout registry version $registry_version, using HEAD"
+                commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+            fi
+        else
+            commit_hash=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        fi
+
         local manifest_version=$(yaml_get "$app_dir/tfgrid-compose.yaml" "version" 2>/dev/null || echo "unknown")
-        
+
         local metadata=$(cat << EOF | jq -c '.'
 {
   "app_name": "$app_name",
@@ -408,8 +445,14 @@ update_cached_app() {
 }
 EOF
 )
+
+        # Store registry version for future reference
+        if [ "$registry_version" != "unknown" ]; then
+            metadata=$(echo "$metadata" | jq ".registry_version = \"$registry_version\"")
+        fi
+
         set_cache_metadata "$app_name" "$metadata"
-        
+
         log_success "Updated $app_name"
         cd - >/dev/null
         return 0
