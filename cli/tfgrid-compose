@@ -1740,15 +1740,15 @@ address)
                 log_error "Multiple deployments match: $APP_INPUT"
                 echo ""
                 echo "Available deployments:"
-                local IFS=$'\n'
-                local options=($RESOLVED_DEPLOYMENT)
+                IFS=$'\n'
+                options=($RESOLVED_DEPLOYMENT)
                 for i in "${!options[@]}"; do
-                    local deployment_id="${options[$i]}"
-                    local details=$(get_deployment_by_id "$deployment_id" 2>/dev/null)
+                    deployment_id="${options[$i]}"
+                    details=$(get_deployment_by_id "$deployment_id" 2>/dev/null)
                     if [ -n "$details" ]; then
-                        local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}' | tr -d '"' || echo "")
-                        local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}' | tr -d '"' || echo "")
-                        local mycelium_ip=$(echo "$details" | grep "mycelium_ip:" | awk '{print $2}' | tr -d '"' || echo "")
+                        app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}' | tr -d '"' || echo "")
+                        vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}' | tr -d '"' || echo "")
+                        mycelium_ip=$(echo "$details" | grep "mycelium_ip:" | awk '{print $2}' | tr -d '"' || echo "")
                         echo "  $deployment_id $app_name ($vm_ip) $([ -n "$mycelium_ip" ] && echo "[mycelium: $mycelium_ip]")"
                     fi
                 done
@@ -1774,7 +1774,7 @@ address)
 
         if [ -z "$CONTEXT_APP" ]; then
             # No context, show interactive selection
-            local all_deployments=$(get_all_deployments 2>/dev/null || echo "")
+            all_deployments=$(get_all_deployments 2>/dev/null || echo "")
 
             if [ -z "$all_deployments" ]; then
                 log_error "No deployments found"
@@ -1786,14 +1786,14 @@ address)
             echo "📱 Select deployment to show addresses:"
             echo ""
 
-            local deployment_options=()
-            local deployment_ids=()
+            deployment_options=()
+            deployment_ids=()
 
             if command_exists yq; then
                 while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
                     if [ -n "$deployment_id" ] && [ -n "$app_name" ] && [ "$status" = "active" ]; then
-                        local mycelium_ip=$(yq eval ".deployments.\"$deployment_id\".mycelium_ip // \"\"" "$HOME/.config/tfgrid-compose/deployments.yaml" 2>/dev/null || echo "")
-                        local display_name="$deployment_id $app_name ($vm_ip)"
+                        mycelium_ip=$(yq eval ".deployments.\"$deployment_id\".mycelium_ip // \"\"" "$HOME/.config/tfgrid-compose/deployments.yaml" 2>/dev/null || echo "")
+                        display_name="$deployment_id $app_name ($vm_ip)"
                         [ -n "$mycelium_ip" ] && display_name="$display_name [mycelium: $mycelium_ip]"
                         deployment_options+=("$display_name")
                         deployment_ids+=("$deployment_id")
@@ -1837,17 +1837,17 @@ address)
     echo ""
 
     # Get deployment details
-    local details=$(get_deployment_by_id "$DEPLOYMENT_ID")
+    details=$(get_deployment_by_id "$DEPLOYMENT_ID")
     if [ -z "$details" ]; then
         log_error "Could not get deployment details for: $DEPLOYMENT_ID"
         exit 1
     fi
 
-    local app_name=$(echo "$details" | grep "^app_name:" | awk '{print $2}' | tr -d '"')
-    local vm_ip=$(echo "$details" | grep "^vm_ip:" | awk '{print $2}' | tr -d '"')
-    local mycelium_ip=$(echo "$details" | grep "^mycelium_ip:" | awk '{print $2}' | tr -d '"' || echo "")
-    local contract_id=$(echo "$details" | grep "^contract_id:" | awk '{print $2}' | tr -d '"')
-    local created_at=$(echo "$details" | grep "^created_at:" | awk '{print $2}' | tr -d '"')
+    app_name=$(echo "$details" | grep "^app_name:" | awk '{print $2}' | tr -d '"')
+    vm_ip=$(echo "$details" | grep "^vm_ip:" | awk '{print $2}' | tr -d '"')
+    mycelium_ip=$(echo "$details" | grep "^mycelium_ip:" | awk '{print $2}' | tr -d '"' || echo "")
+    contract_id=$(echo "$details" | grep "^contract_id:" | awk '{print $2}' | tr -d '"')
+    created_at=$(echo "$details" | grep "^created_at:" | awk '{print $2}' | tr -d '"')
 
     echo "📋 Deployment: $DEPLOYMENT_ID"
     echo "🏷️  App: $app_name"
@@ -1855,7 +1855,7 @@ address)
         echo "🔗 Contract: $contract_id"
     fi
     if [ -n "$created_at" ]; then
-        local age=$(calculate_deployment_age "$created_at")
+        age=$(calculate_deployment_age "$created_at")
         echo "📅 Created: $age"
     fi
     echo ""
