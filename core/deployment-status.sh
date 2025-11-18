@@ -108,42 +108,55 @@ get_deployment_status_from_registry() {
 # Validate deployment contracts on the grid
 validate_deployment_contracts() {
     local deployment_id="$1"
-    
-    # Load credentials
+
+    # Check if tfcmd is available first
+    if ! command -v tfcmd >/dev/null 2>&1; then
+        echo "true"  # Assume valid if tfcmd not installed (don't filter out deployments)
+        return
+    fi
+
+    # Load credentials with timeout
     if [ ! -f "$SCRIPT_DIR/login.sh" ]; then
-        echo "false"  # Can't validate, deployment is invalid
+        echo "true"  # Can't validate, but don't invalidate deployments
         return
     fi
-    
-    source "$SCRIPT_DIR/login.sh" 2>/dev/null || {
-        echo "false"  # Can't load login script, deployment is invalid
-        return
-    }
-    
-    if ! load_credentials 2>/dev/null; then
-        echo "false"  # Can't validate, deployment is invalid
+
+    # Timeout credential loading to prevent hanging
+    local credentials_loaded=false
+    if timeout 10 bash -c "source '$SCRIPT_DIR/login.sh' 2>/dev/null && load_credentials 2>/dev/null" >/dev/null 2>&1; then
+        credentials_loaded=true
+    fi
+
+    if [ "$credentials_loaded" != "true" ]; then
+        echo "true"  # Can't validate credentials, assume valid
         return
     fi
-    
-    # Get actual contracts from tfcmd
-    local contracts_output=$(tfcmd get contracts 2>/dev/null || echo "")
-    
-    # If no contracts found, deployment is invalid
+
+    # Get actual contracts from tfcmd with timeout
+    local contracts_output=""
+    if timeout 15 bash -c "tfcmd get contracts 2>/dev/null" 2>/dev/null; then
+        contracts_output=$(timeout 15 bash -c "tfcmd get contracts 2>/dev/null" 2>/dev/null || echo "")
+    else
+        echo "true"  # Timeout, assume valid
+        return
+    fi
+
+    # If no contracts found, validation unclear - assume valid
     if [ -z "$contracts_output" ]; then
-        echo "false"
+        echo "true"  # No contracts returned, don't invalidate
         return
     fi
-    
+
     # Get expected contract ID from deployment registry
     local deployment_details=$(get_deployment_by_id "$deployment_id" 2>/dev/null || echo "")
     local expected_contract_id=$(echo "$deployment_details" | grep -E "^\s*contract_id:" | awk '{print $2}' | tr -d '"' || echo "")
-    
+
     # If no contract ID expected, this is an orphaned deployment
     if [ -z "$expected_contract_id" ] || [ "$expected_contract_id" = "null" ]; then
-        echo "false"
+        echo "false"  # Invalid - no contract ID
         return
     fi
-    
+
     # Check if the expected contract ID exists in the contracts list
     # Format: "1632034    8          vm         vm              vm/vm"
     # Contract ID is at the start of the line

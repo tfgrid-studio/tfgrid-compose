@@ -1716,36 +1716,236 @@ case "$COMMAND" in
         execute_pattern_script "connect"
         ;;
         
-    address)
-        # Address command
-        if [ -z "$1" ]; then
-            log_error "Usage: tfgrid-compose address <app>"
-            exit 1
+address)
+    # Address command - show deployment addresses
+    log_command "Deployment Addresses"
+
+    # Enhanced detection: Support deployment names, smart context, and interactive selection
+    APP_INPUT="$1"
+    DEPLOYMENT_ID=""
+
+    if [ -n "$APP_INPUT" ]; then
+        # Direct deployment/app name provided
+        RESOLVED_DEPLOYMENT=$(resolve_deployment "$APP_INPUT")
+        RESOLVE_RESULT=$?
+
+        case $RESOLVE_RESULT in
+            0)
+                # Single match found
+                DEPLOYMENT_ID="$RESOLVED_DEPLOYMENT"
+                ;;
+            3)
+                # Multiple matches - show selection menu
+                echo ""
+                log_error "Multiple deployments match: $APP_INPUT"
+                echo ""
+                echo "Available deployments:"
+                local IFS=$'\n'
+                local options=($RESOLVED_DEPLOYMENT)
+                for i in "${!options[@]}"; do
+                    local deployment_id="${options[$i]}"
+                    local details=$(get_deployment_by_id "$deployment_id" 2>/dev/null)
+                    if [ -n "$details" ]; then
+                        local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}' | tr -d '"' || echo "")
+                        local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}' | tr -d '"' || echo "")
+                        local mycelium_ip=$(echo "$details" | grep "mycelium_ip:" | awk '{print $2}' | tr -d '"' || echo "")
+                        echo "  $deployment_id $app_name ($vm_ip) $([ -n "$mycelium_ip" ] && echo "[mycelium: $mycelium_ip]")"
+                    fi
+                done
+                echo ""
+                read -p "Enter deployment ID: " chosen_id
+                if [ -n "$chosen_id" ] && [[ " ${options[@]} " =~ " $chosen_id " ]]; then
+                    DEPLOYMENT_ID="$chosen_id"
+                else
+                    log_error "Invalid selection"
+                    exit 1
+                fi
+                ;;
+            *)
+                # No matches found
+                log_error "Deployment not found: $APP_INPUT"
+                log_info "Use 'tfgrid-compose ps' to see available deployments"
+                exit 1
+                ;;
+        esac
+    else
+        # No argument - use smart context detection
+        CONTEXT_APP=$(get_smart_context)
+
+        if [ -z "$CONTEXT_APP" ]; then
+            # No context, show interactive selection
+            local all_deployments=$(get_all_deployments 2>/dev/null || echo "")
+
+            if [ -z "$all_deployments" ]; then
+                log_error "No deployments found"
+                log_info "Deploy an app first: tfgrid-compose up <app-name>"
+                exit 1
+            fi
+
+            echo ""
+            echo "📱 Select deployment to show addresses:"
+            echo ""
+
+            local deployment_options=()
+            local deployment_ids=()
+
+            if command_exists yq; then
+                while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+                    if [ -n "$deployment_id" ] && [ -n "$app_name" ] && [ "$status" = "active" ]; then
+                        local mycelium_ip=$(yq eval ".deployments.\"$deployment_id\".mycelium_ip // \"\"" "$HOME/.config/tfgrid-compose/deployments.yaml" 2>/dev/null || echo "")
+                        local display_name="$deployment_id $app_name ($vm_ip)"
+                        [ -n "$mycelium_ip" ] && display_name="$display_name [mycelium: $mycelium_ip]"
+                        deployment_options+=("$display_name")
+                        deployment_ids+=("$deployment_id")
+                    fi
+                done <<< "$all_deployments"
+            fi
+
+            if [ ${#deployment_options[@]} -eq 0 ]; then
+                log_error "No active deployments found"
+                exit 1
+            fi
+
+            for i in "${!deployment_options[@]}"; do
+                echo "$((i+1))) ${deployment_options[$i]}"
+            done
+
+            echo ""
+            read -p "Enter number [1-${#deployment_options[@]}] or 'q' to quit: " choice
+
+            if [ "$choice" = "q" ] || [ "$choice" = "Q" ]; then
+                echo ""
+                log_info "Cancelled"
+                exit 0
+            fi
+
+            if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#deployment_options[@]} ]; then
+                log_error "Invalid choice"
+                exit 1
+            fi
+
+            DEPLOYMENT_ID="${deployment_ids[$((choice-1))]}"
+        else
+            # Use detected context
+            DEPLOYMENT_ID="$CONTEXT_APP"
         fi
-        
-        APP_PATH="$1"
-        
-        # Load app
-        if ! load_app "$APP_PATH"; then
-            exit 1
-        fi
-        
-        # Get pattern
-        PATTERN_NAME=$(get_recommended_pattern)
-        
-        if [ -z "$PATTERN_NAME" ]; then
-            log_error "Cannot determine pattern for app"
-            exit 1
-        fi
-        
-        # Load pattern
-        if ! load_pattern "$PATTERN_NAME"; then
-            exit 1
-        fi
-        
-        # Execute pattern address script
-        execute_pattern_script "address"
-        ;;
+    fi
+
+    # Now we have DEPLOYMENT_ID - show addresses
+    echo ""
+    echo "🌐 Deployment Addresses: $DEPLOYMENT_ID"
+    echo ""
+
+    # Get deployment details
+    local details=$(get_deployment_by_id "$DEPLOYMENT_ID")
+    if [ -z "$details" ]; then
+        log_error "Could not get deployment details for: $DEPLOYMENT_ID"
+        exit 1
+    fi
+
+    local app_name=$(echo "$details" | grep "^app_name:" | awk '{print $2}' | tr -d '"')
+    local vm_ip=$(echo "$details" | grep "^vm_ip:" | awk '{print $2}' | tr -d '"')
+    local mycelium_ip=$(echo "$details" | grep "^mycelium_ip:" | awk '{print $2}' | tr -d '"' || echo "")
+    local contract_id=$(echo "$details" | grep "^contract_id:" | awk '{print $2}' | tr -d '"')
+    local created_at=$(echo "$details" | grep "^created_at:" | awk '{print $2}' | tr -d '"')
+
+    echo "📋 Deployment: $DEPLOYMENT_ID"
+    echo "🏷️  App: $app_name"
+    if [ -n "$contract_id" ] && [ "$contract_id" != "null" ]; then
+        echo "🔗 Contract: $contract_id"
+    fi
+    if [ -n "$created_at" ]; then
+        local age=$(calculate_deployment_age "$created_at")
+        echo "📅 Created: $age"
+    fi
+    echo ""
+
+    # Show addresses based on app type
+    case "${app_name:-unknown}" in
+        tfgrid-ai-stack)
+            echo "🌐 Access URLs:"
+            echo ""
+            if [ -n "$vm_ip" ]; then
+                echo "📦 WireGuard Addresses (IPv4):"
+                echo "  • Gateway:       http://$vm_ip/"
+                echo "  • Gitea (Git):   http://$vm_ip/git/"
+                echo "  • AI Agent API:  http://$vm_ip/api/"
+                echo ""
+            fi
+
+            if [ -n "$mycelium_ip" ]; then
+                echo "🫚 Mycelium Addresses (IPv6):"
+                echo "  • Gateway:       http://[$mycelium_ip]/"
+                echo "  • Gitea (Git):   http://[$mycelium_ip]/git/"
+                echo "  • AI Agent API:  http://[$mycelium_ip]/api/"
+                echo ""
+                echo "💡 Pro tip: Mycelium URLs work from anywhere on the internet!"
+            fi
+
+            if [ -z "$mycelium_ip" ] && [ -z "$vm_ip" ]; then
+                echo "❌ No IP addresses found for this deployment"
+            fi
+
+            echo ""
+            echo "🔧 Management:"
+            echo "  • SSH:           tfgrid-compose ssh $DEPLOYMENT_ID"
+            echo "  • Status:        tfgrid-compose status $app_name"
+            echo "  • Logs:          tfgrid-compose exec $DEPLOYMENT_ID logs"
+            ;;
+
+        tfgrid-ai-agent)
+            echo "🤖 AI Agent URLs:"
+            echo ""
+            if [ -n "$vm_ip" ]; then
+                echo "  • API:           http://$vm_ip:8000"
+                echo "  • Health:        http://$vm_ip:8000/health"
+                echo ""
+            fi
+            echo "🔧 Management:"
+            echo "  • SSH:           tfgrid-compose ssh $DEPLOYMENT_ID"
+            echo "  • Logs:          tfgrid-compose logs $app_name"
+            ;;
+
+        tfgrid-gitea)
+            echo "📦 Gitea Git Server:"
+            echo ""
+            if [ -n "$vm_ip" ]; then
+                echo "  • Web Interface: http://$vm_ip:3000"
+                echo ""
+            fi
+            if [ -n "$mycelium_ip" ]; then
+                echo "  • Mycelium Web:  http://[$mycelium_ip]:3000"
+                echo ""
+            fi
+            echo "🔧 Management:"
+            echo "  • SSH:           tfgrid-compose ssh $DEPLOYMENT_ID"
+            ;;
+
+        *)
+            # Generic display for other apps
+            echo "🌐 Network Addresses:"
+            echo ""
+            if [ -n "$vm_ip" ]; then
+                echo "📡 WireGuard (VPN):   $vm_ip"
+                echo ""
+            fi
+            if [ -n "$mycelium_ip" ]; then
+                echo "🫚 Mycelium (Global):  $mycelium_ip"
+                echo ""
+                echo "💡 Mycelium provides global IPv6 connectivity!"
+                echo ""
+            fi
+            echo "🔧 Management:"
+            echo "  • SSH:             tfgrid-compose ssh $DEPLOYMENT_ID"
+            echo "  • Status:          tfgrid-compose status $app_name"
+            ;;
+    esac
+
+    echo ""
+    log_info "🔍 Not seeing the expected URLs?"
+    echo "   Run: tfgrid-compose ps"
+    exit 0
+    ;;
         
     init)
         # Initialize app configuration
