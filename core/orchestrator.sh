@@ -540,7 +540,15 @@ deploy_app_source() {
         log_error "Failed to copy deployment hooks to VM ($scp_host)"
         return 1
     fi
-    log_success "Deployment hooks copied to VM"
+
+    # Copy state.yaml to VM for IP access during configuration
+    log_info "Copying deployment state..."
+    if ! scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        "$STATE_DIR/state.yaml" "root@$scp_host:/tmp/app-deployment/state.yaml" 2>/dev/null; then
+        log_error "Failed to copy state.yaml to VM ($scp_host)"
+        return 1
+    fi
+    log_success "Deployment hooks and state copied to VM"
 
     # Copy app source directory contents if it exists (for scripts, templates, etc.)
     if [ -d "$APP_DIR/src" ]; then
@@ -590,7 +598,7 @@ run_app_hooks() {
 
     # Pass network preference to deployment hooks
     local network_preference=$(get_network_preference "$DEPLOYMENT_ID")
-    env_vars="$env_vars export NETWORK_PREFERENCE='$network_preference';"
+    env_vars="$env_vars export DEPLOYMENT_NETWORK_PREFERENCE='$network_preference';"
     log_info "Passing network preference to deployment hooks: $network_preference"
     
     # Check if Ansible playbook exists (Option B: Ansible deployment)
