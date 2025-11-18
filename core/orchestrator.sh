@@ -15,15 +15,15 @@ source "$SCRIPT_DIR/interactive-config.sh"
 get_vm_ip_from_state() {
     # Try to get VM IP from various state files
     if [ -f "$STATE_DIR/state.yaml" ]; then
-        # Check different possible IP field names
-        local vm_ip=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+        # Check different possible IP field names (take first match only)
+        local vm_ip=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
         if [ -n "$vm_ip" ]; then
             echo "$vm_ip"
             return 0
         fi
         
         # Try gateway_ip as fallback
-        vm_ip=$(grep "^gateway_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+        vm_ip=$(grep "^gateway_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
         if [ -n "$vm_ip" ]; then
             echo "$vm_ip"
             return 0
@@ -254,30 +254,26 @@ EOF
         return 1
     fi
 
-    # Step 2.4: Capture real IP addresses from terraform outputs
+    # Step 2.4: Capture real IP addresses from terraform outputs (logging only; state.yaml is populated by terraform task)
     log_step "Capturing deployment IP addresses..."
     if [ -d "$STATE_DIR/terraform" ] && [ -f "$STATE_DIR/terraform/terraform.tfstate" ]; then
         cd "$STATE_DIR/terraform" || return 1
 
-        # Capture primary (WireGuard) IP and write as vm_ip
+        # Capture primary (WireGuard) IP for logging
         local real_primary_ip=""
         real_primary_ip=$(terraform output -raw primary_ip 2>/dev/null || echo "")
 
         if [ -n "$real_primary_ip" ] && [ "$real_primary_ip" != "null" ]; then
-            # Write vm_ip to state.yaml
-            echo "vm_ip: $real_primary_ip" >> "$STATE_DIR/state.yaml"
             log_success "Captured WireGuard IP: $real_primary_ip"
         else
             log_warning "Could not extract WireGuard IP from terraform output"
         fi
 
-        # Capture Mycelium IPv6 and write as mycelium_ip
+        # Capture Mycelium IPv6 for logging
         local real_mycelium_ip=""
         real_mycelium_ip=$(terraform output -raw mycelium_ip 2>/dev/null || echo "")
 
         if [ -n "$real_mycelium_ip" ] && [ "$real_mycelium_ip" != "null" ] && [ "$real_mycelium_ip" != "<nil>" ]; then
-            # Write mycelium_ip to state.yaml
-            echo "mycelium_ip: $real_mycelium_ip" >> "$STATE_DIR/state.yaml"
             log_success "Captured Mycelium IPv6: $real_mycelium_ip"
         else
             log_debug "Mycelium IP not available (normal if mycelium not enabled)"

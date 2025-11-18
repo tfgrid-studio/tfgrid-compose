@@ -1848,6 +1848,19 @@ address)
     mycelium_ip=$(echo "$details" | grep "^mycelium_ip:" | awk '{print $2}' | tr -d '"' || echo "")
     contract_id=$(echo "$details" | grep "^contract_id:" | awk '{print $2}' | tr -d '"')
     created_at=$(echo "$details" | grep "^created_at:" | awk '{print $2}' | tr -d '"')
+    state_dir=$(echo "$details" | grep "^state_dir:" | awk '{print $2}' | tr -d '"')
+
+    # Fallback: handle vm_ip/mycelium_ip stored as YAML block scalars (vm_ip: |-) by reading from state.yaml
+    if [ "$vm_ip" = "|-" ] || [ -z "$vm_ip" ]; then
+        if [ -n "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
+            vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
+        fi
+    fi
+    if [ "$mycelium_ip" = "|-" ] || [ -z "$mycelium_ip" ]; then
+        if [ -n "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
+            mycelium_ip=$(grep "^mycelium_ip:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
+        fi
+    fi
 
     echo "📋 Deployment: $DEPLOYMENT_ID"
     echo "🏷️  App: $app_name"
