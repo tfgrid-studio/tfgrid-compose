@@ -809,6 +809,167 @@ case "$COMMAND" in
         exit 0
         ;;
         
+    dashboard)
+        # Start local web dashboard (Phase 1)
+        DASHBOARD_HOME="$HOME/.config/tfgrid-compose/dashboard"
+        DASHBOARD_SERVER="$DASHBOARD_HOME/server.js"
+        DASHBOARD_PID_FILE="$DASHBOARD_HOME/dashboard.pid"
+        DASHBOARD_PORT_FILE="$DASHBOARD_HOME/dashboard-port"
+        DASHBOARD_ACTION="$1"
+
+        if [ "$DASHBOARD_ACTION" = "stop" ]; then
+            if [ -f "$DASHBOARD_PID_FILE" ]; then
+                DASHBOARD_PID=$(cat "$DASHBOARD_PID_FILE" 2>/dev/null || true)
+                if [ -n "$DASHBOARD_PID" ] && ps -p "$DASHBOARD_PID" >/dev/null 2>&1; then
+                    kill "$DASHBOARD_PID" 2>/dev/null || true
+                    for i in $(seq 1 50); do
+                        if ! ps -p "$DASHBOARD_PID" >/dev/null 2>&1; then
+                            break
+                        fi
+                        sleep 0.1
+                    done
+                    log_success "Stopped dashboard (pid $DASHBOARD_PID)"
+                else
+                    log_info "Dashboard is not running"
+                fi
+                rm -f "$DASHBOARD_PID_FILE"
+            else
+                log_info "Dashboard is not running"
+            fi
+            exit 0
+        fi
+
+        if [ "$DASHBOARD_ACTION" = "status" ]; then
+            if [ -f "$DASHBOARD_PID_FILE" ]; then
+                DASHBOARD_PID=$(cat "$DASHBOARD_PID_FILE" 2>/dev/null || true)
+                if [ -n "$DASHBOARD_PID" ] && ps -p "$DASHBOARD_PID" >/dev/null 2>&1; then
+                    DASHBOARD_PORT=""
+                    if [ -f "$DASHBOARD_PORT_FILE" ]; then
+                        DASHBOARD_PORT=$(cat "$DASHBOARD_PORT_FILE" 2>/dev/null || true)
+                    fi
+                    if [ -n "$DASHBOARD_PORT" ]; then
+                        log_info "Dashboard running at http://localhost:$DASHBOARD_PORT (pid $DASHBOARD_PID)"
+                    else
+                        log_info "Dashboard running (pid $DASHBOARD_PID)"
+                    fi
+                    exit 0
+                else
+                    log_info "Dashboard is not running"
+                    rm -f "$DASHBOARD_PID_FILE"
+                    exit 0
+                fi
+            else
+                log_info "Dashboard is not running"
+                exit 0
+            fi
+        fi
+
+        if [ "$DASHBOARD_ACTION" = "logs" ]; then
+            DASHBOARD_LOG_FILE="$DASHBOARD_HOME/dashboard.log"
+            if [ ! -f "$DASHBOARD_LOG_FILE" ]; then
+                log_info "No dashboard log file found at $DASHBOARD_LOG_FILE"
+                exit 0
+            fi
+
+            tail -n 200 -f "$DASHBOARD_LOG_FILE"
+            exit $?
+        fi
+
+        # Bootstrap dashboard code into config directory if not present
+        if [ ! -f "$DASHBOARD_SERVER" ]; then
+            TEMPLATE_DIR="$DEPLOYER_ROOT/dashboard"
+
+            if [ -d "$TEMPLATE_DIR" ]; then
+                mkdir -p "$(dirname "$DASHBOARD_HOME")"
+                rm -rf "$DASHBOARD_HOME"
+                cp -R "$TEMPLATE_DIR" "$DASHBOARD_HOME"
+            else
+                log_error "Dashboard template not found at $TEMPLATE_DIR"
+                echo ""
+                echo "Reinstall tfgrid-compose or run the dashboard from a full tfgrid-studio checkout."
+                exit 1
+            fi
+        fi
+
+        # Install dependencies if needed
+        if [ ! -d "$DASHBOARD_HOME/node_modules" ]; then
+            if ! command -v npm >/dev/null 2>&1; then
+                log_error "npm is required to install dashboard dependencies"
+                echo "Install Node.js (v18+) and npm, then run:"
+                echo "  cd $DASHBOARD_HOME && npm install"
+                exit 1
+            fi
+
+            log_info "Installing dashboard dependencies (npm install)..."
+            (
+                cd "$DASHBOARD_HOME"
+                npm install
+            )
+        fi
+
+        if ! command -v node >/dev/null 2>&1; then
+            log_error "Node.js is required to run the dashboard backend"
+            echo "Install Node.js (v18+), then run:"
+            echo "  tfgrid-compose dashboard"
+            exit 1
+        fi
+
+        if [ "$DASHBOARD_ACTION" = "start" ]; then
+            if [ -f "$DASHBOARD_PID_FILE" ]; then
+                DASHBOARD_PID=$(cat "$DASHBOARD_PID_FILE" 2>/dev/null || true)
+                if [ -n "$DASHBOARD_PID" ] && ps -p "$DASHBOARD_PID" >/dev/null 2>&1; then
+                    DASHBOARD_PORT=""
+                    if [ -f "$DASHBOARD_PORT_FILE" ]; then
+                        DASHBOARD_PORT=$(cat "$DASHBOARD_PORT_FILE" 2>/dev/null || true)
+                    fi
+                    if [ -n "$DASHBOARD_PORT" ]; then
+                        log_info "Dashboard already running at http://localhost:$DASHBOARD_PORT (pid $DASHBOARD_PID)"
+                    else
+                        log_info "Dashboard already running (pid $DASHBOARD_PID)"
+                    fi
+                    exit 0
+                else
+                    rm -f "$DASHBOARD_PID_FILE"
+                fi
+            fi
+
+            log_info "Starting TFGrid Studio local dashboard in background..."
+            TFGRID_DASHBOARD_PORT="${TFGRID_DASHBOARD_PORT:-3000}" \
+            TFGRID_COMPOSE_BIN="${TFGRID_COMPOSE_BIN:-tfgrid-compose}" \
+            node "$DASHBOARD_SERVER" >"$DASHBOARD_HOME/dashboard.log" 2>&1 &
+            DASHBOARD_PID=$!
+            echo "$DASHBOARD_PID" >"$DASHBOARD_PID_FILE"
+
+            DASHBOARD_PORT=""
+            for i in $(seq 1 50); do
+                if [ -f "$DASHBOARD_PORT_FILE" ]; then
+                    DASHBOARD_PORT=$(cat "$DASHBOARD_PORT_FILE" 2>/dev/null || true)
+                    if [ -n "$DASHBOARD_PORT" ]; then
+                        break
+                    fi
+                fi
+                sleep 0.1
+            done
+
+            if [ -z "$DASHBOARD_PORT" ]; then
+                DASHBOARD_PORT="${TFGRID_DASHBOARD_PORT:-3000}"
+            fi
+
+            log_success "Dashboard started at http://localhost:$DASHBOARD_PORT (pid $DASHBOARD_PID)"
+            exit 0
+        fi
+
+        log_info "Starting TFGrid Studio local dashboard..."
+        echo ""
+        echo "Dashboard base URL: http://localhost:${TFGRID_DASHBOARD_PORT:-3000}"
+        echo ""
+
+        TFGRID_DASHBOARD_PORT="${TFGRID_DASHBOARD_PORT:-3000}" \
+        TFGRID_COMPOSE_BIN="${TFGRID_COMPOSE_BIN:-tfgrid-compose}" \
+        node "$DASHBOARD_SERVER"
+        exit $?
+        ;;
+
     commands)
         # Show app-specific commands for selected app
         CURRENT_APP=$(get_current_app)

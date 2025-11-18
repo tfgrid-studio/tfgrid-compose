@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TFGrid Studio Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <div class="brand">
+          <span class="brand-badge">TFGrid Studio</span>
+          <h1 class="brand-title">Local Dashboard</h1>
+          <p class="brand-subtitle">Visual control panel for tfgrid-compose deployments</p>
+        </div>
+        <div class="header-actions">
+          <button id="refresh-all" class="btn btn-ghost">Refresh</button>
+        </div>
+      </header>
+
+      <main class="app-main">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Apps from Registry</h2>
+            <p class="panel-subtitle">Deploy official apps like tfgrid-ai-stack with one click.</p>
+          </div>
+          <div id="apps-list" class="cards-grid"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Deployments</h2>
+            <p class="panel-subtitle">Overview of active deployments from tfgrid-compose.</p>
+          </div>
+          <div id="deployments-list" class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>App</th>
+                  <th>Status</th>
+                  <th>IPs</th>
+                  <th>Contract</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="deployments-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+
+      <section id="log-panel" class="log-panel hidden">
+        <div class="log-header">
+          <div>
+            <h2 id="log-title">Job Output</h2>
+            <p id="log-subtitle" class="log-subtitle"></p>
+          </div>
+          <button id="log-close" class="btn btn-ghost">Close</button>
+        </div>
+        <pre id="log-content" class="log-content"></pre>
+      </section>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

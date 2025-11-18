@@ -471,6 +471,7 @@ show_help() {
     echo -e "  ${GREEN}shortcut${NC} <name>       Create command shortcut (e.g., tfgrid, tf, grid)"
     echo -e "  ${GREEN}docs${NC}                  Open documentation in browser"
     echo -e "  ${GREEN}update${NC}                Update to latest version"
+    echo -e "  ${GREEN}dashboard${NC} [start|stop|status|logs] Local web dashboard for apps and deployments"
     echo -e "  ${GREEN}help${NC}                  Show this help message"
     echo ""
     echo -e "${CYAN}Enhanced Cache Examples:${NC}"
