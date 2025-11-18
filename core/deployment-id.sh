@@ -45,6 +45,12 @@ register_deployment() {
         return 1
     fi
 
+    # Best-effort lookup of mycelium_ip from state.yaml (for registry convenience)
+    local mycelium_ip=""
+    if [ -n "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
+        mycelium_ip=$(grep "^mycelium_ip:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}' || echo "")
+    fi
+
     # Validate deployment ID format (16 hex chars)
     if ! [[ "$deployment_id" =~ ^[a-f0-9]{16}$ ]]; then
         log_error "register_deployment: invalid deployment ID format: $deployment_id"
@@ -63,8 +69,8 @@ register_deployment() {
 
     # Use yq if available, otherwise use simple sed/awk
     if command_exists yq; then
-        # Construct the JSON object safely
-        local json_obj="{\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"vm_ip\": \"$vm_ip\", \"created_at\": \"$timestamp\", \"status\": \"active\"}"
+        # Construct the JSON object safely (include mycelium_ip when available)
+        local json_obj="{\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"vm_ip\": \"$vm_ip\", \"mycelium_ip\": \"$mycelium_ip\", \"created_at\": \"$timestamp\", \"status\": \"active\"}"
 
         if [ -n "$contract_id" ]; then
             json_obj=$(echo "$json_obj" | sed 's/}$/, "contract_id": "'$contract_id'"}/')
