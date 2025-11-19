@@ -875,6 +875,85 @@ case "$COMMAND" in
             exit $?
         fi
 
+        if [ "$DASHBOARD_ACTION" = "desktop" ]; then
+            # Install or refresh a desktop launcher for the dashboard (idempotent)
+            LAUNCHER_DIR="$HOME/.local/bin"
+            LAUNCHER_PATH="$LAUNCHER_DIR/tfgrid-dashboard-launcher"
+            APPLICATIONS_DIR="$HOME/.local/share/applications"
+            DESKTOP_FILE="$APPLICATIONS_DIR/tfgrid-dashboard.desktop"
+            DESKTOP_DIR="$HOME/Desktop"
+
+            mkdir -p "$LAUNCHER_DIR" "$APPLICATIONS_DIR"
+
+            cat >"$LAUNCHER_PATH" <<'EOF'
+#!/usr/bin/env bash
+set -e
+
+# Ensure dashboard is running in background
+tfgrid-compose dashboard start >/dev/null 2>&1 || true
+
+DASHBOARD_HOME="$HOME/.config/tfgrid-compose/dashboard"
+DASHBOARD_PORT_FILE="$DASHBOARD_HOME/dashboard-port"
+PORT="${TFGRID_DASHBOARD_PORT:-3000}"
+
+if [ -f "$DASHBOARD_PORT_FILE" ]; then
+  P=$(cat "$DASHBOARD_PORT_FILE" 2>/dev/null || true)
+  if [ -n "$P" ]; then
+    PORT="$P"
+  fi
+fi
+
+URL="http://localhost:$PORT"
+
+if command -v xdg-open >/dev/null 2>&1; then
+  xdg-open "$URL" >/dev/null 2>&1 &
+else
+  echo "Open $URL in your browser"
+fi
+EOF
+
+            chmod +x "$LAUNCHER_PATH"
+
+            # Try to install an icon from the bundled favicon, if available
+            ICON_NAME="tfgrid-studio-dashboard"
+            ICON_TARGET_DIR="$HOME/.local/share/icons"
+            ICON_PATH="$ICON_TARGET_DIR/$ICON_NAME.svg"
+            TEMPLATE_DIR="$DEPLOYER_ROOT/dashboard"
+            FAVICON_SOURCE="$TEMPLATE_DIR/public/favicon.svg"
+
+            if [ -f "$FAVICON_SOURCE" ]; then
+                mkdir -p "$ICON_TARGET_DIR"
+                cp "$FAVICON_SOURCE" "$ICON_PATH" 2>/dev/null || true
+            fi
+
+            cat >"$DESKTOP_FILE" <<EOF
+[Desktop Entry]
+Type=Application
+Name=TFGrid Studio Dashboard
+Comment=Local dashboard for tfgrid-compose apps and deployments
+Exec=$LAUNCHER_PATH
+Terminal=false
+Icon=$ICON_NAME
+Categories=Development;Network;
+EOF
+
+            # Optionally place a shortcut on the user's Desktop if it exists
+            if [ -d "$DESKTOP_DIR" ]; then
+                cp "$DESKTOP_FILE" "$DESKTOP_DIR/TFGrid Studio Dashboard.desktop" 2>/dev/null || true
+            fi
+
+            echo ""
+            log_success "TFGrid Studio Dashboard desktop launcher installed."
+            echo ""
+            log_info "Launcher script: $LAUNCHER_PATH"
+            log_info "Menu entry: TFGrid Studio Dashboard (under Applications/Development)"
+            if [ -d "$DESKTOP_DIR" ]; then
+                log_info "Desktop icon: $DESKTOP_DIR/TFGrid Studio Dashboard.desktop"
+            fi
+            echo ""
+            exit 0
+        fi
+
         # Bootstrap or refresh dashboard code into config directory from installed template
         TEMPLATE_DIR="$DEPLOYER_ROOT/dashboard"
 
