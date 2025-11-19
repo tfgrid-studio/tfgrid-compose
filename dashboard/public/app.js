@@ -407,6 +407,81 @@ async function loadCommands() {
   }
 }
 
+async function loadPreferences() {
+  const wlEl = document.getElementById('preferences-whitelist');
+  const blEl = document.getElementById('preferences-blacklist');
+  const thEl = document.getElementById('preferences-thresholds');
+  if (!wlEl || !blEl || !thEl) return;
+
+  wlEl.innerHTML = '<div class="card-body">Loading whitelist...</div>';
+  blEl.innerHTML = '<div class="card-body">Loading blacklist...</div>';
+  thEl.innerHTML = '<div class="card-body">Loading preferences...</div>';
+
+  try {
+    const data = await fetchJSON('/api/preferences');
+    const wl = data.whitelist || { nodes: [], farms: [] };
+    const bl = data.blacklist || { nodes: [], farms: [] };
+    const prefs = data.preferences || {};
+
+    const wlNodes = (wl.nodes || []).join(', ');
+    const wlFarms = (wl.farms || []).join(', ');
+    const blNodes = (bl.nodes || []).join(', ');
+    const blFarms = (bl.farms || []).join(', ');
+
+    wlEl.innerHTML = `
+      <h3 class="card-title">Whitelist</h3>
+      <div class="card-body">
+        <p><strong>Nodes:</strong> ${wlNodes || '<span class="muted">none</span>'}</p>
+        <p><strong>Farms:</strong> ${wlFarms || '<span class="muted">none</span>'}</p>
+        <div class="pref-actions">
+          <button class="btn btn-ghost btn-small" id="edit-whitelist-nodes">Edit Nodes in CLI Commands</button>
+          <button class="btn btn-ghost btn-small" id="edit-whitelist-farms">Edit Farms in CLI Commands</button>
+        </div>
+      </div>
+    `;
+
+    blEl.innerHTML = `
+      <h3 class="card-title">Blacklist</h3>
+      <div class="card-body">
+        <p><strong>Nodes:</strong> ${blNodes || '<span class="muted">none</span>'}</p>
+        <p><strong>Farms:</strong> ${blFarms || '<span class="muted">none</span>'}</p>
+        <div class="pref-actions">
+          <button class="btn btn-ghost btn-small" id="edit-blacklist-nodes">Edit Nodes in CLI Commands</button>
+          <button class="btn btn-ghost btn-small" id="edit-blacklist-farms">Edit Farms in CLI Commands</button>
+        </div>
+      </div>
+    `;
+
+    const maxCpu = prefs.max_cpu_usage != null ? `${prefs.max_cpu_usage}%` : '<span class="muted">default</span>';
+    const maxDisk = prefs.max_disk_usage != null ? `${prefs.max_disk_usage}%` : '<span class="muted">default</span>';
+    const minUptime = prefs.min_uptime_days != null ? `${prefs.min_uptime_days} days` : '<span class="muted">default</span>';
+
+    thEl.innerHTML = `
+      <h3 class="card-title">Thresholds</h3>
+      <div class="card-body">
+        <p><strong>Max CPU Usage:</strong> ${maxCpu}</p>
+        <p><strong>Max Disk Usage:</strong> ${maxDisk}</p>
+        <p><strong>Min Uptime:</strong> ${minUptime}</p>
+        <p class="preferences-note">Global thresholds are applied by tfgrid-compose during node selection.</p>
+      </div>
+    `;
+
+    const wlNodesBtn = document.getElementById('edit-whitelist-nodes');
+    const wlFarmsBtn = document.getElementById('edit-whitelist-farms');
+    const blNodesBtn = document.getElementById('edit-blacklist-nodes');
+    const blFarmsBtn = document.getElementById('edit-blacklist-farms');
+
+    if (wlNodesBtn) wlNodesBtn.addEventListener('click', () => openCommandWithInitial('whitelist', { args: { subcommand: 'nodes', value: wlNodes }, flags: {} }));
+    if (wlFarmsBtn) wlFarmsBtn.addEventListener('click', () => openCommandWithInitial('whitelist', { args: { subcommand: 'farms', value: wlFarms }, flags: {} }));
+    if (blNodesBtn) blNodesBtn.addEventListener('click', () => openCommandWithInitial('blacklist', { args: { subcommand: 'nodes', value: blNodes }, flags: {} }));
+    if (blFarmsBtn) blFarmsBtn.addEventListener('click', () => openCommandWithInitial('blacklist', { args: { subcommand: 'farms', value: blFarms }, flags: {} }));
+  } catch (err) {
+    wlEl.innerHTML = `<div class="card-body">Failed to load preferences: ${err.message}</div>`;
+    blEl.innerHTML = '';
+    thEl.innerHTML = '';
+  }
+}
+
 async function loadApps() {
   const container = document.getElementById('apps-list');
   container.innerHTML = '<div class="card"><div class="card-body">Loading apps...</div></div>';

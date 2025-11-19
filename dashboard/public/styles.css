@@ -360,6 +360,13 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
+#command-preview {
+  max-height: none;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: visible;
+}
+
 .hidden {
   display: none;
 }
