@@ -303,6 +303,23 @@ textarea {
   flex-direction: column;
 }
 
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-header-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.panel-commands .panel-header-main {
+  flex: 1;
+}
+
 .panel-header h2 {
   font-size: 20px;
   font-weight: 600;

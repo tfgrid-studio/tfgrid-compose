@@ -39,8 +39,11 @@
 
             <section class="panel panel-commands">
               <div class="panel-header">
-                <h2>CLI Commands</h2>
-                <p class="panel-subtitle">Run any tfgrid-compose command with full flags and options.</p>
+                <div class="panel-header-main">
+                  <h2>CLI Commands</h2>
+                  <p class="panel-subtitle">Run any tfgrid-compose command with full flags and options.</p>
+                </div>
+                <button id="toggle-advanced-cli" class="btn btn-ghost btn-small">Advanced CLI</button>
               </div>
               <div class="commands-context">
                 <div class="commands-context-main">
@@ -50,7 +53,7 @@
                 </div>
                 <button id="commands-context-clear" class="btn btn-ghost btn-small hidden">Clear</button>
               </div>
-              <div class="direct-cli">
+              <div class="direct-cli hidden">
                 <div class="direct-cli-main">
                   <div class="direct-cli-label-row">
                     <span class="direct-cli-title">Direct tfgrid-compose</span>

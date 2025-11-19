@@ -1095,6 +1095,30 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  const advancedToggle = document.getElementById('toggle-advanced-cli');
+  const directSection = document.querySelector('.direct-cli');
+  if (advancedToggle && directSection) {
+    const updateLabel = () => {
+      const isHidden = directSection.classList.contains('hidden');
+      advancedToggle.textContent = isHidden ? 'Open Advanced CLI' : 'Hide Advanced CLI';
+    };
+
+    advancedToggle.addEventListener('click', () => {
+      directSection.classList.toggle('hidden');
+      updateLabel();
+    });
+
+    advancedToggle.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        directSection.classList.toggle('hidden');
+        updateLabel();
+      }
+    });
+
+    updateLabel();
+  }
+
   loadApps();
   loadDeployments();
   loadCommands();
