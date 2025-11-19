@@ -2663,12 +2663,8 @@ EOF
                 echo "  Latest commit:  $LATEST_COMMIT"
                 echo ""
 
-                if [ "$CURRENT_COMMIT" = "$LATEST_COMMIT" ] || [ "$CURRENT_COMMIT" = "unknown" ] && [ -n "$LATEST_COMMIT" ]; then
-                    if [ "$CURRENT_COMMIT" = "unknown" ]; then
-                        echo "⚠️  Current version detection failed, but update available"
-                    else
-                        echo "✨ Already at latest version: $LATEST_COMMIT"
-                    fi
+                if [ "$CURRENT_COMMIT" = "$LATEST_COMMIT" ] && [ "$CURRENT_COMMIT" != "unknown" ]; then
+                    echo "✨ Already at latest version: $LATEST_COMMIT"
                     echo ""
                     echo "🧪 Test with: tfgrid-compose --version"
                     echo ""

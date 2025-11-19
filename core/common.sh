@@ -214,6 +214,16 @@ get_tfgrid_compose_git_commit() {
         fi
     fi
     
+    # Try reading from .version file (saved during make install)
+    local version_cache="$deployer_root/.version"
+    if [ -f "$version_cache" ]; then
+        local cached_commit=$(cat "$version_cache" 2>/dev/null | head -c 7)
+        if [[ "$cached_commit" =~ ^[a-f0-9]{7}$ ]]; then
+            echo "$cached_commit"
+            return 0
+        fi
+    fi
+    
     # Execute VERSION script (for backwards compatibility and dynamic detection)
     local version_file="$deployer_root/VERSION"
     if [ -f "$version_file" ] && [ -x "$version_file" ]; then

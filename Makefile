@@ -107,6 +107,14 @@ install:
 	@cp -r cli core patterns dashboard "$$HOME/.local/share/tfgrid-compose/"
 	@cp VERSION "$$HOME/.local/share/tfgrid-compose/"
 	@chmod +x "$$HOME/.local/share/tfgrid-compose/VERSION"
+	@echo "💾 Saving version info..."
+	@if [ -d ".git" ]; then \
+		COMMIT_HASH=$$(git rev-parse --short=7 HEAD 2>/dev/null || echo "unknown"); \
+		if [ "$$COMMIT_HASH" != "unknown" ]; then \
+			echo "$$COMMIT_HASH" > "$$HOME/.local/share/tfgrid-compose/.version"; \
+			echo "✅ Saved commit: $$COMMIT_HASH"; \
+		fi; \
+	fi
 	@echo "#!/usr/bin/env bash" > "$$HOME/.local/bin/tfgrid-compose"
 	@echo "exec \"$$HOME/.local/share/tfgrid-compose/cli/tfgrid-compose\" \"\$$@\"" >> "$$HOME/.local/bin/tfgrid-compose"
 	@chmod +x "$$HOME/.local/bin/tfgrid-compose"
