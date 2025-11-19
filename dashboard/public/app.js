@@ -514,7 +514,7 @@ async function openShellForDeployment(deployment) {
     const contentEl = document.getElementById('shell-content');
 
     if (titleEl) {
-      titleEl.textContent = `Shell  b7 ${deployment.id}`;
+      titleEl.textContent = `Shell - ${deployment.id}`;
     }
     if (subtitleEl) {
       subtitleEl.textContent = deployment.app_name || '';

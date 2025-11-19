@@ -71,7 +71,7 @@ body {
 }
 
 .column-label-output::before {
-  background: linear-gradient(to right, #f97316, #ec4899);
+  background: linear-gradient(to right, #22c55e, #38bdf8);
 }
 .global-header {
   max-width: 1400px;
@@ -334,7 +334,7 @@ body {
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.5);
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
-  max-height: 70vh;
+  max-height: 80vh;
   display: flex;
   flex-direction: column;
 }
@@ -357,7 +357,7 @@ body {
 }
 
 .log-content {
-  max-height: 32vh;
+  max-height: 60vh;
   padding: 10px 16px 14px;
   font-size: 12px;
   line-height: 1.4;
@@ -478,12 +478,20 @@ body {
   background: rgba(15, 23, 42, 0.9);
   border: 1px solid rgba(31, 41, 55, 0.9);
   padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 6px;
 }
 
 .commands-category-title {
   font-size: 13px;
   margin-bottom: 6px;
   color: #9ca3af;
+}
+
+.commands-category {
+  padding: 2px 4px 4px;
+  border-radius: 8px;
 }
 
 .command-item {
