@@ -898,13 +898,12 @@ async function closeShellPanel() {
   }
 
   activeShellSession = null;
-
   if (placeholder && (!logPanel || logPanel.classList.contains('hidden'))) {
     placeholder.classList.remove('hidden');
   }
 }
 
-function openCommandWithInitial(commandId, initial) {
+async function openCommandWithInitial(commandId, initial) {
   if (!commandsCache || !commandsCache.length) {
     showLogPanel('Commands not loaded', '');
     setLogContent('Commands schema is still loading. Try again in a moment.');
@@ -918,7 +917,42 @@ function openCommandWithInitial(commandId, initial) {
     return;
   }
 
-  renderCommandDetail(cmd, initial || { args: {}, flags: {} });
+  const initialState = initial || { args: {}, flags: {} };
+  const hasArgs = Array.isArray(cmd.args) && cmd.args.length > 0;
+  const hasFlags = Array.isArray(cmd.flags) && cmd.flags.length > 0;
+
+  // If the command has no arguments or flags, treat it as a one-click action and run it immediately.
+  if (!hasArgs && !hasFlags) {
+    const preview = `tfgrid-compose ${cmd.command}`;
+    showLogPanel(cmd.label || cmd.command, preview);
+    setLogContent('Starting command job...');
+
+    try {
+      const res = await fetchJSON('/api/commands/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          commandId: cmd.id || cmd.command,
+          args: initialState.args || {},
+          flags: initialState.flags || {},
+        }),
+      });
+      const jobId = res.job_id;
+      if (!jobId) throw new Error('Dashboard backend did not return job_id');
+      registerJob(jobId, {
+        title: cmd.label || cmd.command,
+        subtitle: preview,
+        initialLog: 'Starting command job...',
+      });
+      pollJob(jobId, null, null);
+    } catch (err) {
+      showLogPanel('Command failed to start', cmd.label || cmd.command);
+      setLogContent(`Failed to start command: ${err.message}`);
+    }
+    return;
+  }
+
+  renderCommandDetail(cmd, initialState);
 }
 
 function openAdvancedDeploy(appName) {
