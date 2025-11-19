@@ -928,9 +928,14 @@ URL="http://localhost:$PORT"
 launch_app_window() {
   local url="$1"
 
-  # Prefer Chromium-based browsers in app/window mode, incognito, new window, best-effort fullscreen
+  # Prefer Brave in app/window mode, incognito, new window, best-effort fullscreen
   if command -v brave-browser >/dev/null 2>&1; then
     brave-browser --incognito --new-window --app="$url" --start-fullscreen >/dev/null 2>&1 &
+    return
+  fi
+
+  if command -v brave-browser-stable >/dev/null 2>&1; then
+    brave-browser-stable --incognito --new-window --app="$url" --start-fullscreen >/dev/null 2>&1 &
     return
   fi
 
