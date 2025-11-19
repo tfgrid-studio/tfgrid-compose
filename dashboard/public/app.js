@@ -38,6 +38,12 @@ function hideLogPanel() {
   const shellPanel = document.getElementById('shell-panel');
   const placeholder = document.getElementById('output-placeholder');
   if (panel) panel.classList.add('hidden');
+
+  // Reset job state when closing the log panel
+  jobsState.clear();
+  activeJobId = null;
+  refreshJobsBar();
+
   if (placeholder && (!shellPanel || shellPanel.classList.contains('hidden'))) {
     placeholder.classList.remove('hidden');
   }
@@ -122,6 +128,143 @@ function setShellContent(text) {
   const el = document.getElementById('shell-content');
   if (!el) return;
   el.innerHTML = ansiToHtml(text || '');
+}
+
+const jobsState = new Map();
+let activeJobId = null;
+let jobCounter = 0;
+
+function refreshJobsBar() {
+  const bar = document.getElementById('jobs-bar');
+  const tabs = document.getElementById('jobs-tabs');
+  if (!bar || !tabs) return;
+
+  tabs.innerHTML = '';
+
+  if (!jobsState.size) {
+    bar.classList.add('hidden');
+    return;
+  }
+
+  bar.classList.remove('hidden');
+
+  const jobs = Array.from(jobsState.values()).sort((a, b) => a.index - b.index);
+
+  jobs.forEach((job) => {
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'job-tab' + (job.id === activeJobId ? ' job-tab-active' : '');
+    tab.dataset.jobId = job.id;
+
+    const statusDot = document.createElement('span');
+    let statusClass = 'job-status-running';
+    if (job.status === 'completed') statusClass = 'job-status-completed';
+    else if (job.status === 'failed') statusClass = 'job-status-failed';
+    statusDot.className = `job-status-dot ${statusClass}`;
+    tab.appendChild(statusDot);
+
+    const indexSpan = document.createElement('span');
+    indexSpan.textContent = `#${job.index}`;
+    tab.appendChild(indexSpan);
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'job-tab-label';
+    labelSpan.textContent = job.title || 'Job';
+    tab.appendChild(labelSpan);
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'job-tab-close';
+    closeBtn.innerHTML = '×';
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeJob(job.id);
+    });
+    tab.appendChild(closeBtn);
+
+    tab.addEventListener('click', () => {
+      if (activeJobId !== job.id) {
+        activeJobId = job.id;
+        updateActiveJobView();
+        refreshJobsBar();
+      }
+    });
+
+    tabs.appendChild(tab);
+  });
+}
+
+function updateActiveJobView() {
+  const panel = document.getElementById('log-panel');
+  const placeholder = document.getElementById('output-placeholder');
+  const bar = document.getElementById('jobs-bar');
+  const titleEl = document.getElementById('log-title');
+  const subtitleEl = document.getElementById('log-subtitle');
+
+  if (!activeJobId || !jobsState.has(activeJobId)) {
+    if (panel) panel.classList.add('hidden');
+    if (placeholder) placeholder.classList.remove('hidden');
+    if (bar) bar.classList.add('hidden');
+    return;
+  }
+
+  const job = jobsState.get(activeJobId);
+
+  if (panel) panel.classList.remove('hidden');
+  if (placeholder) placeholder.classList.add('hidden');
+  if (bar) bar.classList.remove('hidden');
+
+  if (titleEl) titleEl.textContent = job.title || 'Job Output';
+  if (subtitleEl) {
+    const statusText = job.status
+      ? `Status: ${job.status}${job.deployment_id ? ` • Deployment: ${job.deployment_id}` : ''}`
+      : '';
+    subtitleEl.textContent = job.subtitle ? `${job.subtitle} • ${statusText}` : statusText;
+  }
+
+  setLogContent(job.logsText || 'Waiting for output...');
+}
+
+function registerJob(jobId, meta) {
+  jobCounter += 1;
+  jobsState.set(jobId, {
+    id: jobId,
+    index: jobCounter,
+    title: meta.title || 'Job',
+    subtitle: meta.subtitle || '',
+    status: 'running',
+    logsText: meta.initialLog || '',
+    deployment_id: null,
+  });
+  activeJobId = jobId;
+  refreshJobsBar();
+  updateActiveJobView();
+}
+
+function updateJobFromServer(jobId, jobData) {
+  if (!jobsState.has(jobId)) return;
+  const job = jobsState.get(jobId);
+  job.status = jobData.status || job.status || 'running';
+  job.deployment_id = jobData.deployment_id || job.deployment_id || null;
+  job.logsText = (jobData.logs || []).join('');
+  jobsState.set(jobId, job);
+  refreshJobsBar();
+  if (activeJobId === jobId) {
+    updateActiveJobView();
+  }
+}
+
+function closeJob(jobId) {
+  const wasActive = activeJobId === jobId;
+  jobsState.delete(jobId);
+  if (!jobsState.size) {
+    activeJobId = null;
+  } else if (wasActive) {
+    const remaining = Array.from(jobsState.values()).sort((a, b) => b.index - a.index);
+    activeJobId = remaining[0].id;
+  }
+  refreshJobsBar();
+  updateActiveJobView();
 }
 
 function isDeploymentScopedCommand(cmd) {
@@ -622,7 +765,12 @@ function renderCommandDetail(cmd, initial) {
         });
         const jobId = res.job_id;
         if (!jobId) throw new Error('Dashboard backend did not return job_id');
-        await pollJob(jobId, submitButton, originalText || 'Run Command');
+        registerJob(jobId, {
+          title: cmd.label || cmd.command,
+          subtitle: preview,
+          initialLog: 'Starting command job...',
+        });
+        pollJob(jobId, submitButton, originalText || 'Run Command');
       } catch (err) {
         setLogContent(`Failed to start command: ${err.message}`);
         if (submitButton) {
@@ -946,7 +1094,12 @@ async function handleProjectAction(deployment, action, inputEl, button) {
     });
     const jobId = res.job_id;
     if (!jobId) throw new Error('Dashboard backend did not return job_id');
-    await pollJob(jobId, button, originalText);
+    registerJob(jobId, {
+      title: `${actionLabel} ${projectName}`,
+      subtitle: `Deployment ${deployment.id} (${deployment.app_name || ''})`,
+      initialLog: `Starting tfgrid-compose ${action} ${projectName}...`,
+    });
+    pollJob(jobId, button, originalText);
   } catch (err) {
     setLogContent(`Failed to start ${action}: ${err.message}`);
     button.disabled = false;
@@ -954,97 +1107,6 @@ async function handleProjectAction(deployment, action, inputEl, button) {
   }
 }
 
-async function loadDeployments() {
-  const tbody = document.getElementById('deployments-body');
-  tbody.innerHTML = '<tr><td colspan="6">Loading deployments...</td></tr>';
-
-  try {
-    const data = await fetchJSON('/api/deployments');
-    const deployments = data.deployments || [];
-
-    if (!deployments.length) {
-      tbody.innerHTML = '<tr><td colspan="6">No deployments found. Deploy an app to get started.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = '';
-
-    deployments.forEach((d) => {
-      const tr = document.createElement('tr');
-      tr.setAttribute('data-deployment-id', d.id);
-      const isAIStack = d.app_name === 'tfgrid-ai-stack';
-
-      if (isAIStack) {
-        tr.innerHTML = `
-          <td><span class="ip-text">${d.id}</span></td>
-          <td>${d.app_name || ''}</td>
-          <td>${statusBadge(d.status)}</td>
-          <td>${formatIPs(d.vm_ip, d.mycelium_ip)}</td>
-          <td>${d.contract_id ? `<span class="ip-text">${d.contract_id}</span>` : ''}</td>
-          <td style="text-align:right">
-            <input type="text" class="project-input" placeholder="project name" />
-            <div class="actions-row">
-              <button class="btn btn-primary" data-action="create" data-id="${d.id}">Create</button>
-              <button class="btn btn-ghost" data-action="run" data-id="${d.id}">Run</button>
-              <button class="btn btn-ghost" data-action="publish" data-id="${d.id}">Publish</button>
-              <button class="btn btn-ghost" data-action="address" data-id="${d.id}">Address</button>
-              <button class="btn btn-ghost" data-action="commands" data-id="${d.id}">Commands</button>
-              <button class="btn btn-ghost" data-action="connect" data-id="${d.id}">Connect</button>
-            </div>
-          </td>
-        `;
-      } else {
-        tr.innerHTML = `
-          <td><span class="ip-text">${d.id}</span></td>
-          <td>${d.app_name || ''}</td>
-          <td>${d.status || ''}</td>
-          <td>${formatIPs(d.vm_ip, d.mycelium_ip)}</td>
-          <td>${d.contract_id ? `<span class="ip-text">${d.contract_id}</span>` : ''}</td>
-          <td style="text-align:right">
-            <div class="actions-row">
-              <button class="btn btn-ghost" data-action="address" data-id="${d.id}">Address</button>
-              <button class="btn btn-ghost" data-action="commands" data-id="${d.id}">Commands</button>
-              <button class="btn btn-ghost" data-action="connect" data-id="${d.id}">Connect</button>
-            </div>
-          </td>
-        `;
-      }
-
-      const buttons = tr.querySelectorAll('button');
-      buttons.forEach((btn) => {
-        const action = btn.getAttribute('data-action') || 'address';
-        if (action === 'address') {
-          btn.addEventListener('click', () => showAddress(d));
-        } else if (action === 'commands') {
-          btn.addEventListener('click', () => setDeploymentContext(d));
-        } else if (action === 'connect') {
-          btn.addEventListener('click', () => openShellForDeployment(d));
-        } else {
-          const input = tr.querySelector('.project-input');
-          btn.addEventListener('click', () => handleProjectAction(d, action, input, btn));
-        }
-      });
-
-      tbody.appendChild(tr);
-    });
-    updateDeploymentSelectionUI();
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6">Failed to load deployments: ${err.message}</td></tr>`;
-  }
-}
-
-async function showAddress(deployment) {
-  try {
-    showLogPanel(`Deployment ${deployment.id}`, `${deployment.app_name || ''} - address`);
-    setLogContent('Loading address information...');
-
-    const data = await fetchJSON(`/api/deployments/${deployment.id}/address`);
-    const output = data.output || '';
-    setLogContent(output.trim() || 'No output.');
-  } catch (err) {
-    setLogContent(`Failed to get address: ${err.message}`);
-  }
-}
 async function runDirectCli() {
   const input = document.getElementById('direct-cli-input');
   const button = document.getElementById('direct-cli-run');
@@ -1072,7 +1134,12 @@ async function runDirectCli() {
     });
     const jobId = res.job_id;
     if (!jobId) throw new Error('Dashboard backend did not return job_id');
-    await pollJob(jobId, button, originalText);
+    registerJob(jobId, {
+      title: 'Direct tfgrid-compose',
+      subtitle: `tfgrid-compose ${line}`,
+      initialLog: 'Starting direct command job...',
+    });
+    pollJob(jobId, button, originalText);
   } catch (err) {
     setLogContent(`Failed to start direct command: ${err.message}`);
     button.disabled = false;
@@ -1082,27 +1149,26 @@ async function runDirectCli() {
 
 async function pollJob(jobId, button, resetLabel) {
   let done = false;
-  while (!done) {
+  while (!done && jobsState.has(jobId)) {
     await new Promise((r) => setTimeout(r, 2000));
     try {
       const data = await fetchJSON(`/api/jobs/${jobId}`);
-      const job = data;
-      const lines = (job.logs || []).join('');
-      setLogContent(lines || 'Waiting for output...');
-
-      if (job.status === 'completed' || job.status === 'failed') {
+      updateJobFromServer(jobId, data);
+      const status = data.status;
+      if (status === 'completed' || status === 'failed') {
         done = true;
         if (button) {
           button.disabled = false;
           if (resetLabel) button.textContent = resetLabel;
         }
-        document.getElementById('log-subtitle').textContent = `Status: ${job.status}${job.deployment_id ? ` • Deployment: ${job.deployment_id}` : ''}`;
-        // Refresh deployments list at the end
         loadDeployments();
         loadPreferences();
       }
     } catch (err) {
-      setLogContent(`Failed to fetch job: ${err.message}`);
+      updateJobFromServer(jobId, {
+        status: 'failed',
+        logs: [`Failed to fetch job: ${err.message}`],
+      });
       done = true;
       if (button) {
         button.disabled = false;
@@ -1127,7 +1193,12 @@ async function startDeployment(appName, button) {
     });
     const jobId = res.job_id;
     if (!jobId) throw new Error('Dashboard backend did not return job_id');
-    await pollJob(jobId, button, 'Deploy');
+    registerJob(jobId, {
+      title: `Deploying ${appName}`,
+      subtitle: 'Running tfgrid-compose up',
+      initialLog: 'Starting deployment job...',
+    });
+    pollJob(jobId, button, 'Deploy');
   } catch (err) {
     setLogContent(`Failed to start deployment: ${err.message}`);
     button.disabled = false;
@@ -1135,6 +1206,7 @@ async function startDeployment(appName, button) {
   }
 }
 
+// ... (rest of the code remains the same)
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('log-close').addEventListener('click', hideLogPanel);
   document.getElementById('refresh-all').addEventListener('click', () => {
