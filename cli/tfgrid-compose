@@ -925,11 +925,49 @@ fi
 
 URL="http://localhost:$PORT"
 
-if command -v xdg-open >/dev/null 2>&1; then
-  xdg-open "$URL" >/dev/null 2>&1 &
-else
-  echo "Open $URL in your browser"
-fi
+launch_app_window() {
+  local url="$1"
+
+  # Prefer Chromium-based browsers in app/window mode
+  if command -v brave-browser >/dev/null 2>&1; then
+    brave-browser --app="$url" --start-fullscreen >/dev/null 2>&1 &
+    return
+  fi
+
+  if command -v brave >/dev/null 2>&1; then
+    brave --app="$url" --start-fullscreen >/dev/null 2>&1 &
+    return
+  fi
+
+  if command -v google-chrome >/dev/null 2>&1; then
+    google-chrome --app="$url" --start-fullscreen >/dev/null 2>&1 &
+    return
+  fi
+
+  if command -v google-chrome-stable >/dev/null 2>&1; then
+    google-chrome-stable --app="$url" --start-fullscreen >/dev/null 2>&1 &
+    return
+  fi
+
+  if command -v chromium >/dev/null 2>&1; then
+    chromium --app="$url" --start-fullscreen >/dev/null 2>&1 &
+    return
+  fi
+
+  if command -v chromium-browser >/dev/null 2>&1; then
+    chromium-browser --app="$url" --start-fullscreen >/dev/null 2>&1 &
+    return
+  fi
+
+  # Fallback to system default browser
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url" >/dev/null 2>&1 &
+  else
+    echo "Open $url in your browser"
+  fi
+}
+
+launch_app_window "$URL"
 EOF
 
             chmod +x "$LAUNCHER_PATH"
