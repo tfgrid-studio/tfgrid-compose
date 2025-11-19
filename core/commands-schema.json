@@ -71,6 +71,7 @@
         { "name": "refresh", "type": "boolean", "description": "Refresh app cache before deploy" },
         { "name": "no-refresh", "type": "boolean", "description": "Skip cache refresh" },
         { "name": "interactive", "alias": "-i", "type": "boolean", "description": "Interactive node/resource selection" },
+        { "name": "verbose", "alias": "-v", "type": "boolean", "description": "Show detailed output during deployment" },
         { "name": "node", "type": "string", "description": "Deploy to specific node ID" },
         { "name": "name", "type": "string", "description": "Custom deployment name suffix" },
         { "name": "blacklist-node", "type": "string", "description": "Exclude specific nodes (comma-separated IDs)" },
