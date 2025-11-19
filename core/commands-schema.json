@@ -203,10 +203,10 @@
       "command": "contracts",
       "label": "Advanced Contract Delete",
       "category": "contracts",
-      "description": "Delete contracts via 'contracts delete' (single or all)",
+      "description": "Delete contracts via 'contracts delete' (single, multiple, or all)",
       "args": [
         { "name": "subcommand", "required": true, "type": "string", "description": "delete" },
-        { "name": "id", "required": false, "type": "string", "description": "Contract ID (omit when using --all)" }
+        { "name": "ids", "required": false, "type": "string", "description": "Contract ID(s) - space or comma-separated (omit when using --all)" }
       ],
       "flags": [
         { "name": "all", "type": "boolean", "description": "Delete all contracts (dangerous)" },

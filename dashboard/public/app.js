@@ -286,8 +286,14 @@ function buildPreviewCommand(cmd, form) {
   (cmd.args || []).forEach((arg) => {
     const el = form.querySelector(`[name="arg-${arg.name}"]`);
     if (!el) return;
-    const val = el.value.trim();
+    let val = el.value.trim();
     if (!val) return;
+    
+    // Handle comma-separated values (e.g., contract IDs) - convert to space-separated
+    if (arg.name === 'ids' && val.includes(',')) {
+      val = val.split(',').map(v => v.trim()).filter(v => v).join(' ');
+    }
+    
     parts.push(val);
   });
 
