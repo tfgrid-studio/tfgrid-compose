@@ -31,6 +31,8 @@ app.use(express.static(path.join(DASHBOARD_ROOT, 'public')));
 
 // Simple in-memory job table for long-running operations (deployments)
 const jobs = new Map();
+// In-memory interactive shell sessions for ssh-like connections
+const shells = new Map();
 
 let commandsSchemaCache = null;
 
@@ -299,6 +301,70 @@ function spawnJob(command, args) {
   return job;
 }
 
+function createShellSession(deploymentId) {
+  const { spawn } = require('child_process');
+
+  const sessionId = randomUUID();
+  const proc = spawn(TFGRID_COMPOSE_BIN, ['ssh', deploymentId], {
+    cwd: HOME_DIR || process.cwd(),
+    env: { ...process.env },
+    shell: false,
+  });
+
+  const session = {
+    id: sessionId,
+    deployment_id: deploymentId,
+    proc,
+    streams: new Set(),
+    buffer: [],
+    closed: false,
+  };
+
+  function broadcastChunk(chunk) {
+    const text = chunk.toString();
+    session.buffer.push(text);
+    session.streams.forEach((res) => {
+      text.split(/\r?\n/).forEach((line) => {
+        res.write(`data: ${line}\n\n`);
+      });
+    });
+  }
+
+  proc.stdout.on('data', (chunk) => {
+    broadcastChunk(chunk);
+  });
+
+  proc.stderr.on('data', (chunk) => {
+    broadcastChunk(chunk);
+  });
+
+  proc.on('close', (code) => {
+    session.closed = true;
+    session.streams.forEach((res) => {
+      res.write(`event: close\n`);
+      res.write(`data: ${code}\n\n`);
+      res.end();
+    });
+    session.streams.clear();
+    shells.delete(sessionId);
+  });
+
+  proc.on('error', (err) => {
+    session.closed = true;
+    session.streams.forEach((res) => {
+      res.write('event: close\n');
+      res.write(`data: ERROR: ${err.message}\n\n`);
+      res.end();
+    });
+    session.streams.clear();
+    shells.delete(sessionId);
+  });
+
+  shells.set(sessionId, session);
+  log('Started shell session', sessionId, 'for deployment', deploymentId);
+  return session;
+}
+
 // Routes
 
 // List available tfgrid-compose commands from shared schema
@@ -364,6 +430,82 @@ app.post('/api/commands/run', (req, res) => {
     log('Error in /api/commands/run:', err.message || err);
     res.status(500).json({ error: 'Failed to start command', details: err.message || String(err) });
   }
+});
+
+// Start interactive shell session (tfgrid-compose ssh <deploymentId>)
+app.post('/api/deployments/:id/shell', (req, res) => {
+  const id = req.params.id;
+  try {
+    const session = createShellSession(id);
+    res.status(201).json({ session_id: session.id, deployment_id: session.deployment_id });
+  } catch (err) {
+    log('Error in /api/deployments/:id/shell:', err.message || err);
+    res.status(500).json({ error: 'Failed to start shell session', details: err.message || String(err) });
+  }
+});
+
+// Stream shell output via Server-Sent Events
+app.get('/api/shells/:id/stream', (req, res) => {
+  const id = req.params.id;
+  const session = shells.get(id);
+  if (!session || session.closed) {
+    res.status(404).end();
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders && res.flushHeaders();
+
+  session.streams.add(res);
+
+  // Replay buffered output for late joiners
+  if (session.buffer.length) {
+    session.buffer.forEach((chunk) => {
+      chunk.split(/\r?\n/).forEach((line) => {
+        res.write(`data: ${line}\n\n`);
+      });
+    });
+  }
+
+  req.on('close', () => {
+    session.streams.delete(res);
+  });
+});
+
+// Send input to shell session stdin
+app.post('/api/shells/:id/input', (req, res) => {
+  const id = req.params.id;
+  const session = shells.get(id);
+  if (!session || session.closed) {
+    return res.status(404).json({ error: 'Shell session not found' });
+  }
+
+  const body = req.body || {};
+  const data = typeof body.data === 'string' ? body.data : '';
+  try {
+    if (data) session.proc.stdin.write(data);
+    res.status(204).end();
+  } catch (err) {
+    log('Error writing to shell stdin:', err.message || err);
+    res.status(500).json({ error: 'Failed to send input' });
+  }
+});
+
+// Close shell session explicitly
+app.post('/api/shells/:id/close', (req, res) => {
+  const id = req.params.id;
+  const session = shells.get(id);
+  if (session && !session.closed) {
+    try {
+      session.proc.kill();
+    } catch (err) {
+      log('Error killing shell session', id, '-', err.message || err);
+    }
+  }
+  shells.delete(id);
+  res.status(204).end();
 });
 
 // List deployments

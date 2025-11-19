@@ -339,6 +339,10 @@ body {
   flex-direction: column;
 }
 
+.shell-panel {
+  margin-top: 14px;
+}
+
 .log-header {
   display: flex;
   justify-content: space-between;
@@ -371,6 +375,29 @@ body {
 
 .hidden {
   display: none;
+}
+
+.shell-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid rgba(31, 41, 55, 0.9);
+}
+
+.shell-input {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(75, 85, 99, 0.9);
+  background: rgba(15, 23, 42, 0.9);
+  color: #e5e7eb;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.shell-input::placeholder {
+  color: #6b7280;
 }
 
 .commands-context {

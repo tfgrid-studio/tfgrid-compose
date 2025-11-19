@@ -106,6 +106,15 @@ function setLogContent(text) {
 
 let commandsCache = [];
 let deploymentContext = null;
+let activeShellSession = null;
+let shellEventSource = null;
+let shellBuffer = '';
+
+function setShellContent(text) {
+  const el = document.getElementById('shell-content');
+  if (!el) return;
+  el.innerHTML = ansiToHtml(text || '');
+}
 
 function isDeploymentScopedCommand(cmd) {
   const id = cmd && (cmd.id || cmd.command);
@@ -470,6 +479,116 @@ function renderCommandDetail(cmd, initial) {
   }
 }
 
+async function openShellForDeployment(deployment) {
+  try {
+    setDeploymentContext(deployment);
+
+    // Close any existing shell session
+    if (shellEventSource) {
+      shellEventSource.close();
+      shellEventSource = null;
+    }
+    if (activeShellSession && activeShellSession.id) {
+      try {
+        await fetch(`/api/shells/${activeShellSession.id}/close`, { method: 'POST' });
+      } catch (err) {
+        // ignore close errors
+      }
+    }
+
+    const res = await fetchJSON(`/api/deployments/${deployment.id}/shell`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    const sessionId = res.session_id;
+    if (!sessionId) throw new Error('Dashboard backend did not return session_id');
+
+    activeShellSession = { id: sessionId, deployment };
+    shellBuffer = '';
+
+    const panel = document.getElementById('shell-panel');
+    const titleEl = document.getElementById('shell-title');
+    const subtitleEl = document.getElementById('shell-subtitle');
+    const contentEl = document.getElementById('shell-content');
+
+    if (titleEl) {
+      titleEl.textContent = `Shell  b7 ${deployment.id}`;
+    }
+    if (subtitleEl) {
+      subtitleEl.textContent = deployment.app_name || '';
+    }
+    if (contentEl) {
+      contentEl.textContent = '';
+    }
+    if (panel) {
+      panel.classList.remove('hidden');
+    }
+
+    const es = new EventSource(`/api/shells/${sessionId}/stream`);
+    shellEventSource = es;
+
+    es.onmessage = (event) => {
+      const line = event.data || '';
+      shellBuffer += line + '\n';
+      setShellContent(shellBuffer);
+    };
+
+    es.addEventListener('close', () => {
+      if (panel) panel.classList.add('hidden');
+      shellEventSource = null;
+      activeShellSession = null;
+    });
+
+    es.onerror = () => {
+      // Keep the session open; errors are usually transient network issues
+    };
+  } catch (err) {
+    showLogPanel('Shell error', '');
+    setLogContent(`Failed to start shell: ${err.message}`);
+  }
+}
+
+async function sendShellInput() {
+  if (!activeShellSession || !activeShellSession.id) return;
+  const inputEl = document.getElementById('shell-input');
+  if (!inputEl) return;
+  const value = (inputEl.value || '').trim();
+  if (!value) return;
+  inputEl.value = '';
+
+  try {
+    await fetch(`/api/shells/${activeShellSession.id}/input`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: value + '\n' }),
+    });
+  } catch (err) {
+    // Swallow errors; shell output panel will reflect any issues
+  }
+}
+
+async function closeShellPanel() {
+  const panel = document.getElementById('shell-panel');
+  if (panel) panel.classList.add('hidden');
+
+  if (shellEventSource) {
+    shellEventSource.close();
+    shellEventSource = null;
+  }
+
+  if (activeShellSession && activeShellSession.id) {
+    try {
+      await fetch(`/api/shells/${activeShellSession.id}/close`, { method: 'POST' });
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  activeShellSession = null;
+}
+
 function openCommandWithInitial(commandId, initial) {
   if (!commandsCache || !commandsCache.length) {
     showLogPanel('Commands not loaded', '');
@@ -711,6 +830,7 @@ async function loadDeployments() {
               <button class="btn btn-ghost" data-action="publish" data-id="${d.id}">Publish</button>
               <button class="btn btn-ghost" data-action="address" data-id="${d.id}">Address</button>
               <button class="btn btn-ghost" data-action="commands" data-id="${d.id}">Commands</button>
+              <button class="btn btn-ghost" data-action="connect" data-id="${d.id}">Connect</button>
             </div>
           </td>
         `;
@@ -725,6 +845,7 @@ async function loadDeployments() {
             <div class="actions-row">
               <button class="btn btn-ghost" data-action="address" data-id="${d.id}">Address</button>
               <button class="btn btn-ghost" data-action="commands" data-id="${d.id}">Commands</button>
+              <button class="btn btn-ghost" data-action="connect" data-id="${d.id}">Connect</button>
             </div>
           </td>
         `;
@@ -737,6 +858,8 @@ async function loadDeployments() {
           btn.addEventListener('click', () => showAddress(d));
         } else if (action === 'commands') {
           btn.addEventListener('click', () => setDeploymentContext(d));
+        } else if (action === 'connect') {
+          btn.addEventListener('click', () => openShellForDeployment(d));
         } else {
           const input = tr.querySelector('.project-input');
           btn.addEventListener('click', () => handleProjectAction(d, action, input, btn));
@@ -830,6 +953,30 @@ window.addEventListener('DOMContentLoaded', () => {
   const clearContextBtn = document.getElementById('commands-context-clear');
   if (clearContextBtn) {
     clearContextBtn.addEventListener('click', () => setDeploymentContext(null));
+  }
+
+  const shellCloseBtn = document.getElementById('shell-close');
+  if (shellCloseBtn) {
+    shellCloseBtn.addEventListener('click', () => {
+      closeShellPanel();
+    });
+  }
+
+  const shellSendBtn = document.getElementById('shell-send');
+  if (shellSendBtn) {
+    shellSendBtn.addEventListener('click', () => {
+      sendShellInput();
+    });
+  }
+
+  const shellInput = document.getElementById('shell-input');
+  if (shellInput) {
+    shellInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendShellInput();
+      }
+    });
   }
 
   loadApps();
