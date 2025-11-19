@@ -19,6 +19,9 @@ const HOME_DIR = process.env.HOME || process.env.USERPROFILE || '';
 const CONFIG_DIR = path.join(HOME_DIR, '.config', 'tfgrid-compose');
 const TFGRID_COMPOSE_BIN = process.env.TFGRID_COMPOSE_BIN || 'tfgrid-compose';
 const PORT_FILE = path.join(DASHBOARD_ROOT, 'dashboard-port');
+const COMMANDS_SCHEMA_ENV = process.env.TFGRID_COMMANDS_SCHEMA || '';
+const DEFAULT_COMMANDS_SCHEMA_PATH = path.join(DASHBOARD_ROOT, '..', 'core', 'commands-schema.json');
+const COMMANDS_SCHEMA_PATH = COMMANDS_SCHEMA_ENV || DEFAULT_COMMANDS_SCHEMA_PATH;
 
 const app = express();
 
@@ -28,6 +31,8 @@ app.use(express.static(path.join(DASHBOARD_ROOT, 'public')));
 
 // Simple in-memory job table for long-running operations (deployments)
 const jobs = new Map();
+
+let commandsSchemaCache = null;
 
 function log(...args) {
   // Prefix logs so they are recognizable when run from tfgrid-compose
@@ -114,6 +119,56 @@ async function getDeployments() {
   });
 }
 
+function loadCommandsSchema() {
+  if (commandsSchemaCache) return commandsSchemaCache;
+
+  try {
+    const raw = fs.readFileSync(COMMANDS_SCHEMA_PATH, 'utf8');
+    const parsed = JSON.parse(raw);
+    commandsSchemaCache = parsed;
+    log('Loaded commands schema from', COMMANDS_SCHEMA_PATH);
+    return parsed;
+  } catch (err) {
+    log('Failed to load commands schema from', COMMANDS_SCHEMA_PATH, '-', err.message);
+    commandsSchemaCache = { version: 1, commands: [] };
+    return commandsSchemaCache;
+  }
+}
+
+function buildCliArgsFromCommand(def, payload) {
+  const cliArgs = [];
+  const argValues = (payload && payload.args) || {};
+  const flagValues = (payload && payload.flags) || {};
+
+  // Positional arguments in defined order
+  (def.args || []).forEach((argDef) => {
+    const val = argValues[argDef.name];
+    if (val === undefined || val === null || val === '') {
+      // Leave missing args for CLI to validate (required vs optional)
+      return;
+    }
+    cliArgs.push(String(val));
+  });
+
+  // Flags
+  (def.flags || []).forEach((flagDef) => {
+    const name = flagDef.name;
+    const val = flagValues[name];
+
+    if (flagDef.type === 'boolean') {
+      if (val === true) {
+        cliArgs.push(`--${name}`);
+      }
+    } else {
+      if (val !== undefined && val !== null && String(val) !== '') {
+        cliArgs.push(`--${name}=${val}`);
+      }
+    }
+  });
+
+  return cliArgs;
+}
+
 function spawnJob(command, args) {
   const { spawn } = require('child_process');
 
@@ -170,6 +225,17 @@ function spawnJob(command, args) {
 }
 
 // Routes
+
+// List available tfgrid-compose commands from shared schema
+app.get('/api/commands', (req, res) => {
+  try {
+    const schema = loadCommandsSchema();
+    res.json(schema);
+  } catch (err) {
+    log('Error in /api/commands:', err.message || err);
+    res.status(500).json({ error: 'Failed to load commands schema' });
+  }
+});
 
 // List registry apps
 app.get('/api/apps', async (req, res) => {

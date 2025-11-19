@@ -39,6 +39,248 @@ function setLogContent(text) {
   document.getElementById('log-content').textContent = text;
 }
 
+let commandsCache = [];
+
+function renderCommandList(commands) {
+  const container = document.getElementById('commands-list');
+  if (!container) return;
+
+  if (!commands.length) {
+    container.innerHTML = '<div class="card"><div class="card-body">No commands available.</div></div>';
+    return;
+  }
+
+  const grouped = {};
+  commands.forEach((cmd) => {
+    const cat = cmd.category || 'other';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(cmd);
+  });
+
+  container.innerHTML = '';
+
+  Object.keys(grouped)
+    .sort()
+    .forEach((cat) => {
+      const section = document.createElement('div');
+      section.className = 'commands-category';
+
+      const heading = document.createElement('h3');
+      heading.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+      section.appendChild(heading);
+
+      grouped[cat].forEach((cmd) => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-ghost command-item';
+        btn.type = 'button';
+        btn.textContent = cmd.label || cmd.command;
+        btn.addEventListener('click', () => renderCommandDetail(cmd));
+        section.appendChild(btn);
+      });
+
+      container.appendChild(section);
+    });
+}
+
+function buildPreviewCommand(cmd, form) {
+  const parts = ['tfgrid-compose', cmd.command];
+
+  (cmd.args || []).forEach((arg) => {
+    const el = form.querySelector(`[name="arg-${arg.name}"]`);
+    if (!el) return;
+    const val = el.value.trim();
+    if (!val) return;
+    parts.push(val);
+  });
+
+  (cmd.flags || []).forEach((flag) => {
+    const name = flag.name;
+    const inputName = `flag-${name}`;
+    const el = form.querySelector(`[name="${inputName}"]`);
+    if (!el) return;
+
+    if (flag.type === 'boolean') {
+      if (el.checked) {
+        parts.push(`--${name}`);
+      }
+    } else {
+      const val = el.value.trim();
+      if (!val) return;
+      parts.push(`--${name}=${val}`);
+    }
+  });
+
+  return parts.join(' ');
+}
+
+function renderCommandDetail(cmd) {
+  const container = document.getElementById('command-detail');
+  if (!container) return;
+
+  const args = cmd.args || [];
+  const flags = cmd.flags || [];
+
+  let html = `
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">${cmd.label || cmd.command}</h3>
+        <p class="card-subtitle">${cmd.description || ''}</p>
+      </div>
+      <div class="card-body">
+        <form id="command-form">
+  `;
+
+  if (args.length) {
+    html += '<div class="form-section"><h4>Arguments</h4>';
+    args.forEach((arg) => {
+      html += `
+        <div class="form-field">
+          <label>
+            <span>${arg.name}${arg.required ? ' *' : ''}</span>
+            <input type="text" name="arg-${arg.name}" placeholder="${arg.description || ''}" />
+          </label>
+        </div>
+      `;
+    });
+    html += '</div>';
+  }
+
+  if (flags.length) {
+    html += '<div class="form-section"><h4>Flags</h4>';
+    flags.forEach((flag) => {
+      if (flag.type === 'boolean') {
+        html += `
+          <div class="form-field">
+            <label class="checkbox-label">
+              <input type="checkbox" name="flag-${flag.name}" />
+              <span>--${flag.name}${flag.alias ? ` (${flag.alias})` : ''} - ${flag.description || ''}</span>
+            </label>
+          </div>
+        `;
+      } else {
+        html += `
+          <div class="form-field">
+            <label>
+              <span>--${flag.name}${flag.alias ? ` (${flag.alias})` : ''}</span>
+              <input type="text" name="flag-${flag.name}" placeholder="${flag.description || ''}" />
+            </label>
+          </div>
+        `;
+      }
+    });
+    html += '</div>';
+  }
+
+  html += `
+          <div class="form-section">
+            <h4>Preview</h4>
+            <pre id="command-preview" class="log-content"></pre>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Run Command</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  container.innerHTML = html;
+
+  const form = document.getElementById('command-form');
+  const previewEl = document.getElementById('command-preview');
+
+  function updatePreview() {
+    if (!previewEl) return;
+    previewEl.textContent = buildPreviewCommand(cmd, form);
+  }
+
+  if (form) {
+    form.addEventListener('input', updatePreview);
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const argsPayload = {};
+      const flagsPayload = {};
+
+      (cmd.args || []).forEach((arg) => {
+        const el = form.querySelector(`[name="arg-${arg.name}"]`);
+        if (!el) return;
+        const val = el.value.trim();
+        if (val) {
+          argsPayload[arg.name] = val;
+        }
+      });
+
+      (cmd.flags || []).forEach((flag) => {
+        const name = flag.name;
+        const el = form.querySelector(`[name="flag-${name}"]`);
+        if (!el) return;
+        if (flag.type === 'boolean') {
+          flagsPayload[name] = el.checked;
+        } else {
+          const val = el.value.trim();
+          if (val) flagsPayload[name] = val;
+        }
+      });
+
+      const preview = buildPreviewCommand(cmd, form);
+      showLogPanel(cmd.label || cmd.command, preview);
+      setLogContent('Starting command job...');
+
+      const submitButton = form.querySelector('button[type="submit"]');
+      const originalText = submitButton ? submitButton.textContent : '';
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Running...';
+      }
+
+      try {
+        const res = await fetchJSON('/api/commands/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            commandId: cmd.id || cmd.command,
+            args: argsPayload,
+            flags: flagsPayload,
+          }),
+        });
+        const jobId = res.job_id;
+        if (!jobId) throw new Error('Dashboard backend did not return job_id');
+        await pollJob(jobId, submitButton, originalText || 'Run Command');
+      } catch (err) {
+        setLogContent(`Failed to start command: ${err.message}`);
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = originalText || 'Run Command';
+        }
+      }
+    });
+
+    updatePreview();
+  }
+}
+
+async function loadCommands() {
+  const listContainer = document.getElementById('commands-list');
+  const detailContainer = document.getElementById('command-detail');
+  if (!listContainer || !detailContainer) return;
+
+  listContainer.innerHTML = '<div class="card"><div class="card-body">Loading commands...</div></div>';
+  detailContainer.innerHTML = '';
+
+  try {
+    const data = await fetchJSON('/api/commands');
+    const commands = (data && data.commands) || [];
+    commandsCache = commands;
+    renderCommandList(commands);
+    if (commands.length > 0) {
+      renderCommandDetail(commands[0]);
+    }
+  } catch (err) {
+    listContainer.innerHTML = `<div class="card"><div class="card-body">Failed to load commands: ${err.message}</div></div>`;
+  }
+}
+
 async function loadApps() {
   const container = document.getElementById('apps-list');
   container.innerHTML = '<div class="card"><div class="card-body">Loading apps...</div></div>';
@@ -259,4 +501,5 @@ window.addEventListener('DOMContentLoaded', () => {
 
   loadApps();
   loadDeployments();
+  loadCommands();
 });

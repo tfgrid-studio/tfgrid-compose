@@ -936,6 +936,7 @@ case "$COMMAND" in
             log_info "Starting TFGrid Studio local dashboard in background..."
             TFGRID_DASHBOARD_PORT="${TFGRID_DASHBOARD_PORT:-3000}" \
             TFGRID_COMPOSE_BIN="${TFGRID_COMPOSE_BIN:-tfgrid-compose}" \
+            TFGRID_COMMANDS_SCHEMA="$DEPLOYER_ROOT/core/commands-schema.json" \
             node "$DASHBOARD_SERVER" >"$DASHBOARD_HOME/dashboard.log" 2>&1 &
             DASHBOARD_PID=$!
             echo "$DASHBOARD_PID" >"$DASHBOARD_PID_FILE"
@@ -966,6 +967,7 @@ case "$COMMAND" in
 
         TFGRID_DASHBOARD_PORT="${TFGRID_DASHBOARD_PORT:-3000}" \
         TFGRID_COMPOSE_BIN="${TFGRID_COMPOSE_BIN:-tfgrid-compose}" \
+        TFGRID_COMMANDS_SCHEMA="$DEPLOYER_ROOT/core/commands-schema.json" \
         node "$DASHBOARD_SERVER"
         exit $?
         ;;

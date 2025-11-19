@@ -1,0 +1,267 @@
+{
+  "version": 1,
+  "commands": [
+    {
+      "id": "help",
+      "command": "help",
+      "label": "Help",
+      "category": "core",
+      "description": "Show help message",
+      "args": [],
+      "flags": []
+    },
+    {
+      "id": "version",
+      "command": "--version",
+      "label": "Version",
+      "category": "core",
+      "description": "Show tfgrid-compose version",
+      "args": [],
+      "flags": []
+    },
+    {
+      "id": "search",
+      "command": "search",
+      "label": "Search Apps",
+      "category": "registry",
+      "description": "Search applications in the registry",
+      "args": [
+        { "name": "query", "required": false, "type": "string", "description": "Search query" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "list",
+      "command": "list",
+      "label": "List Apps (Docker-style)",
+      "category": "deployments",
+      "description": "List deployed apps with Docker-style integration",
+      "args": [],
+      "flags": []
+    },
+    {
+      "id": "ps",
+      "command": "ps",
+      "label": "Deployments (Docker-style)",
+      "category": "deployments",
+      "description": "Docker-style deployment list",
+      "args": [],
+      "flags": []
+    },
+    {
+      "id": "up",
+      "command": "up",
+      "label": "Deploy App",
+      "category": "deploy",
+      "description": "Deploy an application from registry or local path",
+      "args": [
+        { "name": "app", "required": false, "type": "string", "description": "App name or path" }
+      ],
+      "flags": [
+        { "name": "force", "alias": "-f", "type": "boolean", "description": "Force redeploy (destroy + refresh + deploy)" },
+        { "name": "refresh", "type": "boolean", "description": "Refresh app cache before deploy" },
+        { "name": "no-refresh", "type": "boolean", "description": "Skip cache refresh" },
+        { "name": "interactive", "alias": "-i", "type": "boolean", "description": "Interactive node/resource selection" },
+        { "name": "node", "type": "string", "description": "Deploy to specific node ID" },
+        { "name": "name", "type": "string", "description": "Custom deployment name suffix" },
+        { "name": "blacklist-node", "type": "string", "description": "Exclude specific nodes (comma-separated IDs)" },
+        { "name": "blacklist-farm", "type": "string", "description": "Exclude specific farms (comma-separated names)" },
+        { "name": "whitelist-nodes", "type": "string", "description": "Only use specific nodes (comma-separated IDs)" },
+        { "name": "whitelist-farm", "type": "string", "description": "Only use specific farms (comma-separated names)" },
+        { "name": "max-cpu-usage", "type": "string", "description": "Maximum CPU usage threshold (0-100)" },
+        { "name": "max-disk-usage", "type": "string", "description": "Maximum disk usage threshold (0-100)" },
+        { "name": "min-uptime-days", "type": "string", "description": "Minimum node uptime in days" }
+      ]
+    },
+    {
+      "id": "down",
+      "command": "down",
+      "label": "Destroy Deployment",
+      "category": "deploy",
+      "description": "Destroy a deployment",
+      "args": [
+        { "name": "app", "required": false, "type": "string", "description": "App name or path" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "status:app",
+      "command": "status",
+      "label": "Status (App)",
+      "category": "deployments",
+      "description": "Check application status",
+      "args": [
+        { "name": "app", "required": false, "type": "string", "description": "App name or deployment ID" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "logs:app",
+      "command": "logs",
+      "label": "Logs (App)",
+      "category": "deployments",
+      "description": "Show application logs",
+      "args": [
+        { "name": "app", "required": false, "type": "string", "description": "App name or deployment ID" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "ssh",
+      "command": "ssh",
+      "label": "SSH to Deployment",
+      "category": "deployments",
+      "description": "SSH into a deployment",
+      "args": [
+        { "name": "app", "required": false, "type": "string", "description": "App name or deployment ID" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "exec",
+      "command": "exec",
+      "label": "Execute Command on VM",
+      "category": "deployments",
+      "description": "Execute a command on the deployed VM (uses context if app not provided)",
+      "args": [
+        { "name": "app", "required": false, "type": "string", "description": "App name or deployment ID (optional)" },
+        { "name": "remote_cmd", "required": true, "type": "string", "description": "Command to run on the VM" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "address",
+      "command": "address",
+      "label": "Show Addresses",
+      "category": "deployments",
+      "description": "Show deployment addresses (web, git, SSH, etc.)",
+      "args": [
+        { "name": "app", "required": false, "type": "string", "description": "App name or deployment ID" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "cache",
+      "command": "cache",
+      "label": "Cache Management",
+      "category": "cache",
+      "description": "Manage application cache status and updates",
+      "args": [
+        { "name": "subcommand", "required": false, "type": "string", "description": "status | list | outdated | refresh | validate | clear | info" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "update",
+      "command": "update",
+      "label": "Update tfgrid-compose / Apps",
+      "category": "update",
+      "description": "Update tfgrid-compose binary, registry, or cached apps",
+      "args": [
+        { "name": "target", "required": false, "type": "string", "description": "registry | app-name | --all-apps" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "contracts",
+      "command": "contracts",
+      "label": "Contracts (Simple Wrapper)",
+      "category": "contracts",
+      "description": "Manage contracts via simple wrapper",
+      "args": [
+        { "name": "subcommand", "required": false, "type": "string", "description": "list | show | delete | cancel-all" },
+        { "name": "id", "required": false, "type": "string", "description": "Contract ID (where applicable)" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "get",
+      "command": "get",
+      "label": "Advanced Contract Get",
+      "category": "contracts",
+      "description": "Get contracts and contract details via tfcmd",
+      "args": [
+        { "name": "resource", "required": true, "type": "string", "description": "contracts | contract" },
+        { "name": "id", "required": false, "type": "string", "description": "Contract ID when resource=contract" }
+      ],
+      "flags": [
+        { "name": "format", "type": "string", "description": "Output format: table, json, csv" }
+      ]
+    },
+    {
+      "id": "delete",
+      "command": "delete",
+      "label": "Advanced Contract Delete",
+      "category": "contracts",
+      "description": "Delete contracts via tfcmd (single or batch)",
+      "args": [
+        { "name": "resource", "required": true, "type": "string", "description": "contracts | contract" },
+        { "name": "ids", "required": false, "type": "string", "description": "Contract ID or IDs" }
+      ],
+      "flags": [
+        { "name": "all", "type": "boolean", "description": "Delete all contracts (dangerous)" },
+        { "name": "force", "type": "boolean", "description": "Force delete without confirmation" }
+      ]
+    },
+    {
+      "id": "whitelist",
+      "command": "whitelist",
+      "label": "Whitelist Management",
+      "category": "preferences",
+      "description": "Manage preferred nodes and farms",
+      "args": [
+        { "name": "subcommand", "required": false, "type": "string", "description": "nodes | farms | --status | --clear" },
+        { "name": "value", "required": false, "type": "string", "description": "Node IDs or farm names" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "blacklist",
+      "command": "blacklist",
+      "label": "Blacklist Management",
+      "category": "preferences",
+      "description": "Manage nodes and farms to avoid",
+      "args": [
+        { "name": "subcommand", "required": false, "type": "string", "description": "nodes | farms | --status | --clear" },
+        { "name": "value", "required": false, "type": "string", "description": "Node IDs or farm names" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "preferences",
+      "command": "preferences",
+      "label": "General Preferences",
+      "category": "preferences",
+      "description": "Manage general preferences",
+      "args": [
+        { "name": "option", "required": false, "type": "string", "description": "--status | --clear" }
+      ],
+      "flags": []
+    },
+    {
+      "id": "nodes",
+      "command": "nodes",
+      "label": "Node Browser",
+      "category": "nodes",
+      "description": "Interactive node browser and node details",
+      "args": [
+        { "name": "subcommand", "required": false, "type": "string", "description": "show | (none)" },
+        { "name": "id", "required": false, "type": "string", "description": "Node ID for 'show'" }
+      ],
+      "flags": [
+        { "name": "farm", "type": "string", "description": "Filter by farm name" }
+      ]
+    },
+    {
+      "id": "dashboard",
+      "command": "dashboard",
+      "label": "Local Dashboard Lifecycle",
+      "category": "dashboard",
+      "description": "Manage local dashboard lifecycle",
+      "args": [
+        { "name": "action", "required": false, "type": "string", "description": "start | stop | status | logs" }
+      ],
+      "flags": []
+    }
+  ]
+}
