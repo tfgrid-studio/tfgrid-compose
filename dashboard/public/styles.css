@@ -130,15 +130,9 @@ body {
 }
 
 .app-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr);
-  gap: 20px;
-}
-
-@media (max-width: 900px) {
-  .app-main {
-    grid-template-columns: minmax(0, 1fr);
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .panel {
@@ -158,6 +152,10 @@ body {
   margin-top: 4px;
   font-size: 13px;
   color: #9ca3af;
+}
+
+.panel-apps .cards-grid {
+  margin-top: 10px;
 }
 
 .cards-grid {
@@ -241,6 +239,10 @@ body {
 
 .data-table tbody tr:nth-child(odd) {
   background: rgba(15, 23, 42, 0.7);
+}
+
+.data-table tbody tr.deployment-selected {
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.9) inset;
 }
 
 .project-input {
@@ -371,6 +373,41 @@ body {
   display: none;
 }
 
+.commands-context {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(55, 65, 81, 0.8);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.commands-context-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.commands-context-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #9ca3af;
+}
+
+.commands-context-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.commands-context-meta {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
 .commands-layout {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
@@ -379,11 +416,44 @@ body {
 }
 
 .commands-list {
-  max-height: 320px;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
 }
 
-.commands-category h3 {
+.commands-group {
+  margin-top: 8px;
+}
+
+.commands-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.commands-group-header h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #9ca3af;
+}
+
+.commands-group-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(75, 85, 99, 0.8);
+  color: #9ca3af;
+}
+
+.commands-group-body {
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(31, 41, 55, 0.9);
+  padding: 6px;
+}
+
+.commands-category-title {
   font-size: 13px;
   margin-bottom: 6px;
   color: #9ca3af;
@@ -393,6 +463,11 @@ body {
   width: 100%;
   justify-content: flex-start;
   margin-bottom: 4px;
+}
+
+.command-item[disabled] {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .preferences-panel {

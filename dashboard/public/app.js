@@ -105,6 +105,80 @@ function setLogContent(text) {
 }
 
 let commandsCache = [];
+let deploymentContext = null;
+
+function isDeploymentScopedCommand(cmd) {
+  const id = cmd && (cmd.id || cmd.command);
+  return id === 'status:app' || id === 'logs:app' || id === 'ssh' || id === 'exec' || id === 'address';
+}
+
+function getInitialStateForCommand(cmd) {
+  const initial = { args: {}, flags: {} };
+  if (!deploymentContext) return initial;
+
+  const id = cmd && (cmd.id || cmd.command);
+  const dep = deploymentContext;
+  if (!id || !dep) return initial;
+
+  if (id === 'status:app' || id === 'logs:app' || id === 'ssh' || id === 'address') {
+    initial.args.app = dep.id;
+  } else if (id === 'exec') {
+    initial.args.app = dep.id;
+    initial.args.remote_cmd = 'ls';
+  }
+
+  return initial;
+}
+
+function updateDeploymentSelectionUI() {
+  const tbody = document.getElementById('deployments-body');
+  if (!tbody) return;
+
+  const rows = tbody.querySelectorAll('tr');
+  rows.forEach((row) => {
+    const id = row.getAttribute('data-deployment-id');
+    if (deploymentContext && id === deploymentContext.id) {
+      row.classList.add('deployment-selected');
+    } else {
+      row.classList.remove('deployment-selected');
+    }
+  });
+}
+
+function updateCommandsContextUI() {
+  const valueEl = document.getElementById('commands-context-value');
+  const metaEl = document.getElementById('commands-context-meta');
+  const clearBtn = document.getElementById('commands-context-clear');
+
+  const deploymentButtons = document.querySelectorAll('.command-item[data-scope="deployment"]');
+  const hasContext = !!deploymentContext;
+
+  if (valueEl && metaEl && clearBtn) {
+    if (!hasContext) {
+      valueEl.textContent = 'Global (tfgrid-compose)';
+      metaEl.textContent = 'No deployment selected. All commands run without deployment context.';
+      clearBtn.classList.add('hidden');
+    } else {
+      const appName = deploymentContext.app_name || '';
+      valueEl.textContent = appName
+        ? `Deployment ${deploymentContext.id} (${appName})`
+        : `Deployment ${deploymentContext.id}`;
+      metaEl.textContent = 'Commands in "For deployment" will use this deployment where applicable.';
+      clearBtn.classList.remove('hidden');
+    }
+  }
+
+  deploymentButtons.forEach((btn) => {
+    btn.disabled = !hasContext;
+  });
+
+  updateDeploymentSelectionUI();
+}
+
+function setDeploymentContext(deployment) {
+  deploymentContext = deployment || null;
+  updateCommandsContextUI();
+}
 
 function renderCommandList(commands) {
   const container = document.getElementById('commands-list');
@@ -115,36 +189,72 @@ function renderCommandList(commands) {
     return;
   }
 
-  const grouped = {};
+  const globalGrouped = {};
+  const deploymentGrouped = {};
+
   commands.forEach((cmd) => {
     const cat = cmd.category || 'other';
-    if (!grouped[cat]) grouped[cat] = [];
-    grouped[cat].push(cmd);
+    const target = isDeploymentScopedCommand(cmd) ? deploymentGrouped : globalGrouped;
+    if (!target[cat]) target[cat] = [];
+    target[cat].push(cmd);
   });
 
   container.innerHTML = '';
 
-  Object.keys(grouped)
-    .sort()
-    .forEach((cat) => {
+  function renderGroup(title, badgeText, grouped, scope) {
+    const cats = Object.keys(grouped);
+    if (!cats.length) return;
+
+    const groupEl = document.createElement('div');
+    groupEl.className = 'commands-group';
+
+    const header = document.createElement('div');
+    header.className = 'commands-group-header';
+    const h = document.createElement('h3');
+    h.textContent = title;
+    const badge = document.createElement('span');
+    badge.className = 'commands-group-badge';
+    badge.textContent = badgeText;
+    header.appendChild(h);
+    header.appendChild(badge);
+    groupEl.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'commands-group-body';
+
+    cats.sort().forEach((cat) => {
       const section = document.createElement('div');
       section.className = 'commands-category';
 
-      const heading = document.createElement('h3');
+      const heading = document.createElement('div');
+      heading.className = 'commands-category-title';
       heading.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
       section.appendChild(heading);
 
-      grouped[cat].forEach((cmd) => {
+      (grouped[cat] || []).forEach((cmd) => {
         const btn = document.createElement('button');
         btn.className = 'btn btn-ghost command-item';
         btn.type = 'button';
+        btn.dataset.scope = scope;
         btn.textContent = cmd.label || cmd.command;
-        btn.addEventListener('click', () => renderCommandDetail(cmd));
+        btn.addEventListener('click', () => {
+          const initial = getInitialStateForCommand(cmd);
+          renderCommandDetail(cmd, initial);
+        });
         section.appendChild(btn);
       });
 
-      container.appendChild(section);
+      body.appendChild(section);
     });
+
+    groupEl.appendChild(body);
+    container.appendChild(groupEl);
+  }
+
+  renderGroup('Global CLI', 'GLOBAL', globalGrouped, 'global');
+  renderGroup('For deployment', 'DEPLOYMENT', deploymentGrouped, 'deployment');
+
+  updateCommandsContextUI();
 }
 
 function buildPreviewCommand(cmd, form) {
@@ -583,6 +693,7 @@ async function loadDeployments() {
 
     deployments.forEach((d) => {
       const tr = document.createElement('tr');
+      tr.setAttribute('data-deployment-id', d.id);
       const isAIStack = d.app_name === 'tfgrid-ai-stack';
 
       if (isAIStack) {
@@ -599,6 +710,7 @@ async function loadDeployments() {
               <button class="btn btn-ghost" data-action="run" data-id="${d.id}">Run</button>
               <button class="btn btn-ghost" data-action="publish" data-id="${d.id}">Publish</button>
               <button class="btn btn-ghost" data-action="address" data-id="${d.id}">Address</button>
+              <button class="btn btn-ghost" data-action="commands" data-id="${d.id}">Commands</button>
             </div>
           </td>
         `;
@@ -606,11 +718,14 @@ async function loadDeployments() {
         tr.innerHTML = `
           <td><span class="ip-text">${d.id}</span></td>
           <td>${d.app_name || ''}</td>
-          <td>${statusBadge(d.status)}</td>
+          <td>${d.status || ''}</td>
           <td>${formatIPs(d.vm_ip, d.mycelium_ip)}</td>
           <td>${d.contract_id ? `<span class="ip-text">${d.contract_id}</span>` : ''}</td>
           <td style="text-align:right">
-            <button class="btn btn-ghost" data-action="address" data-id="${d.id}">Address</button>
+            <div class="actions-row">
+              <button class="btn btn-ghost" data-action="address" data-id="${d.id}">Address</button>
+              <button class="btn btn-ghost" data-action="commands" data-id="${d.id}">Commands</button>
+            </div>
           </td>
         `;
       }
@@ -620,6 +735,8 @@ async function loadDeployments() {
         const action = btn.getAttribute('data-action') || 'address';
         if (action === 'address') {
           btn.addEventListener('click', () => showAddress(d));
+        } else if (action === 'commands') {
+          btn.addEventListener('click', () => setDeploymentContext(d));
         } else {
           const input = tr.querySelector('.project-input');
           btn.addEventListener('click', () => handleProjectAction(d, action, input, btn));
@@ -628,6 +745,7 @@ async function loadDeployments() {
 
       tbody.appendChild(tr);
     });
+    updateDeploymentSelectionUI();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="6">Failed to load deployments: ${err.message}</td></tr>`;
   }
@@ -708,6 +826,11 @@ window.addEventListener('DOMContentLoaded', () => {
     loadDeployments();
     loadPreferences();
   });
+
+  const clearContextBtn = document.getElementById('commands-context-clear');
+  if (clearContextBtn) {
+    clearContextBtn.addEventListener('click', () => setDeploymentContext(null));
+  }
 
   loadApps();
   loadDeployments();

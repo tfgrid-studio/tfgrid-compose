@@ -24,61 +24,69 @@
           <div class="column-label column-label-input">Input</div>
 
           <main class="app-main">
-          <section class="panel">
-          <div class="panel-header">
-            <h2>Apps from Registry</h2>
-            <p class="panel-subtitle">Deploy official apps like tfgrid-ai-stack with one click.</p>
-          </div>
-          <div id="apps-list" class="cards-grid"></div>
-          </section>
+            <section class="panel panel-apps">
+              <div class="panel-header">
+                <h2>Apps from Registry</h2>
+                <p class="panel-subtitle">Deploy official apps like tfgrid-ai-stack with one click.</p>
+              </div>
+              <div id="apps-list" class="cards-grid"></div>
+            </section>
 
-          <section class="panel">
-          <div class="panel-header">
-            <h2>Deployments</h2>
-            <p class="panel-subtitle">Overview of active deployments from tfgrid-compose.</p>
-          </div>
-          <div id="deployments-list" class="table-wrapper">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>App</th>
-                  <th>Status</th>
-                  <th>IPs</th>
-                  <th>Contract</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="deployments-body"></tbody>
-            </table>
-          </div>
-          </section>
+            <section class="panel panel-commands">
+              <div class="panel-header">
+                <h2>CLI Commands</h2>
+                <p class="panel-subtitle">Run any tfgrid-compose command with full flags and options.</p>
+              </div>
+              <div class="commands-context">
+                <div class="commands-context-main">
+                  <span class="commands-context-label">Context</span>
+                  <span id="commands-context-value" class="commands-context-value">Global (tfgrid-compose)</span>
+                  <p id="commands-context-meta" class="commands-context-meta">No deployment selected. All commands run without deployment context.</p>
+                </div>
+                <button id="commands-context-clear" class="btn btn-ghost btn-small hidden">Clear</button>
+              </div>
+              <div class="commands-layout">
+                <div id="commands-list" class="commands-list"></div>
+                <div id="command-detail" class="commands-detail"></div>
+              </div>
+            </section>
 
-          <section class="panel">
-          <div class="panel-header">
-            <h2>Preferences</h2>
-            <p class="panel-subtitle">Global whitelist/blacklist and resource thresholds used by tfgrid-compose.</p>
-          </div>
-          <div id="preferences-panel" class="preferences-panel">
-            <div class="preferences-grid">
-              <div class="preferences-card" id="preferences-whitelist"></div>
-              <div class="preferences-card" id="preferences-blacklist"></div>
-              <div class="preferences-card" id="preferences-thresholds"></div>
-            </div>
-          </div>
-          </section>
+            <section class="panel">
+              <div class="panel-header">
+                <h2>Deployments</h2>
+                <p class="panel-subtitle">Overview of active deployments from tfgrid-compose.</p>
+              </div>
+              <div id="deployments-list" class="table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>App</th>
+                      <th>Status</th>
+                      <th>IPs</th>
+                      <th>Contract</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="deployments-body"></tbody>
+                </table>
+              </div>
+            </section>
 
-          <section class="panel">
-          <div class="panel-header">
-            <h2>CLI Commands</h2>
-            <p class="panel-subtitle">Run any tfgrid-compose command with full flags and options.</p>
-          </div>
-          <div class="commands-layout">
-            <div id="commands-list" class="commands-list"></div>
-            <div id="command-detail" class="commands-detail"></div>
-          </div>
-          </section>
-        </main>
+            <section class="panel">
+              <div class="panel-header">
+                <h2>Preferences</h2>
+                <p class="panel-subtitle">Global whitelist/blacklist and resource thresholds used by tfgrid-compose.</p>
+              </div>
+              <div id="preferences-panel" class="preferences-panel">
+                <div class="preferences-grid">
+                  <div class="preferences-card" id="preferences-whitelist"></div>
+                  <div class="preferences-card" id="preferences-blacklist"></div>
+                  <div class="preferences-card" id="preferences-thresholds"></div>
+                </div>
+              </div>
+            </section>
+          </main>
       </div>
 
       <div class="terminal-shell">
