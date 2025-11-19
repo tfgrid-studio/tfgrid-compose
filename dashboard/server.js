@@ -312,6 +312,17 @@ app.get('/api/commands', (req, res) => {
   }
 });
 
+// Read-only preferences view (whitelist/blacklist + basic thresholds)
+app.get('/api/preferences', async (req, res) => {
+  try {
+    const prefs = await getPreferences();
+    res.json(prefs);
+  } catch (err) {
+    log('Error in /api/preferences:', err.message || err);
+    res.status(500).json({ error: 'Failed to load preferences' });
+  }
+});
+
 // List registry apps
 app.get('/api/apps', async (req, res) => {
   try {
