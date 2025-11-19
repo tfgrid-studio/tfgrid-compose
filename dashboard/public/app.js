@@ -952,6 +952,40 @@ async function showAddress(deployment) {
     setLogContent(`Failed to get address: ${err.message}`);
   }
 }
+async function runDirectCli() {
+  const input = document.getElementById('direct-cli-input');
+  const button = document.getElementById('direct-cli-run');
+  if (!input || !button) return;
+
+  const line = (input.value || '').trim();
+  if (!line) {
+    showLogPanel('Direct tfgrid-compose', '');
+    setLogContent('Enter a command to run, for example: "up tfgrid-ai-agent".');
+    return;
+  }
+
+  showLogPanel('Direct tfgrid-compose', `tfgrid-compose ${line}`);
+  setLogContent('Starting direct command job...');
+
+  const originalText = button.textContent || 'Run';
+  button.disabled = true;
+  button.textContent = 'Running...';
+
+  try {
+    const res = await fetchJSON('/api/commands/run-direct', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ line }),
+    });
+    const jobId = res.job_id;
+    if (!jobId) throw new Error('Dashboard backend did not return job_id');
+    await pollJob(jobId, button, originalText);
+  } catch (err) {
+    setLogContent(`Failed to start direct command: ${err.message}`);
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
 
 async function pollJob(jobId, button, resetLabel) {
   let done = false;
@@ -1041,6 +1075,22 @@ window.addEventListener('DOMContentLoaded', () => {
       if (e.key === 'Enter') {
         e.preventDefault();
         sendShellInput();
+      }
+    });
+  }
+
+  const directInput = document.getElementById('direct-cli-input');
+  const directRun = document.getElementById('direct-cli-run');
+  if (directRun) {
+    directRun.addEventListener('click', () => {
+      runDirectCli();
+    });
+  }
+  if (directInput) {
+    directInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        runDirectCli();
       }
     });
   }

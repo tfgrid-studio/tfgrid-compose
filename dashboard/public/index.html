@@ -50,6 +50,19 @@
                 </div>
                 <button id="commands-context-clear" class="btn btn-ghost btn-small hidden">Clear</button>
               </div>
+              <div class="direct-cli">
+                <div class="direct-cli-main">
+                  <div class="direct-cli-label-row">
+                    <span class="direct-cli-title">Direct tfgrid-compose</span>
+                    <span class="direct-cli-subtitle">Run any command without typing the prefix.</span>
+                  </div>
+                  <div class="direct-cli-input-row">
+                    <span class="direct-cli-prefix">tfgrid-compose</span>
+                    <input id="direct-cli-input" type="text" class="direct-cli-input" placeholder="up tfgrid-ai-agent, status, exec tfgrid-ai-agent uname -a" />
+                    <button id="direct-cli-run" class="btn btn-primary btn-small">Run</button>
+                  </div>
+                </div>
+              </div>
               <div class="commands-layout">
                 <div id="commands-list" class="commands-list"></div>
               </div>

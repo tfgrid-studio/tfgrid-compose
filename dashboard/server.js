@@ -246,7 +246,7 @@ function buildCliArgsFromCommand(def, payload) {
   return cliArgs;
 }
 
-function spawnJob(command, args) {
+function spawnJob(command, args, displayCommand) {
   const { spawn } = require('child_process');
 
   const jobId = randomUUID();
@@ -258,7 +258,7 @@ function spawnJob(command, args) {
 
   const job = {
     id: jobId,
-    command: [command, ...args].join(' '),
+    command: displayCommand || [command, ...args].join(' '),
     status: 'running',
     created_at: new Date().toISOString(),
     completed_at: null,
@@ -429,6 +429,32 @@ app.post('/api/commands/run', (req, res) => {
   } catch (err) {
     log('Error in /api/commands/run:', err.message || err);
     res.status(500).json({ error: 'Failed to start command', details: err.message || String(err) });
+  }
+});
+
+// Direct tfgrid-compose runner (free-form line, without requiring commands schema)
+app.post('/api/commands/run-direct', (req, res) => {
+  try {
+    const body = req.body || {};
+    const line = (body.line || '').trim();
+
+    if (!line) {
+      return res.status(400).json({ error: 'line is required' });
+    }
+
+    // Use /bin/sh -lc to honor quoting/spacing while still streaming via spawnJob
+    const fullCommand = `${TFGRID_COMPOSE_BIN} ${line}`;
+    const job = spawnJob('/bin/sh', ['-lc', fullCommand], fullCommand);
+    log('Started direct command job', job.id, '->', job.command);
+
+    res.status(202).json({
+      job_id: job.id,
+      status: job.status,
+      command: job.command,
+    });
+  } catch (err) {
+    log('Error in /api/commands/run-direct:', err.message || err);
+    res.status(500).json({ error: 'Failed to start direct command', details: err.message || String(err) });
   }
 });
 
