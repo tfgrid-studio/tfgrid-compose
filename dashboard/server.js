@@ -121,6 +121,79 @@ async function getDeployments() {
   });
 }
 
+function parseContractsList(raw) {
+  const lines = (raw || '').split(/\r?\n/);
+  const nodeContracts = [];
+  const nameContracts = [];
+  let state = 'none';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (trimmed.startsWith('Node contracts:')) {
+      state = 'node-header';
+      continue;
+    }
+    if (trimmed.startsWith('Name contracts:')) {
+      state = 'name-header';
+      continue;
+    }
+
+    if (state === 'node-header') {
+      state = 'node';
+      continue;
+    }
+    if (state === 'name-header') {
+      state = 'name';
+      continue;
+    }
+
+    if (state === 'node') {
+      if (trimmed.startsWith('ID ')) continue;
+      const parts = trimmed.split(/\s+/);
+      if (parts.length < 2) continue;
+      const id = parts[0];
+      const nodeId = parts[1];
+      if (!id || id === 'ID') continue;
+      nodeContracts.push({ id, node_id: nodeId || null, raw: trimmed });
+    } else if (state === 'name') {
+      if (trimmed.startsWith('ID ')) continue;
+      const parts = trimmed.split(/\s+/);
+      if (!parts.length) continue;
+      const id = parts[0];
+      if (!id || id === 'ID') continue;
+      const name = parts.slice(1).join(' ') || null;
+      nameContracts.push({ id, name });
+    }
+  }
+
+  return { nodeContracts, nameContracts };
+}
+
+async function getContracts() {
+  let stdout = '';
+  try {
+    const result = await execAsync(`${TFGRID_COMPOSE_BIN} contracts list`, {
+      cwd: HOME_DIR || process.cwd(),
+    });
+    stdout = result.stdout || '';
+  } catch (err) {
+    stdout = (err && err.stdout) || '';
+    log('Error running contracts list:', err.message || err);
+  }
+
+  if (!stdout) {
+    return { node_contracts: [], name_contracts: [] };
+  }
+
+  const parsed = parseContractsList(stdout);
+  return {
+    node_contracts: parsed.nodeContracts,
+    name_contracts: parsed.nameContracts,
+  };
+}
+
 const PREFERENCES_PATH = path.join(CONFIG_DIR, 'preferences.yaml');
 
 async function ensurePreferencesFile() {
@@ -397,6 +470,17 @@ app.get('/api/apps', async (req, res) => {
   } catch (err) {
     log('Error in /api/apps:', err);
     res.status(500).json({ error: 'Failed to load apps' });
+  }
+});
+
+// List active contracts for selection in dashboard
+app.get('/api/contracts', async (req, res) => {
+  try {
+    const data = await getContracts();
+    res.json(data);
+  } catch (err) {
+    log('Error in /api/contracts:', err.message || err);
+    res.status(500).json({ error: 'Failed to load contracts' });
   }
 });
 

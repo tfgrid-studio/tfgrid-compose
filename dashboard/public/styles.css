@@ -659,6 +659,78 @@ textarea {
   color: #6b7280;
 }
 
+.contracts-help-text {
+  margin-top: 4px;
+  font-size: 14px;
+  color: #9ca3af;
+}
+
+.contracts-picker-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.contracts-loading,
+.contracts-empty,
+.contracts-error {
+  font-size: 14px;
+  color: #9ca3af;
+}
+
+.contracts-error {
+  color: #fca5a5;
+}
+
+.contracts-group {
+  border-radius: 8px;
+  border: 1px solid rgba(31, 41, 55, 0.9);
+  background: rgba(15, 23, 42, 0.95);
+  padding: 6px 8px 8px;
+}
+
+.contracts-group-title {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: #9ca3af;
+  margin-bottom: 4px;
+}
+
+.contracts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.contracts-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 13px;
+  color: #e5e7eb;
+}
+
+.contracts-item input[type="checkbox"] {
+  margin-top: 2px;
+}
+
+.contracts-label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.contracts-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.contracts-meta {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
 .commands-context-main {
   display: flex;
   flex-direction: column;

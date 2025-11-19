@@ -375,6 +375,13 @@ function renderCommandDetail(cmd, initial) {
       <p class="command-warning">
         Using <code>--all</code> will delete all contracts associated with your mnemonic. This cannot be undone.
       </p>
+      <div class="form-section" id="contracts-picker-section">
+        <h4>Available Contracts</h4>
+        <p class="contracts-help-text">Select contracts to delete. Selected IDs are added to the Contract ID(s) field above.</p>
+        <div class="contracts-picker-body">
+          <div class="contracts-loading">Loading contracts...</div>
+        </div>
+      </div>
     `;
   }
 
@@ -477,6 +484,94 @@ function renderCommandDetail(cmd, initial) {
         };
         allCheckbox.addEventListener('change', syncWarning);
         syncWarning();
+      }
+
+      const contractsSection = document.getElementById('contracts-picker-section');
+      const idsInput = form.querySelector('input[name="arg-ids"]');
+      if (contractsSection && idsInput) {
+        const pickerBody = contractsSection.querySelector('.contracts-picker-body');
+        if (pickerBody) {
+          (async () => {
+            try {
+              const data = await fetchJSON('/api/contracts');
+              const nodeContracts = data.node_contracts || [];
+              const nameContracts = data.name_contracts || [];
+
+              if (!nodeContracts.length && !nameContracts.length) {
+                pickerBody.innerHTML = '<div class="contracts-empty">No active contracts found.</div>';
+                return;
+              }
+
+              let htmlPicker = '';
+
+              if (nodeContracts.length) {
+                htmlPicker += '<div class="contracts-group"><h5 class="contracts-group-title">Node contracts</h5><div class="contracts-list">';
+                nodeContracts.forEach((c) => {
+                  const id = c.id;
+                  const label = c.raw || `ID ${id}`;
+                  htmlPicker += `
+                    <label class="contracts-item">
+                      <input type="checkbox" class="contracts-checkbox" data-contract-id="${id}" />
+                      <span class="contracts-label">
+                        <span class="contracts-id">#${id}</span>
+                        <span class="contracts-meta">${escapeHtml(label)}</span>
+                      </span>
+                    </label>
+                  `;
+                });
+                htmlPicker += '</div></div>';
+              }
+
+              if (nameContracts.length) {
+                htmlPicker += '<div class="contracts-group"><h5 class="contracts-group-title">Name contracts</h5><div class="contracts-list">';
+                nameContracts.forEach((c) => {
+                  const id = c.id;
+                  const name = c.name || '';
+                  const label = name ? `${id} ${name}` : id;
+                  htmlPicker += `
+                    <label class="contracts-item">
+                      <input type="checkbox" class="contracts-checkbox" data-contract-id="${id}" />
+                      <span class="contracts-label">
+                        <span class="contracts-id">#${id}</span>
+                        <span class="contracts-meta">${escapeHtml(label)}</span>
+                      </span>
+                    </label>
+                  `;
+                });
+                htmlPicker += '</div></div>';
+              }
+
+              pickerBody.innerHTML = htmlPicker;
+
+              const checkboxes = pickerBody.querySelectorAll('.contracts-checkbox');
+
+              const syncIdsFromCheckboxes = () => {
+                const existing = (idsInput.value || '').trim();
+                const tokens = existing ? existing.split(/[\s,]+/).filter(Boolean) : [];
+                const set = new Set(tokens);
+
+                checkboxes.forEach((cb) => {
+                  const cid = cb.getAttribute('data-contract-id');
+                  if (!cid) return;
+                  if (cb.checked) {
+                    set.add(cid);
+                  } else {
+                    set.delete(cid);
+                  }
+                });
+
+                idsInput.value = Array.from(set).join(' ');
+                updatePreview();
+              };
+
+              checkboxes.forEach((cb) => {
+                cb.addEventListener('change', syncIdsFromCheckboxes);
+              });
+            } catch (err) {
+              pickerBody.innerHTML = `<div class="contracts-error">Failed to load contracts: ${escapeHtml(err.message || String(err))}</div>`;
+            }
+          })();
+        }
       }
     }
     form.addEventListener('submit', async (e) => {
