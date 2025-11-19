@@ -4157,16 +4157,26 @@ EOF
                 exit 1
                 ;;
             delete)
-                # Delete single contract using simple wrapper
-                CONTRACT_ID="$1"
-                
-                if [ -z "$CONTRACT_ID" ]; then
-                    echo ""
-                    echo "Usage: tfgrid-compose contracts delete <contract-id>"
-                    exit 1
+                # Delete contracts using simple wrapper
+                # Supports:
+                #   tfgrid-compose contracts delete <contract-id>
+                #   tfgrid-compose contracts delete --all
+                if [ "${1:-}" = "--all" ]; then
+                    # Alias for cancel-all
+                    shift || true
+                    contracts_cancel_all
+                else
+                    CONTRACT_ID="$1"
+
+                    if [ -z "$CONTRACT_ID" ]; then
+                        echo ""
+                        echo "Usage: tfgrid-compose contracts delete <contract-id>"
+                        echo "       tfgrid-compose contracts delete --all"
+                        exit 1
+                    fi
+
+                    contracts_delete "$CONTRACT_ID"
                 fi
-                
-                contracts_delete "$CONTRACT_ID"
                 ;;
             cancel-all)
                 # Cancel all contracts using simple wrapper
