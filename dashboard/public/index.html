@@ -7,21 +7,23 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="split-shell">
-      <div class="app-shell">
-        <div class="column-label column-label-input">Input</div>
-        <header class="app-header">
-          <div class="brand">
-            <span class="brand-badge">TFGrid Studio</span>
-            <h1 class="brand-title">Local Dashboard</h1>
-            <p class="brand-subtitle">Visual control panel for tfgrid-compose deployments</p>
-          </div>
-          <div class="header-actions">
-            <button id="refresh-all" class="btn btn-ghost">Refresh</button>
-          </div>
-        </header>
+    <div class="page-root">
+      <header class="global-header">
+        <div class="global-brand">
+          <span class="brand-badge">TFGrid Studio</span>
+          <h1 class="global-title">TFGrid Dashboard</h1>
+          <p class="global-subtitle">Visual control panel for tfgrid-compose deployments</p>
+        </div>
+        <div class="header-actions">
+          <button id="refresh-all" class="btn btn-ghost">Refresh</button>
+        </div>
+      </header>
 
-        <main class="app-main">
+      <div class="split-shell">
+        <div class="app-shell">
+          <div class="column-label column-label-input">Input</div>
+
+          <main class="app-main">
           <section class="panel">
           <div class="panel-header">
             <h2>Apps from Registry</h2>
@@ -93,7 +95,32 @@
         </section>
       </div>
     </div>
-
+    <footer class="app-footer">
+      <div class="footer-inner">
+        <div class="footer-heading">
+          <h2>TFGrid Studio Ecosystem</h2>
+          <p>Integrated tools and resources</p>
+        </div>
+        <div class="footer-grid">
+          <div class="footer-card">
+            <h3>TFGrid Studio</h3>
+            <a href="https://tfgrid.studio" target="_blank" rel="noreferrer">tfgrid.studio</a>
+          </div>
+          <div class="footer-card">
+            <h3>Install</h3>
+            <a href="https://install.tfgrid.studio" target="_blank" rel="noreferrer">install.tfgrid.studio</a>
+          </div>
+          <div class="footer-card">
+            <h3>Registry</h3>
+            <a href="https://registry.tfgrid.studio" target="_blank" rel="noreferrer">registry.tfgrid.studio</a>
+          </div>
+          <div class="footer-card">
+            <h3>You are here</h3>
+            <a href="https://docs.tfgrid.studio" target="_blank" rel="noreferrer">docs.tfgrid.studio</a>
+          </div>
+        </div>
+      </div>
+    </footer>
     <script src="/app.js"></script>
   </body>
 </html>

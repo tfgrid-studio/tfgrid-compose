@@ -13,13 +13,20 @@ body {
   line-height: 1.5;
 }
 
+.page-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 .split-shell {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 24px 16px 48px;
+  padding: 16px 16px 32px;
   display: flex;
   gap: 20px;
   align-items: stretch;
+  flex: 1;
 }
 
 @media (max-width: 1100px) {
@@ -66,13 +73,31 @@ body {
 .column-label-output::before {
   background: linear-gradient(to right, #f97316, #ec4899);
 }
-
-.app-header {
+.global-header {
+  max-width: 1400px;
+  margin: 24px auto 8px;
+  padding: 0 16px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 24px;
+  align-items: flex-end;
+  gap: 24px;
+}
+
+.global-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.global-title {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.global-subtitle {
+  font-size: 14px;
+  color: #9ca3af;
 }
 
 .brand-badge {
@@ -422,3 +447,50 @@ body {
 .ansi-fg-bright-5 { color: #f9a8d4; }
 .ansi-fg-bright-6 { color: #bae6fd; }
 .ansi-fg-bright-7 { color: #f9fafb; }
+
+.app-footer {
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+  padding: 12px 16px 18px;
+  background: radial-gradient(circle at bottom, rgba(15, 23, 42, 0.9), rgba(2, 6, 23, 0.95));
+}
+
+.footer-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footer-heading h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.footer-heading p {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.footer-card h3 {
+  font-size: 12px;
+  font-weight: 500;
+  color: #e5e7eb;
+}
+
+.footer-card a {
+  font-size: 12px;
+  color: #38bdf8;
+  text-decoration: none;
+}
+
+.footer-card a:hover {
+  text-decoration: underline;
+}
