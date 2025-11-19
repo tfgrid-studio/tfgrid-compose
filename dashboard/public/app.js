@@ -24,15 +24,23 @@ function formatIPs(vm_ip, mycelium_ip) {
 
 function showLogPanel(title, subtitle) {
   const panel = document.getElementById('log-panel');
+  const placeholder = document.getElementById('output-placeholder');
   const titleEl = document.getElementById('log-title');
   const subtitleEl = document.getElementById('log-subtitle');
   titleEl.textContent = title;
   subtitleEl.textContent = subtitle || '';
   panel.classList.remove('hidden');
+  if (placeholder) placeholder.classList.add('hidden');
 }
 
 function hideLogPanel() {
-  document.getElementById('log-panel').classList.add('hidden');
+  const panel = document.getElementById('log-panel');
+  const shellPanel = document.getElementById('shell-panel');
+  const placeholder = document.getElementById('output-placeholder');
+  if (panel) panel.classList.add('hidden');
+  if (placeholder && (!shellPanel || shellPanel.classList.contains('hidden'))) {
+    placeholder.classList.remove('hidden');
+  }
 }
 
 function escapeHtml(str) {
@@ -509,6 +517,7 @@ async function openShellForDeployment(deployment) {
     shellBuffer = '';
 
     const panel = document.getElementById('shell-panel');
+    const placeholder = document.getElementById('output-placeholder');
     const titleEl = document.getElementById('shell-title');
     const subtitleEl = document.getElementById('shell-subtitle');
     const contentEl = document.getElementById('shell-content');
@@ -524,6 +533,9 @@ async function openShellForDeployment(deployment) {
     }
     if (panel) {
       panel.classList.remove('hidden');
+    }
+    if (placeholder) {
+      placeholder.classList.add('hidden');
     }
 
     const es = new EventSource(`/api/shells/${sessionId}/stream`);
@@ -571,6 +583,8 @@ async function sendShellInput() {
 
 async function closeShellPanel() {
   const panel = document.getElementById('shell-panel');
+  const logPanel = document.getElementById('log-panel');
+  const placeholder = document.getElementById('output-placeholder');
   if (panel) panel.classList.add('hidden');
 
   if (shellEventSource) {
@@ -587,6 +601,10 @@ async function closeShellPanel() {
   }
 
   activeShellSession = null;
+
+  if (placeholder && (!logPanel || logPanel.classList.contains('hidden'))) {
+    placeholder.classList.remove('hidden');
+  }
 }
 
 function openCommandWithInitial(commandId, initial) {
