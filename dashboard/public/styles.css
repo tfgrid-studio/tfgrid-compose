@@ -659,6 +659,19 @@ body {
   margin-top: 6px;
 }
 
+.footer-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.footer-card-icon svg {
+  width: 18px;
+  height: 18px;
+  color: #38bdf8;
+}
+
 .footer-card h3 {
   font-size: 12px;
   font-weight: 500;
@@ -673,4 +686,10 @@ body {
 
 .footer-card a:hover {
   text-decoration: underline;
+}
+
+.footer-card-description {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #9ca3af;
 }
