@@ -1,0 +1,10 @@
+<!-- TFGrid Studio Favicon - Lightning bolt icon -->
+<svg width="128" height="128" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="lightning-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="url(#lightning-gradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
