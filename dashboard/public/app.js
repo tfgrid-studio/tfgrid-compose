@@ -590,6 +590,7 @@ async function pollJob(jobId, button, resetLabel) {
         document.getElementById('log-subtitle').textContent = `Status: ${job.status}${job.deployment_id ? ` • Deployment: ${job.deployment_id}` : ''}`;
         // Refresh deployments list at the end
         loadDeployments();
+        loadPreferences();
       }
     } catch (err) {
       setLogContent(`Failed to fetch job: ${err.message}`);
