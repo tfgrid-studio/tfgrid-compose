@@ -266,29 +266,30 @@ function renderCommandDetail(cmd, initial) {
   }
 }
 
-function openAdvancedDeploy(appName) {
+function openCommandWithInitial(commandId, initial) {
   if (!commandsCache || !commandsCache.length) {
     showLogPanel('Commands not loaded', '');
     setLogContent('Commands schema is still loading. Try again in a moment.');
     return;
   }
 
-  const cmd = commandsCache.find((c) => c.id === 'up' || c.command === 'up');
+  const cmd = commandsCache.find((c) => c.id === commandId || c.command === commandId);
   if (!cmd) {
-    showLogPanel('Deploy command not available', '');
-    setLogContent('The "up" command is not available in the current commands schema.');
+    showLogPanel('Command not available', '');
+    setLogContent(`The command "${commandId}" is not available in the current commands schema.`);
     return;
   }
 
-  renderCommandDetail(cmd, {
-    args: { app: appName },
-    flags: {},
-  });
+  renderCommandDetail(cmd, initial || { args: {}, flags: {} });
 
   const commandsPanel = document.querySelector('.commands-layout');
   if (commandsPanel && typeof commandsPanel.scrollIntoView === 'function') {
     commandsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+}
+
+function openAdvancedDeploy(appName) {
+  openCommandWithInitial('up', { args: { app: appName }, flags: {} });
 }
 
 async function loadCommands() {
@@ -535,9 +536,11 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('refresh-all').addEventListener('click', () => {
     loadApps();
     loadDeployments();
+    loadPreferences();
   });
 
   loadApps();
   loadDeployments();
   loadCommands();
+  loadPreferences();
 });

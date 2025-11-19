@@ -119,6 +119,81 @@ async function getDeployments() {
   });
 }
 
+const PREFERENCES_PATH = path.join(CONFIG_DIR, 'preferences.yaml');
+
+async function ensurePreferencesFile() {
+  if (fs.existsSync(PREFERENCES_PATH)) return;
+  try {
+    // Trigger CLI to create preferences file with defaults
+    await execAsync(`${TFGRID_COMPOSE_BIN} preferences --status`, {
+      cwd: HOME_DIR || process.cwd(),
+    });
+  } catch (err) {
+    log('Warning: failed to auto-create preferences file via CLI:', err.message || err);
+  }
+}
+
+async function getPreferences() {
+  await ensurePreferencesFile();
+
+  if (!fs.existsSync(PREFERENCES_PATH)) {
+    return {
+      whitelist: { nodes: [], farms: [] },
+      blacklist: { nodes: [], farms: [] },
+      preferences: { max_cpu_usage: null, max_disk_usage: null, min_uptime_days: null },
+      metadata: { created: null, last_updated: null },
+    };
+  }
+
+  const content = readFileIfExists(PREFERENCES_PATH);
+  if (!content) {
+    return {
+      whitelist: { nodes: [], farms: [] },
+      blacklist: { nodes: [], farms: [] },
+      preferences: { max_cpu_usage: null, max_disk_usage: null, min_uptime_days: null },
+      metadata: { created: null, last_updated: null },
+    };
+  }
+
+  let doc;
+  try {
+    doc = YAML.parse(content) || {};
+  } catch (err) {
+    log('Failed to parse preferences.yaml:', err.message);
+    return {
+      whitelist: { nodes: [], farms: [] },
+      blacklist: { nodes: [], farms: [] },
+      preferences: { max_cpu_usage: null, max_disk_usage: null, min_uptime_days: null },
+      metadata: { created: null, last_updated: null },
+    };
+  }
+
+  const wl = doc.whitelist || {};
+  const bl = doc.blacklist || {};
+  const prefs = doc.preferences || {};
+  const meta = doc.metadata || {};
+
+  return {
+    whitelist: {
+      nodes: Array.isArray(wl.nodes) ? wl.nodes : [],
+      farms: Array.isArray(wl.farms) ? wl.farms : [],
+    },
+    blacklist: {
+      nodes: Array.isArray(bl.nodes) ? bl.nodes : [],
+      farms: Array.isArray(bl.farms) ? bl.farms : [],
+    },
+    preferences: {
+      max_cpu_usage: prefs.max_cpu_usage ?? null,
+      max_disk_usage: prefs.max_disk_usage ?? null,
+      min_uptime_days: prefs.min_uptime_days ?? null,
+    },
+    metadata: {
+      created: meta.created ?? null,
+      last_updated: meta.last_updated ?? null,
+    },
+  };
+}
+
 function loadCommandsSchema() {
   if (commandsSchemaCache) return commandsSchemaCache;
 
