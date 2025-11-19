@@ -35,8 +35,73 @@ function hideLogPanel() {
   document.getElementById('log-panel').classList.add('hidden');
 }
 
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function ansiToHtml(str) {
+  const ESC = '\u001b[';
+  let result = '';
+  let i = 0;
+  let openSpan = false;
+
+  while (i < str.length) {
+    const idx = str.indexOf(ESC, i);
+    if (idx === -1) {
+      result += escapeHtml(str.slice(i));
+      break;
+    }
+
+    result += escapeHtml(str.slice(i, idx));
+    const end = str.indexOf('m', idx);
+    if (end === -1) {
+      result += escapeHtml(str.slice(idx));
+      break;
+    }
+
+    const codeStr = str.slice(idx + ESC.length, end);
+    const codes = codeStr
+      .split(';')
+      .map((c) => parseInt(c, 10))
+      .filter((n) => !Number.isNaN(n));
+
+    if (openSpan) {
+      result += '</span>';
+      openSpan = false;
+    }
+
+    if (codes.length === 0 || codes.includes(0)) {
+      // Reset, no styles
+    } else {
+      const classes = [];
+      codes.forEach((c) => {
+        if (c === 1) classes.push('ansi-bold');
+        if (c >= 30 && c <= 37) classes.push(`ansi-fg-${c - 30}`);
+        if (c >= 90 && c <= 97) classes.push(`ansi-fg-bright-${c - 90}`);
+      });
+      if (classes.length) {
+        result += `<span class="${classes.join(' ')}">`;
+        openSpan = true;
+      }
+    }
+
+    i = end + 1;
+  }
+
+  if (openSpan) {
+    result += '</span>';
+  }
+
+  return result;
+}
+
 function setLogContent(text) {
-  document.getElementById('log-content').textContent = text;
+  const el = document.getElementById('log-content');
+  if (!el) return;
+  el.innerHTML = ansiToHtml(text || '');
 }
 
 let commandsCache = [];

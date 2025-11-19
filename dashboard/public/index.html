@@ -7,28 +7,29 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="app-shell">
-      <header class="app-header">
-        <div class="brand">
-          <span class="brand-badge">TFGrid Studio</span>
-          <h1 class="brand-title">Local Dashboard</h1>
-          <p class="brand-subtitle">Visual control panel for tfgrid-compose deployments</p>
-        </div>
-        <div class="header-actions">
-          <button id="refresh-all" class="btn btn-ghost">Refresh</button>
-        </div>
-      </header>
+    <div class="split-shell">
+      <div class="app-shell">
+        <header class="app-header">
+          <div class="brand">
+            <span class="brand-badge">TFGrid Studio</span>
+            <h1 class="brand-title">Local Dashboard</h1>
+            <p class="brand-subtitle">Visual control panel for tfgrid-compose deployments</p>
+          </div>
+          <div class="header-actions">
+            <button id="refresh-all" class="btn btn-ghost">Refresh</button>
+          </div>
+        </header>
 
-      <main class="app-main">
-        <section class="panel">
+        <main class="app-main">
+          <section class="panel">
           <div class="panel-header">
             <h2>Apps from Registry</h2>
             <p class="panel-subtitle">Deploy official apps like tfgrid-ai-stack with one click.</p>
           </div>
           <div id="apps-list" class="cards-grid"></div>
-        </section>
+          </section>
 
-        <section class="panel">
+          <section class="panel">
           <div class="panel-header">
             <h2>Deployments</h2>
             <p class="panel-subtitle">Overview of active deployments from tfgrid-compose.</p>
@@ -48,9 +49,9 @@
               <tbody id="deployments-body"></tbody>
             </table>
           </div>
-        </section>
+          </section>
 
-        <section class="panel">
+          <section class="panel">
           <div class="panel-header">
             <h2>Preferences</h2>
             <p class="panel-subtitle">Global whitelist/blacklist and resource thresholds used by tfgrid-compose.</p>
@@ -62,9 +63,9 @@
               <div class="preferences-card" id="preferences-thresholds"></div>
             </div>
           </div>
-        </section>
+          </section>
 
-        <section class="panel">
+          <section class="panel">
           <div class="panel-header">
             <h2>CLI Commands</h2>
             <p class="panel-subtitle">Run any tfgrid-compose command with full flags and options.</p>
@@ -73,19 +74,22 @@
             <div id="commands-list" class="commands-list"></div>
             <div id="command-detail" class="commands-detail"></div>
           </div>
-        </section>
-      </main>
+          </section>
+        </main>
+      </div>
 
-      <section id="log-panel" class="log-panel hidden">
-        <div class="log-header">
-          <div>
-            <h2 id="log-title">Job Output</h2>
-            <p id="log-subtitle" class="log-subtitle"></p>
+      <div class="terminal-shell">
+        <section id="log-panel" class="log-panel hidden">
+          <div class="log-header">
+            <div>
+              <h2 id="log-title">Job Output</h2>
+              <p id="log-subtitle" class="log-subtitle"></p>
+            </div>
+            <button id="log-close" class="btn btn-ghost">Close</button>
           </div>
-          <button id="log-close" class="btn btn-ghost">Close</button>
-        </div>
-        <pre id="log-content" class="log-content"></pre>
-      </section>
+          <pre id="log-content" class="log-content"></pre>
+        </section>
+      </div>
     </div>
 
     <script src="/app.js"></script>
