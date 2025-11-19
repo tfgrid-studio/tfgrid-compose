@@ -135,7 +135,7 @@ function getInitialStateForCommand(cmd) {
 
   // Global presets that do not depend on deployment context
   if (id === 'delete') {
-    initial.args.resource = 'contracts';
+    initial.args.subcommand = 'delete';
   }
 
   if (!deploymentContext) return initial;
