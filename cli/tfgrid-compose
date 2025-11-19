@@ -920,64 +920,6 @@ notify() {
   fi
 }
 
-DASHBOARD_HOME="$HOME/.config/tfgrid-compose/dashboard"
-DASHBOARD_PORT_FILE="$DASHBOARD_HOME/dashboard-port"
-PORT="${TFGRID_DASHBOARD_PORT:-43100}"
-
-if [ -f "$DASHBOARD_PORT_FILE" ]; then
-  P=$(cat "$DASHBOARD_PORT_FILE" 2>/dev/null || true)
-  if [ -n "$P" ]; then
-    PORT="$P"
-  fi
-fi
-
-URL="http://localhost:$PORT"
-
-# Check if dashboard is already running and responding
-is_dashboard_ready() {
-  if command -v curl >/dev/null 2>&1; then
-    curl -s -f -o /dev/null --max-time 1 "$URL" 2>/dev/null
-    return $?
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q -O /dev/null --timeout=1 "$URL" 2>/dev/null
-    return $?
-  else
-    # No curl/wget, assume it's ready after starting
-    return 0
-  fi
-}
-
-# If dashboard is already ready, just open browser
-if is_dashboard_ready; then
-  launch_app_window "$URL"
-  exit 0
-fi
-
-# Dashboard not ready, start it and wait
-notify "TFGrid Studio" "Starting dashboard server..."
-
-# Start dashboard in background
-tfgrid-compose dashboard start >/dev/null 2>&1 || true
-
-# Wait for dashboard to be ready (max 15 seconds)
-MAX_WAIT=15
-WAITED=0
-
-while [ $WAITED -lt $MAX_WAIT ]; do
-  if is_dashboard_ready; then
-    notify "TFGrid Studio" "Dashboard ready! Opening browser..."
-    sleep 0.5  # Brief pause so user sees the notification
-    launch_app_window "$URL"
-    exit 0
-  fi
-  sleep 0.5
-  WAITED=$((WAITED + 1))
-done
-
-# Timeout - dashboard didn't start in time
-notify "TFGrid Studio" "Dashboard failed to start. Check logs with: t dashboard logs" "critical"
-exit 1
-
 launch_app_window() {
   local url="$1"
 
@@ -1024,6 +966,64 @@ launch_app_window() {
     echo "Open $url in your browser"
   fi
 }
+
+# Check if dashboard is already running and responding
+is_dashboard_ready() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -s -f -o /dev/null --max-time 1 "$URL" 2>/dev/null
+    return $?
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -O /dev/null --timeout=1 "$URL" 2>/dev/null
+    return $?
+  else
+    # No curl/wget, assume it's ready after starting
+    return 0
+  fi
+}
+
+DASHBOARD_HOME="$HOME/.config/tfgrid-compose/dashboard"
+DASHBOARD_PORT_FILE="$DASHBOARD_HOME/dashboard-port"
+PORT="${TFGRID_DASHBOARD_PORT:-43100}"
+
+if [ -f "$DASHBOARD_PORT_FILE" ]; then
+  P=$(cat "$DASHBOARD_PORT_FILE" 2>/dev/null || true)
+  if [ -n "$P" ]; then
+    PORT="$P"
+  fi
+fi
+
+URL="http://localhost:$PORT"
+
+# If dashboard is already ready, just open browser
+if is_dashboard_ready; then
+  launch_app_window "$URL"
+  exit 0
+fi
+
+# Dashboard not ready, start it and wait
+notify "TFGrid Studio" "Starting dashboard server..."
+
+# Start dashboard in background
+tfgrid-compose dashboard start >/dev/null 2>&1 || true
+
+# Wait for dashboard to be ready (max 15 seconds)
+MAX_WAIT=15
+WAITED=0
+
+while [ $WAITED -lt $MAX_WAIT ]; do
+  if is_dashboard_ready; then
+    notify "TFGrid Studio" "Dashboard ready! Opening browser..."
+    sleep 0.5  # Brief pause so user sees the notification
+    launch_app_window "$URL"
+    exit 0
+  fi
+  sleep 0.5
+  WAITED=$((WAITED + 1))
+done
+
+# Timeout - dashboard didn't start in time
+notify "TFGrid Studio" "Dashboard failed to start. Check logs with: t dashboard logs" "critical"
+exit 1
 EOF
 
             chmod +x "$LAUNCHER_PATH"
