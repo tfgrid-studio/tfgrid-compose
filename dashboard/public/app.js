@@ -1107,6 +1107,88 @@ async function handleProjectAction(deployment, action, inputEl, button) {
   }
 }
 
+async function loadDeployments() {
+  const tbody = document.getElementById('deployments-body');
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="6">Loading deployments...</td></tr>';
+
+  try {
+    const data = await fetchJSON('/api/deployments');
+    const deployments = data.deployments || [];
+
+    if (!deployments.length) {
+      tbody.innerHTML = '<tr><td colspan="6">No deployments found. Deploy an app to get started.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+
+    deployments.forEach((d) => {
+      const tr = document.createElement('tr');
+      tr.setAttribute('data-deployment-id', d.id);
+      const isAIStack = d.app_name === 'tfgrid-ai-stack';
+
+      if (isAIStack) {
+        tr.innerHTML = `
+          <td><span class="ip-text">${d.id}</span></td>
+          <td>${d.app_name || ''}</td>
+          <td>${statusBadge(d.status)}</td>
+          <td>${formatIPs(d.vm_ip, d.mycelium_ip)}</td>
+          <td>${d.contract_id ? `<span class="ip-text">${d.contract_id}</span>` : ''}</td>
+          <td style="text-align:right">
+            <input type="text" class="project-input" placeholder="project name" />
+            <div class="actions-row">
+              <button class="btn btn-primary" data-action="create" data-id="${d.id}">Create</button>
+              <button class="btn btn-ghost" data-action="run" data-id="${d.id}">Run</button>
+              <button class="btn btn-ghost" data-action="publish" data-id="${d.id}">Publish</button>
+              <button class="btn btn-ghost" data-action="address" data-id="${d.id}">Address</button>
+              <button class="btn btn-ghost" data-action="commands" data-id="${d.id}">Commands</button>
+              <button class="btn btn-ghost" data-action="connect" data-id="${d.id}">Connect</button>
+            </div>
+          </td>
+        `;
+      } else {
+        tr.innerHTML = `
+          <td><span class="ip-text">${d.id}</span></td>
+          <td>${d.app_name || ''}</td>
+          <td>${d.status || ''}</td>
+          <td>${formatIPs(d.vm_ip, d.mycelium_ip)}</td>
+          <td>${d.contract_id ? `<span class="ip-text">${d.contract_id}</span>` : ''}</td>
+          <td style="text-align:right">
+            <div class="actions-row">
+              <button class="btn btn-ghost" data-action="address" data-id="${d.id}">Address</button>
+              <button class="btn btn-ghost" data-action="commands" data-id="${d.id}">Commands</button>
+              <button class="btn btn-ghost" data-action="connect" data-id="${d.id}">Connect</button>
+            </div>
+          </td>
+        `;
+      }
+
+      const buttons = tr.querySelectorAll('button');
+      buttons.forEach((btn) => {
+        const action = btn.getAttribute('data-action') || 'address';
+        if (action === 'address') {
+          btn.addEventListener('click', () => showAddress(d));
+        } else if (action === 'commands') {
+          btn.addEventListener('click', () => setDeploymentContext(d));
+        } else if (action === 'connect') {
+          btn.addEventListener('click', () => openShellForDeployment(d));
+        } else {
+          const input = tr.querySelector('.project-input');
+          btn.addEventListener('click', () => handleProjectAction(d, action, input, btn));
+        }
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    updateDeploymentSelectionUI();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6">Failed to load deployments: ${err.message}</td></tr>`;
+  }
+}
+
 async function runDirectCli() {
   const input = document.getElementById('direct-cli-input');
   const button = document.getElementById('direct-cli-run');
