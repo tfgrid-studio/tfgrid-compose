@@ -714,5 +714,5 @@ function startServer(port, remainingTries) {
   });
 }
 
-const BASE_PORT = parseInt(process.env.TFGRID_DASHBOARD_PORT || '3000', 10);
+const BASE_PORT = parseInt(process.env.TFGRID_DASHBOARD_PORT || '43100', 10);
 startServer(BASE_PORT, 20);

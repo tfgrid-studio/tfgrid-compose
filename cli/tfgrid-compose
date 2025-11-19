@@ -914,7 +914,7 @@ tfgrid-compose dashboard start >/dev/null 2>&1 || true
 
 DASHBOARD_HOME="$HOME/.config/tfgrid-compose/dashboard"
 DASHBOARD_PORT_FILE="$DASHBOARD_HOME/dashboard-port"
-PORT="${TFGRID_DASHBOARD_PORT:-3000}"
+PORT="${TFGRID_DASHBOARD_PORT:-43100}"
 
 if [ -f "$DASHBOARD_PORT_FILE" ]; then
   P=$(cat "$DASHBOARD_PORT_FILE" 2>/dev/null || true)
@@ -1089,7 +1089,7 @@ EOF
             fi
 
             log_info "Starting TFGrid Studio local dashboard in background..."
-            TFGRID_DASHBOARD_PORT="${TFGRID_DASHBOARD_PORT:-3000}" \
+            TFGRID_DASHBOARD_PORT="${TFGRID_DASHBOARD_PORT:-43100}" \
             TFGRID_COMPOSE_BIN="${TFGRID_COMPOSE_BIN:-tfgrid-compose}" \
             TFGRID_COMMANDS_SCHEMA="$DEPLOYER_ROOT/core/commands-schema.json" \
             node "$DASHBOARD_SERVER" >"$DASHBOARD_HOME/dashboard.log" 2>&1 &
@@ -1108,7 +1108,7 @@ EOF
             done
 
             if [ -z "$DASHBOARD_PORT" ]; then
-                DASHBOARD_PORT="${TFGRID_DASHBOARD_PORT:-3000}"
+                DASHBOARD_PORT="${TFGRID_DASHBOARD_PORT:-43100}"
             fi
 
             log_success "Dashboard started at http://localhost:$DASHBOARD_PORT (pid $DASHBOARD_PID)"
@@ -1117,10 +1117,10 @@ EOF
 
         log_info "Starting TFGrid Studio local dashboard..."
         echo ""
-        echo "Dashboard base URL: http://localhost:${TFGRID_DASHBOARD_PORT:-3000}"
+        echo "Dashboard base URL: http://localhost:${TFGRID_DASHBOARD_PORT:-43100}"
         echo ""
 
-        TFGRID_DASHBOARD_PORT="${TFGRID_DASHBOARD_PORT:-3000}" \
+        TFGRID_DASHBOARD_PORT="${TFGRID_DASHBOARD_PORT:-43100}" \
         TFGRID_COMPOSE_BIN="${TFGRID_COMPOSE_BIN:-tfgrid-compose}" \
         TFGRID_COMMANDS_SCHEMA="$DEPLOYER_ROOT/core/commands-schema.json" \
         node "$DASHBOARD_SERVER"
