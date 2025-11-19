@@ -646,9 +646,6 @@ async function loadCommands() {
     const commands = (data && data.commands) || [];
     commandsCache = commands;
     renderCommandList(commands);
-    if (commands.length > 0) {
-      renderCommandDetail(commands[0]);
-    }
   } catch (err) {
     listContainer.innerHTML = `<div class="card"><div class="card-body">Failed to load commands: ${err.message}</div></div>`;
   }
