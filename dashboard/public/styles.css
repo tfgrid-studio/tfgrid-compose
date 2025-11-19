@@ -62,6 +62,27 @@ textarea {
   gap: 12px;
 }
 
+#command-detail {
+  flex: 0 0 auto;
+}
+
+#command-detail .card {
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+}
+
+.command-warning {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #f97316;
+  opacity: 0.9;
+}
+
+.command-warning.active {
+  color: #f87171;
+  font-weight: 500;
+}
+
 .output-placeholder {
   flex: 1;
   min-height: 0;

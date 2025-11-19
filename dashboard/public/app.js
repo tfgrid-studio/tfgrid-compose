@@ -318,6 +318,8 @@ function renderCommandDetail(cmd, initial) {
   const args = cmd.args || [];
   const flags = cmd.flags || [];
 
+  const isDeleteCommand = cmd.id === 'delete' || cmd.command === 'contracts';
+
   const initialArgs = (initial && initial.args) || {};
   const initialFlags = (initial && initial.flags) || {};
 
@@ -360,6 +362,14 @@ function renderCommandDetail(cmd, initial) {
       `;
     });
     html += '</div>';
+  }
+
+  if (isDeleteCommand) {
+    html += `
+      <p class="command-warning">
+        Using <code>--all</code> will delete all contracts associated with your mnemonic. This cannot be undone.
+      </p>
+    `;
   }
 
   if (flags.length) {
@@ -429,6 +439,23 @@ function renderCommandDetail(cmd, initial) {
     });
 
     form.addEventListener('input', updatePreview);
+
+    // Highlight dangerous delete-all usage when applicable
+    if (isDeleteCommand) {
+      const allCheckbox = form.querySelector('input[name="flag-all"]');
+      const warningEl = form.querySelector('.command-warning');
+      if (allCheckbox && warningEl) {
+        const syncWarning = () => {
+          if (allCheckbox.checked) {
+            warningEl.classList.add('active');
+          } else {
+            warningEl.classList.remove('active');
+          }
+        };
+        allCheckbox.addEventListener('change', syncWarning);
+        syncWarning();
+      }
+    }
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
 
