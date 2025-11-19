@@ -2637,6 +2637,29 @@ EOF
                 echo "  → Latest:  $LATEST_COMMIT"
                 echo ""
 
+                # Check if dashboard is currently running so we can restart it after update
+                DASHBOARD_WAS_RUNNING=false
+                DASHBOARD_HOME="$HOME/.config/tfgrid-compose/dashboard"
+                DASHBOARD_PID_FILE="$DASHBOARD_HOME/dashboard.pid"
+
+                if [ -f "$DASHBOARD_PID_FILE" ]; then
+                    DASHBOARD_PID=$(cat "$DASHBOARD_PID_FILE" 2>/dev/null || true)
+                    if [ -n "$DASHBOARD_PID" ] && ps -p "$DASHBOARD_PID" >/dev/null 2>&1; then
+                        DASHBOARD_WAS_RUNNING=true
+                        log_info "Stopping running dashboard before update (pid $DASHBOARD_PID)..."
+                        kill "$DASHBOARD_PID" 2>/dev/null || true
+                        for i in $(seq 1 50); do
+                            if ! ps -p "$DASHBOARD_PID" >/dev/null 2>&1; then
+                                break
+                            fi
+                            sleep 0.1
+                        done
+                        rm -f "$DASHBOARD_PID_FILE"
+                    else
+                        rm -f "$DASHBOARD_PID_FILE"
+                    fi
+                fi
+
                 # Create temp directory
                 TEMP_DIR=$(mktemp -d)
                 trap "rm -rf '$TEMP_DIR'" EXIT
@@ -2663,6 +2686,15 @@ EOF
                 echo ""
                 log_success "✅ Successfully updated to latest version!"
                 echo ""
+                # Restart dashboard if it was running before the update
+                if [ "$DASHBOARD_WAS_RUNNING" = true ]; then
+                    log_info "Restarting TFGrid Studio dashboard with updated version..."
+                    if command -v tfgrid-compose >/dev/null 2>&1; then
+                        tfgrid-compose dashboard start >/dev/null 2>&1 || true
+                    fi
+                    echo ""
+                fi
+
                 echo "🔍 Detection Method: Dynamic Git commit detection"
                 echo "🧪 Test with: tfgrid-compose --version"
                 echo ""
