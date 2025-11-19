@@ -36,7 +36,7 @@ body {
 }
 
 .app-shell {
-  flex: 1.7;
+  flex: 2;
   display: flex;
   flex-direction: column;
 }
@@ -437,7 +437,7 @@ body {
 
 .commands-layout {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
   gap: 16px;
   margin-top: 14px;
 }
