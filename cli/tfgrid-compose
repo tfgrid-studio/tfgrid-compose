@@ -909,8 +909,16 @@ case "$COMMAND" in
 #!/usr/bin/env bash
 set -e
 
-# Ensure dashboard is running in background
-tfgrid-compose dashboard start >/dev/null 2>&1 || true
+# Show notification helper
+notify() {
+  local title="$1"
+  local message="$2"
+  local urgency="${3:-normal}"
+  
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -u "$urgency" "$title" "$message" 2>/dev/null || true
+  fi
+}
 
 DASHBOARD_HOME="$HOME/.config/tfgrid-compose/dashboard"
 DASHBOARD_PORT_FILE="$DASHBOARD_HOME/dashboard-port"
@@ -924,6 +932,51 @@ if [ -f "$DASHBOARD_PORT_FILE" ]; then
 fi
 
 URL="http://localhost:$PORT"
+
+# Check if dashboard is already running and responding
+is_dashboard_ready() {
+  if command -v curl >/dev/null 2>&1; then
+    curl -s -f -o /dev/null --max-time 1 "$URL" 2>/dev/null
+    return $?
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q -O /dev/null --timeout=1 "$URL" 2>/dev/null
+    return $?
+  else
+    # No curl/wget, assume it's ready after starting
+    return 0
+  fi
+}
+
+# If dashboard is already ready, just open browser
+if is_dashboard_ready; then
+  launch_app_window "$URL"
+  exit 0
+fi
+
+# Dashboard not ready, start it and wait
+notify "TFGrid Studio" "Starting dashboard server..."
+
+# Start dashboard in background
+tfgrid-compose dashboard start >/dev/null 2>&1 || true
+
+# Wait for dashboard to be ready (max 15 seconds)
+MAX_WAIT=15
+WAITED=0
+
+while [ $WAITED -lt $MAX_WAIT ]; do
+  if is_dashboard_ready; then
+    notify "TFGrid Studio" "Dashboard ready! Opening browser..."
+    sleep 0.5  # Brief pause so user sees the notification
+    launch_app_window "$URL"
+    exit 0
+  fi
+  sleep 0.5
+  WAITED=$((WAITED + 1))
+done
+
+# Timeout - dashboard didn't start in time
+notify "TFGrid Studio" "Dashboard failed to start. Check logs with: t dashboard logs" "critical"
+exit 1
 
 launch_app_window() {
   local url="$1"
@@ -971,8 +1024,6 @@ launch_app_window() {
     echo "Open $url in your browser"
   fi
 }
-
-launch_app_window "$URL"
 EOF
 
             chmod +x "$LAUNCHER_PATH"
