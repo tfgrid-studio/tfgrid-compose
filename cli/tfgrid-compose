@@ -817,6 +817,26 @@ case "$COMMAND" in
         DASHBOARD_PORT_FILE="$DASHBOARD_HOME/dashboard-port"
         DASHBOARD_ACTION="$1"
 
+        # If no explicit action is provided and a background dashboard is already running,
+        # report its status instead of starting another instance.
+        if [ -z "$DASHBOARD_ACTION" ] && [ -f "$DASHBOARD_PID_FILE" ]; then
+            DASHBOARD_PID=$(cat "$DASHBOARD_PID_FILE" 2>/dev/null || true)
+            if [ -n "$DASHBOARD_PID" ] && ps -p "$DASHBOARD_PID" >/dev/null 2>&1; then
+                DASHBOARD_PORT=""
+                if [ -f "$DASHBOARD_PORT_FILE" ]; then
+                    DASHBOARD_PORT=$(cat "$DASHBOARD_PORT_FILE" 2>/dev/null || true)
+                fi
+                if [ -n "$DASHBOARD_PORT" ]; then
+                    log_info "Dashboard already running at http://localhost:$DASHBOARD_PORT (pid $DASHBOARD_PID)"
+                else
+                    log_info "Dashboard already running (pid $DASHBOARD_PID)"
+                fi
+                exit 0
+            else
+                rm -f "$DASHBOARD_PID_FILE"
+            fi
+        fi
+
         if [ "$DASHBOARD_ACTION" = "stop" ]; then
             if [ -f "$DASHBOARD_PID_FILE" ]; then
                 DASHBOARD_PID=$(cat "$DASHBOARD_PID_FILE" 2>/dev/null || true)
