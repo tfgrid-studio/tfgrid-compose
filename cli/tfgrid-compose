@@ -875,20 +875,28 @@ case "$COMMAND" in
             exit $?
         fi
 
-        # Bootstrap dashboard code into config directory if not present
-        if [ ! -f "$DASHBOARD_SERVER" ]; then
-            TEMPLATE_DIR="$DEPLOYER_ROOT/dashboard"
+        # Bootstrap or refresh dashboard code into config directory from installed template
+        TEMPLATE_DIR="$DEPLOYER_ROOT/dashboard"
 
-            if [ -d "$TEMPLATE_DIR" ]; then
-                mkdir -p "$(dirname "$DASHBOARD_HOME")"
-                rm -rf "$DASHBOARD_HOME"
+        if [ -d "$TEMPLATE_DIR" ]; then
+            mkdir -p "$(dirname "$DASHBOARD_HOME")"
+            if [ ! -d "$DASHBOARD_HOME" ]; then
                 cp -R "$TEMPLATE_DIR" "$DASHBOARD_HOME"
             else
-                log_error "Dashboard template not found at $TEMPLATE_DIR"
-                echo ""
-                echo "Reinstall tfgrid-compose or run the dashboard from a full tfgrid-studio checkout."
-                exit 1
+                # Refresh core dashboard files while preserving node_modules
+                if [ -f "$TEMPLATE_DIR/server.js" ]; then
+                    cp "$TEMPLATE_DIR/server.js" "$DASHBOARD_HOME/server.js"
+                fi
+                if [ -d "$TEMPLATE_DIR/public" ]; then
+                    rm -rf "$DASHBOARD_HOME/public"
+                    cp -R "$TEMPLATE_DIR/public" "$DASHBOARD_HOME/public"
+                fi
             fi
+        else
+            log_error "Dashboard template not found at $TEMPLATE_DIR"
+            echo ""
+            echo "Reinstall tfgrid-compose or run the dashboard from a full tfgrid-studio checkout."
+            exit 1
         fi
 
         # Install dependencies if needed

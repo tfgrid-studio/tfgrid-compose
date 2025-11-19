@@ -129,6 +129,7 @@ body {
   margin-top: 10px;
   display: flex;
   justify-content: flex-end;
+  gap: 6px;
 }
 
 .table-wrapper {
@@ -244,6 +245,11 @@ body {
   background: transparent;
   color: #e5e7eb;
   border: 1px solid rgba(75, 85, 99, 0.7);
+}
+
+.btn-small {
+  padding: 4px 10px;
+  font-size: 11px;
 }
 
 .log-panel {

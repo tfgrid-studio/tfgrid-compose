@@ -113,12 +113,15 @@ function buildPreviewCommand(cmd, form) {
   return parts.join(' ');
 }
 
-function renderCommandDetail(cmd) {
+function renderCommandDetail(cmd, initial) {
   const container = document.getElementById('command-detail');
   if (!container) return;
 
   const args = cmd.args || [];
   const flags = cmd.flags || [];
+
+  const initialArgs = (initial && initial.args) || {};
+  const initialFlags = (initial && initial.flags) || {};
 
   let html = `
     <div class="card">
@@ -133,11 +136,12 @@ function renderCommandDetail(cmd) {
   if (args.length) {
     html += '<div class="form-section"><h4>Arguments</h4>';
     args.forEach((arg) => {
+      const initialVal = initialArgs[arg.name] || '';
       html += `
         <div class="form-field">
           <label>
             <span>${arg.name}${arg.required ? ' *' : ''}</span>
-            <input type="text" name="arg-${arg.name}" placeholder="${arg.description || ''}" />
+            <input type="text" name="arg-${arg.name}" value="${initialVal}" placeholder="${arg.description || ''}" />
           </label>
         </div>
       `;
@@ -149,20 +153,22 @@ function renderCommandDetail(cmd) {
     html += '<div class="form-section"><h4>Flags</h4>';
     flags.forEach((flag) => {
       if (flag.type === 'boolean') {
+        const checkedAttr = initialFlags[flag.name] ? ' checked' : '';
         html += `
           <div class="form-field">
             <label class="checkbox-label">
-              <input type="checkbox" name="flag-${flag.name}" />
+              <input type="checkbox" name="flag-${flag.name}"${checkedAttr} />
               <span>--${flag.name}${flag.alias ? ` (${flag.alias})` : ''} - ${flag.description || ''}</span>
             </label>
           </div>
         `;
       } else {
+        const initialVal = initialFlags[flag.name] || '';
         html += `
           <div class="form-field">
             <label>
               <span>--${flag.name}${flag.alias ? ` (${flag.alias})` : ''}</span>
-              <input type="text" name="flag-${flag.name}" placeholder="${flag.description || ''}" />
+              <input type="text" name="flag-${flag.name}" value="${initialVal}" placeholder="${flag.description || ''}" />
             </label>
           </div>
         `;
@@ -260,6 +266,31 @@ function renderCommandDetail(cmd) {
   }
 }
 
+function openAdvancedDeploy(appName) {
+  if (!commandsCache || !commandsCache.length) {
+    showLogPanel('Commands not loaded', '');
+    setLogContent('Commands schema is still loading. Try again in a moment.');
+    return;
+  }
+
+  const cmd = commandsCache.find((c) => c.id === 'up' || c.command === 'up');
+  if (!cmd) {
+    showLogPanel('Deploy command not available', '');
+    setLogContent('The "up" command is not available in the current commands schema.');
+    return;
+  }
+
+  renderCommandDetail(cmd, {
+    args: { app: appName },
+    flags: {},
+  });
+
+  const commandsPanel = document.querySelector('.commands-layout');
+  if (commandsPanel && typeof commandsPanel.scrollIntoView === 'function') {
+    commandsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 async function loadCommands() {
   const listContainer = document.getElementById('commands-list');
   const detailContainer = document.getElementById('command-detail');
@@ -311,12 +342,19 @@ async function loadApps() {
           <p>${app.description || ''}</p>
         </div>
         <div class="card-footer">
-          <button class="btn btn-primary" data-app="${app.name}">Deploy</button>
+          <button class="btn btn-primary" data-app="${app.name}" data-kind="quick">Deploy</button>
+          <button class="btn btn-ghost btn-small" data-app="${app.name}" data-kind="advanced">Advanced</button>
         </div>
       `;
 
-      const btn = card.querySelector('button');
-      btn.addEventListener('click', () => startDeployment(app.name, btn));
+      const quickBtn = card.querySelector('button[data-kind="quick"]');
+      const advancedBtn = card.querySelector('button[data-kind="advanced"]');
+      if (quickBtn) {
+        quickBtn.addEventListener('click', () => startDeployment(app.name, quickBtn));
+      }
+      if (advancedBtn) {
+        advancedBtn.addEventListener('click', () => openAdvancedDeploy(app.name));
+      }
 
       container.appendChild(card);
     });
