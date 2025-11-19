@@ -661,11 +661,6 @@ function openCommandWithInitial(commandId, initial) {
   }
 
   renderCommandDetail(cmd, initial || { args: {}, flags: {} });
-
-  const commandsPanel = document.querySelector('.commands-layout');
-  if (commandsPanel && typeof commandsPanel.scrollIntoView === 'function') {
-    commandsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
 }
 
 function openAdvancedDeploy(appName) {
