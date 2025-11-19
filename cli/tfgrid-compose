@@ -937,9 +937,14 @@ Icon=$ICON_NAME
 Categories=Development;Network;
 EOF
 
+            # Mark the desktop entry as executable so some desktop environments treat it as a launcher
+            chmod +x "$DESKTOP_FILE" 2>/dev/null || true
+
             # Optionally place a shortcut on the user's Desktop if it exists
             if [ -d "$DESKTOP_DIR" ]; then
-                cp "$DESKTOP_FILE" "$DESKTOP_DIR/TFGrid Studio Dashboard.desktop" 2>/dev/null || true
+                DESKTOP_SHORTCUT="$DESKTOP_DIR/TFGrid Studio Dashboard.desktop"
+                cp "$DESKTOP_FILE" "$DESKTOP_SHORTCUT" 2>/dev/null || true
+                chmod +x "$DESKTOP_SHORTCUT" 2>/dev/null || true
             fi
 
             echo ""
