@@ -449,14 +449,25 @@ function renderCommandDetail(cmd, initial) {
     // Highlight dangerous delete-all usage when applicable
     if (isDeleteCommand) {
       const allCheckbox = form.querySelector('input[name="flag-all"]');
+      const yesCheckbox = form.querySelector('input[name="flag-yes"]');
       const warningEl = form.querySelector('.command-warning');
       if (allCheckbox && warningEl) {
         const syncWarning = () => {
           if (allCheckbox.checked) {
             warningEl.classList.add('active');
+            // Auto-enable --yes when --all is checked (dashboard can't handle interactive prompts)
+            if (yesCheckbox) {
+              yesCheckbox.checked = true;
+              yesCheckbox.disabled = true; // Prevent unchecking
+            }
           } else {
             warningEl.classList.remove('active');
+            // Re-enable --yes checkbox when --all is unchecked
+            if (yesCheckbox) {
+              yesCheckbox.disabled = false;
+            }
           }
+          updatePreview();
         };
         allCheckbox.addEventListener('change', syncWarning);
         syncWarning();
