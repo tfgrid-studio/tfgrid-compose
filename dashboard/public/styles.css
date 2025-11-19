@@ -706,7 +706,7 @@ textarea {
   color: #9ca3af;
 }
 
-/* Responsive typography: step base font size down on smaller screens */
+/* Responsive layout & typography for smaller screens */
 @media (max-width: 1100px) {
   body {
     font-size: 16px;
@@ -717,10 +717,59 @@ textarea {
   body {
     font-size: 15px;
   }
+
+  .split-shell {
+    padding: 12px 16px 24px;
+  }
+
+  .global-header {
+    padding: 0 16px;
+  }
 }
 
 @media (max-width: 640px) {
   body {
     font-size: 14px;
+  }
+
+  .global-header {
+    margin: 16px 0 8px;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .global-title {
+    font-size: 28px;
+  }
+
+  .global-subtitle {
+    font-size: 14px;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .commands-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .commands-context {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .split-shell {
+    padding: 12px 12px 20px;
+  }
+
+  .app-footer {
+    padding: 10px 12px 14px;
+  }
+
+  .footer-inner {
+    padding: 0 16px;
   }
 }
