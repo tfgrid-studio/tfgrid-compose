@@ -468,22 +468,20 @@ function renderCommandDetail(cmd, initial) {
         const syncWarning = () => {
           if (allCheckbox.checked) {
             warningEl.classList.add('active');
-            // Auto-enable --yes when --all is checked (dashboard can't handle interactive prompts)
-            if (yesCheckbox) {
-              yesCheckbox.checked = true;
-              yesCheckbox.disabled = true; // Prevent unchecking
-            }
           } else {
             warningEl.classList.remove('active');
-            // Re-enable --yes checkbox when --all is unchecked
-            if (yesCheckbox) {
-              yesCheckbox.disabled = false;
-            }
           }
           updatePreview();
         };
         allCheckbox.addEventListener('change', syncWarning);
         syncWarning();
+      }
+
+      // Dashboard cannot handle interactive yes/no prompts, so always force --yes
+      if (yesCheckbox) {
+        yesCheckbox.checked = true;
+        yesCheckbox.disabled = true; // Prevent unchecking from dashboard
+        updatePreview();
       }
 
       const contractsSection = document.getElementById('contracts-picker-section');
