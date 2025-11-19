@@ -4157,10 +4157,16 @@ EOF
                 # Supports:
                 #   tfgrid-compose contracts delete <contract-id>
                 #   tfgrid-compose contracts delete --all
+                #   tfgrid-compose contracts delete --all --yes
                 if [ "${1:-}" = "--all" ]; then
                     # Alias for cancel-all
                     shift || true
-                    contracts_cancel_all
+                    # Check for --yes flag
+                    if [ "${1:-}" = "--yes" ]; then
+                        contracts_cancel_all "--yes"
+                    else
+                        contracts_cancel_all
+                    fi
                 else
                     CONTRACT_ID="$1"
 

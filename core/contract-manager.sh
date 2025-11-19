@@ -95,6 +95,8 @@ contracts_delete() {
 
 # Simple wrapper for tfcmd cancel all contracts
 contracts_cancel_all() {
+    local skip_confirm="${1:-}"
+    
     log_warning "This will cancel ALL contracts associated with your mnemonic!"
     echo ""
     echo "Contracts that will be cancelled:"
@@ -103,10 +105,15 @@ contracts_cancel_all() {
     echo "  • All active deployment contracts"
     echo ""
     
-    read -p "Are you sure you want to cancel ALL contracts? (yes/no): " -r
-    if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
-        log_info "Cancelled by user"
-        return 0
+    # Skip confirmation if --yes flag is passed
+    if [ "$skip_confirm" != "--yes" ]; then
+        read -p "Are you sure you want to cancel ALL contracts? (yes/no): " -r
+        if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+            log_info "Cancelled by user"
+            return 0
+        fi
+    else
+        log_info "Auto-confirmed via --yes flag"
     fi
     
     if ! check_tfcmd_installed; then

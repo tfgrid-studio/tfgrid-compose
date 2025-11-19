@@ -209,7 +209,8 @@
         { "name": "id", "required": false, "type": "string", "description": "Contract ID (omit when using --all)" }
       ],
       "flags": [
-        { "name": "all", "type": "boolean", "description": "Delete all contracts (dangerous)" }
+        { "name": "all", "type": "boolean", "description": "Delete all contracts (dangerous)" },
+        { "name": "yes", "type": "boolean", "description": "Skip confirmation prompt (required for dashboard)" }
       ]
     },
     {
