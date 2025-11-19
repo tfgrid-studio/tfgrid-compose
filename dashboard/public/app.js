@@ -131,9 +131,15 @@ function isDeploymentScopedCommand(cmd) {
 
 function getInitialStateForCommand(cmd) {
   const initial = { args: {}, flags: {} };
+  const id = cmd && (cmd.id || cmd.command);
+
+  // Global presets that do not depend on deployment context
+  if (id === 'delete') {
+    initial.args.resource = 'contracts';
+  }
+
   if (!deploymentContext) return initial;
 
-  const id = cmd && (cmd.id || cmd.command);
   const dep = deploymentContext;
   if (!id || !dep) return initial;
 
