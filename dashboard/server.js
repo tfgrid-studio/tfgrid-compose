@@ -248,6 +248,38 @@ app.get('/api/apps', async (req, res) => {
   }
 });
 
+// Generic command runner (spawns tfgrid-compose with args/flags from schema)
+app.post('/api/commands/run', (req, res) => {
+  try {
+    const schema = loadCommandsSchema();
+    const commands = (schema && schema.commands) || [];
+    const body = req.body || {};
+    const commandId = body.commandId;
+
+    if (!commandId || typeof commandId !== 'string') {
+      return res.status(400).json({ error: 'commandId is required' });
+    }
+
+    const commandDef = commands.find((c) => c.id === commandId || c.command === commandId);
+    if (!commandDef) {
+      return res.status(404).json({ error: `Unknown command: ${commandId}` });
+    }
+
+    const cliArgs = [commandDef.command, ...buildCliArgsFromCommand(commandDef, body)];
+    const job = spawnJob(TFGRID_COMPOSE_BIN, cliArgs);
+    log('Started generic command job', job.id, '->', job.command);
+
+    res.status(202).json({
+      job_id: job.id,
+      status: job.status,
+      command: job.command,
+    });
+  } catch (err) {
+    log('Error in /api/commands/run:', err.message || err);
+    res.status(500).json({ error: 'Failed to start command', details: err.message || String(err) });
+  }
+});
+
 // List deployments
 app.get('/api/deployments', async (req, res) => {
   try {
