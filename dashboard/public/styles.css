@@ -64,6 +64,7 @@ textarea {
 
 #command-detail {
   flex: 0 0 auto;
+  order: 0;
 }
 
 #command-detail .card {
@@ -413,6 +414,7 @@ textarea {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
+  order: 2;
 }
 
 .shell-panel {

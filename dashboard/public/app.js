@@ -415,6 +415,12 @@ function renderCommandDetail(cmd, initial) {
 
   container.innerHTML = html;
 
+  // When showing a command form, collapse the empty output placeholder
+  const outputPlaceholder = document.getElementById('output-placeholder');
+  if (outputPlaceholder) {
+    outputPlaceholder.classList.add('hidden');
+  }
+
   const form = document.getElementById('command-form');
   const previewEl = document.getElementById('command-preview');
 
