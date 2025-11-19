@@ -202,12 +202,27 @@ function renderCommandDetail(cmd, initial) {
     html += '<div class="form-section"><h4>Arguments</h4>';
     args.forEach((arg) => {
       const initialVal = initialArgs[arg.name] || '';
+      let optionsHtml = '';
+      if (typeof arg.description === 'string' && arg.description.includes('|')) {
+        const tokens = arg.description
+          .split('|')
+          .map((t) => t.trim())
+          .filter((t) => t && !t.includes(' '));
+        if (tokens.length) {
+          optionsHtml = '<div class="arg-options" data-arg="' + arg.name + '">';
+          tokens.forEach((token) => {
+            optionsHtml += `<button type="button" class="btn btn-ghost btn-small arg-chip" data-value="${token}">${token}</button>`;
+          });
+          optionsHtml += '</div>';
+        }
+      }
       html += `
         <div class="form-field">
           <label>
             <span>${arg.name}${arg.required ? ' *' : ''}</span>
             <input type="text" name="arg-${arg.name}" value="${initialVal}" placeholder="${arg.description || ''}" />
           </label>
+          ${optionsHtml}
         </div>
       `;
     });
@@ -266,6 +281,20 @@ function renderCommandDetail(cmd, initial) {
   }
 
   if (form) {
+    const chips = form.querySelectorAll('.arg-chip');
+    chips.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const value = chip.getAttribute('data-value') || '';
+        const wrapper = chip.closest('.arg-options');
+        const argName = wrapper && wrapper.getAttribute('data-arg');
+        if (!argName) return;
+        const input = form.querySelector(`[name="arg-${argName}"]`);
+        if (!input) return;
+        input.value = value;
+        updatePreview();
+      });
+    });
+
     form.addEventListener('input', updatePreview);
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
