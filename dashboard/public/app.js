@@ -256,7 +256,7 @@ function renderCommandList(commands) {
         btn.textContent = cmd.label || cmd.command;
         btn.addEventListener('click', () => {
           const initial = getInitialStateForCommand(cmd);
-          renderCommandDetail(cmd, initial);
+          openCommandWithInitial(cmd.id || cmd.command, initial);
         });
         section.appendChild(btn);
       });
