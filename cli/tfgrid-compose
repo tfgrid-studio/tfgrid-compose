@@ -4292,16 +4292,21 @@ EOF
                 SUCCESS_COUNT=0
                 FAILED_IDS=()
                 
+                # Temporarily disable exit-on-error to continue deleting remaining contracts
+                set +e
+                
                 for id in "${UNIQUE_IDS[@]}"; do
-                    echo "Deleting contract $id..."
-                    if contracts_delete "$id" >/dev/null 2>&1; then
-                        echo "  ✅ Contract $id deleted successfully"
+                    if contracts_delete "$id"; then
                         ((SUCCESS_COUNT++))
                     else
-                        echo "  ❌ Failed to delete contract $id"
+                        log_error "Failed to delete contract $id"
                         FAILED_IDS+=("$id")
                     fi
+                    echo ""
                 done
+                
+                # Re-enable exit-on-error
+                set -e
                 
                 # Summary
                 echo ""
