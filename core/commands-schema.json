@@ -11,6 +11,15 @@
       "flags": []
     },
     {
+      "id": "docs",
+      "command": "docs",
+      "label": "Docs",
+      "category": "core",
+      "description": "Open TFGrid Studio documentation in your browser",
+      "args": [],
+      "flags": []
+    },
+    {
       "id": "version",
       "command": "--version",
       "label": "Version",
