@@ -155,6 +155,15 @@ notify() {
   fi
 }
 
+focus_dashboard_window() {
+  if command -v wmctrl >/dev/null 2>&1; then
+    if wmctrl -a "TFGrid Studio Dashboard" >/dev/null 2>&1; then
+      return 0
+    fi
+  fi
+  return 1
+}
+
 launch_app_window() {
   local url="$1"
 
@@ -241,6 +250,9 @@ URL="http://localhost:$PORT"
 
 # If dashboard is already ready, just open browser
 if is_dashboard_ready; then
+  if focus_dashboard_window; then
+    exit 0
+  fi
   launch_app_window "$URL"
   exit 0
 fi
