@@ -525,7 +525,9 @@ app.post('/api/window/minimize', async (req, res) => {
   }
 
   try {
-    await execAsync('wmctrl -r :ACTIVE: -b add,hidden');
+    // Minimize the TFGrid Studio Dashboard browser window explicitly by title,
+    // so it works even if another app (like the terminal) currently has focus.
+    await execAsync('wmctrl -r "TFGrid Studio Dashboard" -b add,hidden');
     res.status(204).end();
   } catch (err) {
     log('Error in /api/window/minimize:', err.message || err);
