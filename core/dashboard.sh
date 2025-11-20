@@ -160,37 +160,47 @@ launch_app_window() {
 
   # Prefer Brave/Chromium in a dedicated incognito window with the dashboard URL
   if command -v brave-browser >/dev/null 2>&1; then
-    brave-browser --incognito --new-window "$url" >/dev/null 2>&1 &
+    brave-browser --incognito --kiosk "$url" >/dev/null 2>&1 &
     return
   fi
 
   if command -v brave-browser-stable >/dev/null 2>&1; then
-    brave-browser-stable --incognito --new-window "$url" >/dev/null 2>&1 &
+    brave-browser-stable --incognito --kiosk "$url" >/dev/null 2>&1 &
     return
   fi
 
   if command -v brave >/dev/null 2>&1; then
-    brave --incognito --new-window "$url" >/dev/null 2>&1 &
+    brave --incognito --kiosk "$url" >/dev/null 2>&1 &
     return
   fi
 
   if command -v google-chrome >/dev/null 2>&1; then
-    google-chrome --incognito --new-window "$url" >/dev/null 2>&1 &
+    google-chrome --incognito --kiosk "$url" >/dev/null 2>&1 &
     return
   fi
 
   if command -v google-chrome-stable >/dev/null 2>&1; then
-    google-chrome-stable --incognito --new-window "$url" >/dev/null 2>&1 &
+    google-chrome-stable --incognito --kiosk "$url" >/dev/null 2>&1 &
     return
   fi
 
   if command -v chromium >/dev/null 2>&1; then
-    chromium --incognito --new-window "$url" >/dev/null 2>&1 &
+    chromium --incognito --kiosk "$url" >/dev/null 2>&1 &
     return
   fi
 
   if command -v chromium-browser >/dev/null 2>&1; then
-    chromium-browser --incognito --new-window "$url" >/dev/null 2>&1 &
+    chromium-browser --incognito --kiosk "$url" >/dev/null 2>&1 &
+    return
+  fi
+
+  if command -v firefox >/dev/null 2>&1; then
+    firefox --private-window --kiosk "$url" >/dev/null 2>&1 &
+    return
+  fi
+
+  if command -v firefox-esr >/dev/null 2>&1; then
+    firefox-esr --private-window --kiosk "$url" >/dev/null 2>&1 &
     return
   fi
 
