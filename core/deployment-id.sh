@@ -439,6 +439,70 @@ list_deployments_docker_style() {
     done
 }
 
+list_deployments_docker_style_active_contracts() {
+    local deployments=$(get_all_deployments)
+
+    if [ -z "$deployments" ]; then
+        echo "Deployments (Docker-style):"
+        echo ""
+        echo "(no deployments found)"
+        return 0
+    fi
+
+    local contracts_output=""
+    if ! contracts_output=$(timeout 15 bash -c "tfgrid-compose contracts list 2>/dev/null" 2>/dev/null); then
+        list_deployments_docker_style
+        return 0
+    fi
+
+    local active_ids
+    active_ids=$(printf '%s\n' "$contracts_output" | awk '/^[0-9]+[[:space:]]/ {print $1}')
+
+    if [ -z "$active_ids" ]; then
+        echo "Deployments (Docker-style):"
+        echo ""
+        echo "(no deployments with active contracts found)"
+        return 0
+    fi
+
+    echo "Deployments (Docker-style):"
+    echo ""
+    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS      CONTRACT    AGE"
+    echo "────────────────────────────────────────────────────────────────────────────"
+
+    echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+        if [ -z "$deployment_id" ]; then
+            continue
+        fi
+
+        if [ -z "$contract_id" ] || [ "$contract_id" = "null" ]; then
+            continue
+        fi
+
+        if ! printf '%s\n' "$active_ids" | grep -q -E "^${contract_id}$"; then
+            continue
+        fi
+
+        local age
+        age=$(calculate_deployment_age "$created_at")
+
+        local display_contract="$contract_id"
+        if [ -z "$display_contract" ] || [ "$display_contract" = "unknown" ]; then
+            display_contract="N/A"
+        elif [ ${#display_contract} -gt 9 ]; then
+            display_contract="${display_contract:0:9}..."
+        fi
+
+        printf "%-16s %-19s %-9s %-12s %-9s %s\n" \
+               "$deployment_id" \
+               "${app_name:0:19}" \
+               "${status:0:9}" \
+               "${vm_ip:0:12}" \
+               "$display_contract" \
+               "$age"
+    done
+}
+
 # Export functions for use in other scripts
 export -f init_deployment_registry
 export -f generate_deployment_id
@@ -453,6 +517,7 @@ export -f resolve_deployment
 export -f resolve_partial_deployment_id
 export -f calculate_deployment_age
 export -f list_deployments_docker_style
+export -f list_deployments_docker_style_active_contracts
 
 # Clean up invalid deployments from registry and mark as failed
 cleanup_invalid_deployments() {

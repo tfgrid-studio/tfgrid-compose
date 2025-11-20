@@ -53,18 +53,41 @@ cmd_list() {
 
 cmd_ps() {
   # Docker-style process listing (summary)
+  local show_all=false
+
+  for arg in "$@"; do
+    case "$arg" in
+      --all|-a)
+        show_all=true
+        ;;
+    esac
+  done
+
   log_info "TFGrid Compose v$VERSION - Docker-Style Deployment Listing"
   echo ""
-  
-  if list_deployments_docker_style >/dev/null 2>&1; then
-    list_deployments_docker_style
-    echo ""
-    log_info "Select deployment: tfgrid-compose select <deployment-id|app-name>"
-    log_info "Run commands: tfgrid-compose <command> [args]"
+
+  if [ "$show_all" = true ]; then
+    if list_deployments_docker_style >/dev/null 2>&1; then
+      list_deployments_docker_style
+      echo ""
+      log_info "Select deployment: tfgrid-compose select <deployment-id|app-name>"
+      log_info "Run commands: tfgrid-compose <command> [args]"
+    else
+      log_warning "No deployments found"
+      echo ""
+      log_info "Deploy an app: tfgrid-compose up <app-name>"
+    fi
   else
-    log_warning "No deployments found"
-    echo ""
-    log_info "Deploy an app: tfgrid-compose up <app-name>"
+    if list_deployments_docker_style_active_contracts >/dev/null 2>&1; then
+      list_deployments_docker_style_active_contracts
+      echo ""
+      log_info "Select deployment: tfgrid-compose select <deployment-id|app-name>"
+      log_info "Run commands: tfgrid-compose <command> [args]"
+    else
+      log_warning "No deployments found"
+      echo ""
+      log_info "Deploy an app: tfgrid-compose up <app-name>"
+    fi
   fi
 }
 
