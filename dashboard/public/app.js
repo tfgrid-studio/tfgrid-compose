@@ -1444,6 +1444,18 @@ window.addEventListener('DOMContentLoaded', () => {
     loadPreferences();
   });
 
+  const minimizeDashboardBtn = document.getElementById('minimize-dashboard');
+  if (minimizeDashboardBtn) {
+    minimizeDashboardBtn.addEventListener('click', async () => {
+      try {
+        await fetch('/api/window/minimize', { method: 'POST' });
+      } catch (err) {
+        // Best-effort; ignore errors if minimize is not supported
+        console.error('Failed to minimize dashboard window', err);
+      }
+    });
+  }
+
   const closeDashboardBtn = document.getElementById('close-dashboard');
   if (closeDashboardBtn) {
     closeDashboardBtn.addEventListener('click', () => {
