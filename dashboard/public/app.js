@@ -1444,6 +1444,15 @@ window.addEventListener('DOMContentLoaded', () => {
     loadPreferences();
   });
 
+  const closeDashboardBtn = document.getElementById('close-dashboard');
+  if (closeDashboardBtn) {
+    closeDashboardBtn.addEventListener('click', () => {
+      // Attempt to close the window (may be ignored by some browsers
+      // if the window was not opened by script, but is useful in kiosk mode).
+      window.close();
+    });
+  }
+
   const clearContextBtn = document.getElementById('commands-context-clear');
   if (clearContextBtn) {
     clearContextBtn.addEventListener('click', () => setDeploymentContext(null));
