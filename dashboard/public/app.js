@@ -44,6 +44,8 @@ function hideLogPanel() {
   activeJobId = null;
   refreshJobsBar();
 
+  clearJobsFromStorage();
+
   if (placeholder && (!shellPanel || shellPanel.classList.contains('hidden'))) {
     placeholder.classList.remove('hidden');
   }
@@ -133,6 +135,47 @@ function setShellContent(text) {
 const jobsState = new Map();
 let activeJobId = null;
 let jobCounter = 0;
+
+const JOBS_STORAGE_KEY = 'tfgrid-dashboard-jobs-v1';
+
+function persistJobsToStorage() {
+  try {
+    const payload = {
+      activeJobId,
+      jobs: Array.from(jobsState.values()).map((job) => ({
+        id: job.id,
+        index: job.index,
+        title: job.title || 'Job',
+        subtitle: job.subtitle || '',
+        status: job.status || 'running',
+        deployment_id: job.deployment_id || null,
+      })),
+    };
+    window.localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify(payload));
+  } catch (e) {
+    // Ignore storage errors
+  }
+}
+
+function loadJobsFromStorage() {
+  try {
+    const raw = window.localStorage.getItem(JOBS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.jobs)) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+function clearJobsFromStorage() {
+  try {
+    window.localStorage.removeItem(JOBS_STORAGE_KEY);
+  } catch (e) {
+    // Ignore storage errors
+  }
+}
 
 function refreshJobsBar() {
   const bar = document.getElementById('jobs-bar');
@@ -239,6 +282,8 @@ function registerJob(jobId, meta) {
   activeJobId = jobId;
   refreshJobsBar();
   updateActiveJobView();
+
+  persistJobsToStorage();
 }
 
 function updateJobFromServer(jobId, jobData) {
@@ -252,6 +297,8 @@ function updateJobFromServer(jobId, jobData) {
   if (activeJobId === jobId) {
     updateActiveJobView();
   }
+
+  persistJobsToStorage();
 }
 
 function closeJob(jobId) {
@@ -265,6 +312,72 @@ function closeJob(jobId) {
   }
   refreshJobsBar();
   updateActiveJobView();
+
+  if (!jobsState.size) {
+    clearJobsFromStorage();
+  } else {
+    persistJobsToStorage();
+  }
+}
+
+async function rehydrateJobsFromStorage() {
+  const stored = loadJobsFromStorage();
+  if (!stored || !stored.jobs || !stored.jobs.length) return;
+
+  jobsState.clear();
+  jobCounter = 0;
+  activeJobId = null;
+
+  stored.jobs
+    .slice()
+    .sort((a, b) => (a.index || 0) - (b.index || 0))
+    .forEach((meta) => {
+      const idx = meta.index && Number.isFinite(meta.index) ? meta.index : jobCounter + 1;
+      if (idx > jobCounter) {
+        jobCounter = idx;
+      }
+      jobsState.set(meta.id, {
+        id: meta.id,
+        index: idx,
+        title: meta.title || 'Job',
+        subtitle: meta.subtitle || '',
+        status: meta.status || 'running',
+        logsText: 'Restoring job output...',
+        deployment_id: meta.deployment_id || null,
+      });
+    });
+
+  if (stored.activeJobId && jobsState.has(stored.activeJobId)) {
+    activeJobId = stored.activeJobId;
+  } else {
+    const remaining = Array.from(jobsState.values()).sort((a, b) => b.index - a.index);
+    activeJobId = remaining.length ? remaining[0].id : null;
+  }
+
+  refreshJobsBar();
+  updateActiveJobView();
+
+  const currentJobs = Array.from(jobsState.values());
+  currentJobs.forEach(async (job) => {
+    try {
+      const data = await fetchJSON(`/api/jobs/${job.id}`);
+      updateJobFromServer(job.id, data);
+      const status = data.status;
+      if (status !== 'completed' && status !== 'failed') {
+        pollJob(job.id, null, null);
+      }
+    } catch (err) {
+      if (jobsState.has(job.id)) {
+        jobsState.delete(job.id);
+        if (activeJobId === job.id) {
+          activeJobId = null;
+        }
+      }
+      refreshJobsBar();
+      updateActiveJobView();
+      persistJobsToStorage();
+    }
+  });
 }
 
 function isDeploymentScopedCommand(cmd) {
@@ -1399,6 +1512,8 @@ window.addEventListener('DOMContentLoaded', () => {
 
     updateLabel();
   }
+
+  rehydrateJobsFromStorage();
 
   loadApps();
   loadDeployments();
