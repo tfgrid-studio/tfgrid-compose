@@ -517,8 +517,6 @@ textarea {
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.5);
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
-  flex: 1 1 auto;
-  min-height: 0;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
