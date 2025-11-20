@@ -4,6 +4,7 @@
   padding: 0;
 }
 
+html,
 body {
   font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background: radial-gradient(circle at top, #111827, #020617 60%);
@@ -11,6 +12,7 @@ body {
   min-height: 100vh;
   font-size: 17px;
   line-height: 1.6;
+  overflow-y: scroll;
 }
 
 button,
@@ -517,6 +519,8 @@ textarea {
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.5);
   box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8);
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
