@@ -107,7 +107,7 @@ async function getDeployments() {
   }
 
   const deployments = doc.deployments || {};
-  return Object.keys(deployments).map((id) => {
+  const allDeployments = Object.keys(deployments).map((id) => {
     const d = deployments[id] || {};
     return {
       id,
@@ -119,6 +119,41 @@ async function getDeployments() {
       created_at: d.created_at || null,
     };
   });
+
+  // Use tfgrid-compose as the source of truth for active contracts.
+  // Only include deployments whose contract_id is present in the
+  // current contracts list. If there are no active contracts, this
+  // will return an empty array so the UI shows no deployments.
+  let contracts;
+  try {
+    contracts = await getContracts();
+  } catch (err) {
+    log('Failed to load contracts for deployment filtering:', err.message || err);
+    return allDeployments;
+  }
+
+  const nodeContracts = Array.isArray(contracts.node_contracts) ? contracts.node_contracts : [];
+  const nameContracts = Array.isArray(contracts.name_contracts) ? contracts.name_contracts : [];
+
+  const activeIds = new Set();
+  for (const c of nodeContracts) {
+    if (c && c.id != null) {
+      activeIds.add(String(c.id));
+    }
+  }
+  for (const c of nameContracts) {
+    if (c && c.id != null) {
+      activeIds.add(String(c.id));
+    }
+  }
+
+  if (activeIds.size === 0) {
+    // No active contracts on the grid – surface this as an empty
+    // deployments list so the dashboard does not show stale entries.
+    return [];
+  }
+
+  return allDeployments.filter((d) => d.contract_id && activeIds.has(String(d.contract_id)));
 }
 
 function parseContractsList(raw) {
