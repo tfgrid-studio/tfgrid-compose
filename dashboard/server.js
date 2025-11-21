@@ -519,22 +519,6 @@ app.get('/api/contracts', async (req, res) => {
   }
 });
 
-app.post('/api/window/minimize', async (req, res) => {
-  if (process.platform !== 'linux') {
-    return res.status(501).json({ error: 'Window minimize is only supported on Linux' });
-  }
-
-  try {
-    // Minimize the TFGrid Studio Dashboard browser window explicitly by title,
-    // so it works even if another app (like the terminal) currently has focus.
-    await execAsync('wmctrl -r "TFGrid Studio Dashboard" -b add,hidden');
-    res.status(204).end();
-  } catch (err) {
-    log('Error in /api/window/minimize:', err.message || err);
-    res.status(500).json({ error: 'Failed to minimize window' });
-  }
-});
-
 // Generic command runner (spawns tfgrid-compose with args/flags from schema)
 app.post('/api/commands/run', (req, res) => {
   try {
