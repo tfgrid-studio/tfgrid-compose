@@ -267,8 +267,12 @@ apply_node_filters() {
     fi
 
     # Apply filters using jq
+    # We already query GridProxy with status=up, so rely on that and avoid
+    # an additional .healthy flag that may not be present. Only exclude
+    # dedicated nodes here; the rest of the logic is driven by preferences
+    # (whitelist/blacklist and thresholds).
     local filtered_nodes=$(echo "$nodes_json" | jq -r '
-        [.[] | select(.healthy == true and .dedicated == false)] |
+        [.[] | select(.dedicated == false)] |
         map(
             # Apply whitelist logic (OR logic):
             # Node allowed if:
