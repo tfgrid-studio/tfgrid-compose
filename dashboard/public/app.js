@@ -1110,6 +1110,13 @@ async function loadPreferences() {
 
   try {
     const data = await fetchJSON('/api/preferences');
+    let net = null;
+    try {
+      net = await fetchJSON('/api/network-settings');
+    } catch (e) {
+      // network settings are optional; ignore failures
+      net = null;
+    }
     const wl = data.whitelist || { nodes: [], farms: [] };
     const bl = data.blacklist || { nodes: [], farms: [] };
     const prefs = data.preferences || {};
@@ -1143,17 +1150,22 @@ async function loadPreferences() {
       </div>
     `;
 
-    const maxCpu = prefs.max_cpu_usage != null ? `${prefs.max_cpu_usage}%` : '<span class="muted">default</span>';
-    const maxDisk = prefs.max_disk_usage != null ? `${prefs.max_disk_usage}%` : '<span class="muted">default</span>';
-    const minUptime = prefs.min_uptime_days != null ? `${prefs.min_uptime_days} days` : '<span class="muted">default</span>';
+    const maxCpu = prefs.max_cpu_usage != null ? `${prefs.max_cpu_usage}%` : 'not set';
+    const maxDisk = prefs.max_disk_usage != null ? `${prefs.max_disk_usage}%` : 'not set';
+    const minUptime = prefs.min_uptime_days != null ? `${prefs.min_uptime_days} days` : 'not set';
+
+    const netPref = net && net.preference ? net.preference : 'wireguard';
+    const netMode = net && net.mode ? net.mode : 'wireguard-only';
 
     thEl.innerHTML = `
-      <h3 class="card-title">Thresholds</h3>
       <div class="card-body">
+        <h3>Global thresholds & network</h3>
         <p><strong>Max CPU Usage:</strong> ${maxCpu}</p>
         <p><strong>Max Disk Usage:</strong> ${maxDisk}</p>
         <p><strong>Min Uptime:</strong> ${minUptime}</p>
-        <p class="preferences-note">Global thresholds are applied by tfgrid-compose during node selection.</p>
+        <p><strong>Access Preference:</strong> ${escapeHtml(netPref)}</p>
+        <p><strong>Provisioning Mode:</strong> ${escapeHtml(netMode)}</p>
+        <p class="preferences-note">Thresholds and network settings are applied by tfgrid-compose during node selection and network provisioning.</p>
       </div>
     `;
 

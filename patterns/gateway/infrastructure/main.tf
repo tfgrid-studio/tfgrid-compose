@@ -6,6 +6,12 @@ terraform {
   }
 }
 
+variable "network_mode" {
+  type        = string
+  default     = "wireguard-only"
+  description = "Network exposure mode: wireguard-only, mycelium-only, both"
+}
+
 # Variables
 variable "mnemonic" {
   type        = string
@@ -94,7 +100,7 @@ resource "grid_network" "gateway_network" {
   name          = "gateway_net"
   nodes         = local.all_nodes
   ip_range      = "10.1.0.0/16"
-  add_wg_access = true
+  add_wg_access = var.network_mode != "mycelium-only"
   mycelium_keys = {
     for node in local.all_nodes : tostring(node) => random_bytes.mycelium_key[tostring(node)].hex
   }

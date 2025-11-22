@@ -560,11 +560,20 @@ generate_terraform_config() {
     local inter_node_network=$(yaml_get "$APP_MANIFEST" "network.inter_node")
     local network_mode=$(yaml_get "$APP_MANIFEST" "network.mode")
     
+    # If manifest doesn't define a mode, fall back to global network mode preference
+    if [ -z "$network_mode" ] || [ "$network_mode" = "null" ]; then
+        # get_global_network_mode is defined in core/network.sh, which is sourced by the CLI
+        if command -v get_global_network_mode >/dev/null 2>&1; then
+            network_mode=$(get_global_network_mode)
+        fi
+    fi
+    
     # Export network configuration (use manifest values or defaults)
     export TF_VAR_tfgrid_network="${TF_VAR_tfgrid_network:-main}"
     export MAIN_NETWORK="${main_network:-${MAIN_NETWORK:-wireguard}}"
     export INTER_NODE_NETWORK="${inter_node_network:-${INTER_NODE_NETWORK:-wireguard}}"
-    export NETWORK_MODE="${network_mode:-${NETWORK_MODE:-wireguard-only}}"
+    export NETWORK_MODE="${network_mode:-wireguard-only}"
+    export TF_VAR_network_mode="$NETWORK_MODE"
     
     # Pass main_network to Terraform
     export TF_VAR_main_network="$MAIN_NETWORK"

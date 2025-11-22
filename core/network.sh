@@ -14,6 +14,8 @@ if [ -z "${NETWORK_WIREGUARD:-}" ]; then
     readonly NETWORK_MYCELIUM="mycelium"
     readonly DEFAULT_NETWORK="$NETWORK_WIREGUARD"
     readonly GLOBAL_NETWORK_FILE="$HOME/.config/tfgrid-compose/network-preference"
+    readonly DEFAULT_NETWORK_MODE="wireguard-only"
+    readonly GLOBAL_NETWORK_MODE_FILE="$HOME/.config/tfgrid-compose/network-mode"
 fi
 
 # Get network preference (deployment-specific or global fallback)
@@ -47,6 +49,14 @@ get_network_preference() {
     get_global_network_preference
 }
 
+get_global_network_mode() {
+    if [ -f "$GLOBAL_NETWORK_MODE_FILE" ]; then
+        cat "$GLOBAL_NETWORK_MODE_FILE" 2>/dev/null || echo "$DEFAULT_NETWORK_MODE"
+    else
+        echo "$DEFAULT_NETWORK_MODE"
+    fi
+}
+
 # Get global network preference
 get_global_network_preference() {
     if [ -f "$GLOBAL_NETWORK_FILE" ]; then
@@ -76,6 +86,24 @@ set_global_network_preference() {
     # Set global preference
     echo "$network" > "$GLOBAL_NETWORK_FILE"
     log_success "Global network preference set to: $network"
+    return 0
+}
+
+set_global_network_mode() {
+    local mode="$1"
+
+    case "$mode" in
+        wireguard-only|mycelium-only|both)
+            ;;
+        *)
+            log_error "Invalid network mode: $mode. Must be 'wireguard-only', 'mycelium-only', or 'both'"
+            return 1
+            ;;
+    esac
+
+    mkdir -p "$(dirname "$GLOBAL_NETWORK_MODE_FILE")"
+    echo "$mode" > "$GLOBAL_NETWORK_MODE_FILE"
+    log_success "Global network mode set to: $mode"
     return 0
 }
 
@@ -197,22 +225,25 @@ network_subcommand() {
     shift
 
     case "$subcommand" in
-        set)
-            # Always allow global network preference setting regardless of deployment context
-            local network="$1"
-
-            if [ -z "$network" ]; then
+        mode)
+            local mode="$1"
+            if [ -z "$mode" ]; then
                 echo ""
-                echo "Usage: tfgrid-compose network set <wireguard|mycelium>"
-                echo ""
-                echo "This sets the global network preference for all deployments."
-                echo "You can also set per-deployment preferences using:"
-                echo "  tfgrid-compose select <deployment-id> && tfgrid-compose network set <network>"
+                echo "Usage: tfgrid-compose network mode <wireguard-only|mycelium-only|both>"
                 echo ""
                 return 1
             fi
+            set_global_network_mode "$mode"
+            ;;
 
-            # Set global preference for all deployments
+        prefer|set)
+            local network="$1"
+            if [ -z "$network" ]; then
+                echo ""
+                echo "Usage: tfgrid-compose network prefer <wireguard|mycelium>"
+                echo ""
+                return 1
+            fi
             set_global_network_preference "$network"
             ;;
 
@@ -239,34 +270,34 @@ network_subcommand() {
                         ;;
                 esac
             else
-                # No valid deployment context - show global preference
-                local current=$(get_global_network_preference)
+                local current_pref=$(get_global_network_preference)
+                local current_mode=$(get_global_network_mode)
                 echo ""
-                echo "Global Network Preference"
-                echo "========================"
-                echo "Current network: $current"
-                echo ""
-                echo "This applies to all deployments that don't have specific preferences set."
+                echo "Global Network Settings"
+                echo "======================="
+                echo "Access preference: $current_pref"
+                echo "Provisioning mode: $current_mode"
                 echo ""
                 if [ -n "$app_name" ]; then
                     echo "Note: Detected context '$app_name' but no valid deployment found with that name."
                     echo "You may have selected a deployment that no longer exists."
                 fi
                 echo ""
-                log_info "To set deployment-specific preferences:"
-                echo "  tfgrid-compose select <deployment-id> && tfgrid-compose network set <network>"
-                echo "  (use 't ps' to see deployment IDs)"
             fi
             ;;
 
         list|available)
             echo ""
-            echo "Available networks:"
+            echo "Available runtime networks:"
             echo "  $NETWORK_WIREGUARD - Traditional VPN with private IPv4"
             echo "  $NETWORK_MYCELIUM  - Global IPv6 addressing"
             echo ""
-            echo "Both networks are automatically provisioned during deployment."
+            echo "Available provisioning modes:"
+            echo "  wireguard-only  - Provision WireGuard access gateway only"
+            echo "  mycelium-only   - Provision Mycelium only (no WireGuard access gateway)"
+            echo "  both            - Provision both WireGuard access gateway and Mycelium"
             ;;
+        ;;
 
         test|verify)
             local app_name=$(get_smart_context)
@@ -284,9 +315,10 @@ network_subcommand() {
             log_error "Unknown network subcommand: $subcommand"
             echo ""
             echo "Available subcommands:"
-            echo "  set <network>     Set preferred network (wireguard|mycelium)"
-            echo "  get, show         Show current network preference"
-            echo "  list, available   List available networks"
+            echo "  prefer <network>  Set preferred runtime network (wireguard|mycelium)"
+            echo "  mode <mode>       Set provisioning mode (wireguard-only|mycelium-only|both)"
+            echo "  get, show         Show current settings"
+            echo "  list, available   List available networks and modes"
             echo "  test, verify      Test connectivity to both networks"
             echo ""
             return 1

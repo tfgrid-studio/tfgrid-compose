@@ -32,6 +32,12 @@ variable "network_name" {
   description = "Name of the network for the cluster"
 }
 
+variable "network_mode" {
+  type        = string
+  default     = "wireguard-only"
+  description = "Network exposure mode: wireguard-only, mycelium-only, both"
+}
+
 variable "tfgrid_network" {
   type        = string
   default     = "main"
@@ -95,7 +101,7 @@ resource "grid_network" "k3s_network" {
   name          = var.network_name
   nodes         = local.all_nodes
   ip_range      = "10.1.0.0/16"
-  add_wg_access = true
+  add_wg_access = var.network_mode != "mycelium-only"
   mycelium_keys = merge(
     {
       for node in local.cluster_nodes : tostring(node) => random_bytes.k3s_mycelium_key[tostring(node)].hex

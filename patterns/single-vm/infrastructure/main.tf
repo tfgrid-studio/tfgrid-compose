@@ -31,6 +31,12 @@ variable "tfgrid_network" {
   description = "ThreeFold Grid network (main, test, dev)"
 }
 
+variable "network_mode" {
+  type        = string
+  default     = "wireguard-only"
+  description = "Network exposure mode: wireguard-only, mycelium-only, both"
+}
+
 variable "vm_node" {
   type        = number
   description = "Node ID for VM deployment"
@@ -103,7 +109,7 @@ resource "grid_network" "vm_network" {
   name          = "net_${random_string.deployment_id.result}"
   nodes         = [var.vm_node]
   ip_range      = "10.1.0.0/16"
-  add_wg_access = true
+  add_wg_access = var.network_mode != "mycelium-only"
   mycelium_keys = {
     tostring(var.vm_node) = random_bytes.mycelium_key.hex
   }

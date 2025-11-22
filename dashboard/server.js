@@ -229,7 +229,19 @@ async function getContracts() {
   };
 }
 
+function getNetworkSettings() {
+  const prefRaw = readFileIfExists(NETWORK_PREF_FILE);
+  const modeRaw = readFileIfExists(NETWORK_MODE_FILE);
+
+  const preference = (prefRaw || 'wireguard').trim() || 'wireguard';
+  const mode = (modeRaw || 'wireguard-only').trim() || 'wireguard-only';
+
+  return { preference, mode };
+}
+
 const PREFERENCES_PATH = path.join(CONFIG_DIR, 'preferences.yaml');
+const NETWORK_PREF_FILE = path.join(CONFIG_DIR, 'network-preference');
+const NETWORK_MODE_FILE = path.join(CONFIG_DIR, 'network-mode');
 
 async function ensurePreferencesFile() {
   if (fs.existsSync(PREFERENCES_PATH)) return;
@@ -483,6 +495,17 @@ app.get('/api/commands', (req, res) => {
   } catch (err) {
     log('Error in /api/commands:', err.message || err);
     res.status(500).json({ error: 'Failed to load commands schema' });
+  }
+});
+
+// Global network preference + provisioning mode
+app.get('/api/network-settings', (req, res) => {
+  try {
+    const settings = getNetworkSettings();
+    res.json(settings);
+  } catch (err) {
+    log('Error in /api/network-settings:', err.message || err);
+    res.status(500).json({ error: 'Failed to load network settings' });
   }
 });
 
