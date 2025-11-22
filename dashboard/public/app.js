@@ -113,11 +113,16 @@ function ansiToHtml(str) {
 
   return result;
 }
+let logAutoScroll = true;
+let shellAutoScroll = true;
 
 function setLogContent(text) {
   const el = document.getElementById('log-content');
   if (!el) return;
   el.innerHTML = ansiToHtml(text || '');
+  if (logAutoScroll) {
+    el.scrollTop = el.scrollHeight;
+  }
 }
 
 let commandsCache = [];
@@ -130,6 +135,9 @@ function setShellContent(text) {
   const el = document.getElementById('shell-content');
   if (!el) return;
   el.innerHTML = ansiToHtml(text || '');
+  if (shellAutoScroll) {
+    el.scrollTop = el.scrollHeight;
+  }
 }
 
 const jobsState = new Map();
@@ -1438,6 +1446,25 @@ async function startDeployment(appName, button) {
 // ... (rest of the code remains the same)
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('log-close').addEventListener('click', hideLogPanel);
+
+  const logContent = document.getElementById('log-content');
+  if (logContent) {
+    logContent.addEventListener('scroll', () => {
+      const nearBottom =
+        logContent.scrollHeight - (logContent.scrollTop + logContent.clientHeight) < 20;
+      logAutoScroll = nearBottom;
+    });
+  }
+
+  const shellContent = document.getElementById('shell-content');
+  if (shellContent) {
+    shellContent.addEventListener('scroll', () => {
+      const nearBottom =
+        shellContent.scrollHeight - (shellContent.scrollTop + shellContent.clientHeight) < 20;
+      shellAutoScroll = nearBottom;
+    });
+  }
+
   document.getElementById('refresh-all').addEventListener('click', () => {
     loadApps();
     loadDeployments();
