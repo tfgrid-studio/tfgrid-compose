@@ -297,7 +297,6 @@ network_subcommand() {
             echo "  mycelium-only   - Provision Mycelium only (no WireGuard access gateway)"
             echo "  both            - Provision both WireGuard access gateway and Mycelium"
             ;;
-        ;;
 
         test|verify)
             local app_name=$(get_smart_context)
