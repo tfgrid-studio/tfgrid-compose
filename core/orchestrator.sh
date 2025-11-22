@@ -116,14 +116,36 @@ deploy_app() {
     echo ""
     
     # Determine resources (priority: flags > .env > manifest > defaults)
-    # Try recommended first, fallback to min, then default
+    # For AI-stack style apps, use resources.cpu.*, for single-vm style apps
+    # prefer resources.vm.* when present.
     MANIFEST_CPU=$(yaml_get "$APP_MANIFEST" "resources.cpu.recommended" || yaml_get "$APP_MANIFEST" "resources.cpu.min" || echo "2")
     MANIFEST_MEM=$(yaml_get "$APP_MANIFEST" "resources.memory.recommended" || yaml_get "$APP_MANIFEST" "resources.memory.min" || echo "4096")
     MANIFEST_DISK=$(yaml_get "$APP_MANIFEST" "resources.disk.recommended" || yaml_get "$APP_MANIFEST" "resources.disk.min" || echo "50")
-    
-    DEPLOY_CPU=${CUSTOM_CPU:-${TF_VAR_ai_agent_cpu:-$MANIFEST_CPU}}
-    DEPLOY_MEM=${CUSTOM_MEM:-${TF_VAR_ai_agent_mem:-$MANIFEST_MEM}}
-    DEPLOY_DISK=${CUSTOM_DISK:-${TF_VAR_ai_agent_disk:-$MANIFEST_DISK}}
+
+    if [ "$PATTERN_NAME" = "single-vm" ]; then
+        # Override manifest resources from single-vm specific config when available
+        local vm_cpu vm_mem vm_disk
+        vm_cpu=$(yaml_get "$APP_MANIFEST" "resources.vm.cpu" 2>/dev/null || echo "")
+        vm_mem=$(yaml_get "$APP_MANIFEST" "resources.vm.memory" 2>/dev/null || echo "")
+        vm_disk=$(yaml_get "$APP_MANIFEST" "resources.vm.disk" 2>/dev/null || echo "")
+
+        [ "$vm_cpu" = "null" ] && vm_cpu=""
+        [ "$vm_mem" = "null" ] && vm_mem=""
+        [ "$vm_disk" = "null" ] && vm_disk=""
+
+        [ -n "$vm_cpu" ] && MANIFEST_CPU="$vm_cpu"
+        [ -n "$vm_mem" ] && MANIFEST_MEM="$vm_mem"
+        [ -n "$vm_disk" ] && MANIFEST_DISK="$vm_disk"
+
+        DEPLOY_CPU=${CUSTOM_CPU:-$MANIFEST_CPU}
+        DEPLOY_MEM=${CUSTOM_MEM:-$MANIFEST_MEM}
+        DEPLOY_DISK=${CUSTOM_DISK:-$MANIFEST_DISK}
+    else
+        DEPLOY_CPU=${CUSTOM_CPU:-${TF_VAR_ai_agent_cpu:-$MANIFEST_CPU}}
+        DEPLOY_MEM=${CUSTOM_MEM:-${TF_VAR_ai_agent_mem:-$MANIFEST_MEM}}
+        DEPLOY_DISK=${CUSTOM_DISK:-${TF_VAR_ai_agent_disk:-$MANIFEST_DISK}}
+    fi
+
     DEPLOY_NETWORK=${CUSTOM_NETWORK:-${TF_VAR_tfgrid_network:-"main"}}
     
     # Interactive mode
