@@ -380,7 +380,41 @@ EOF
     echo "  • View logs: tfgrid-compose logs $APP_NAME"
     echo "  • Connect: tfgrid-compose ssh $APP_NAME"
     echo ""
-    
+
+    # If JSON output was requested (for programmatic callers like control planes),
+    # emit a final machine-readable summary line that external tools can parse
+    # without depending on log formatting.
+    if [ "${TFGRID_OUTPUT_FORMAT:-}" = "json" ]; then
+        # Prefer primary_ip from state.yaml, fall back to network-aware resolution
+        local primary_ip=""
+        local mycelium_ip=""
+
+        if [ -f "$STATE_DIR/state.yaml" ]; then
+            primary_ip=$(grep "^primary_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+            mycelium_ip=$(grep "^mycelium_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+        fi
+
+        if [ -z "$primary_ip" ]; then
+            primary_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
+        fi
+
+        # Build minimal JSON payload. Use deploymentId/primaryIp/myceliumIp keys
+        # to match control-plane orchestrator expectations.
+        local json="{\"deploymentId\":\"$DEPLOYMENT_ID\""
+        if [ -n "$primary_ip" ]; then
+            json="$json,\"primaryIp\":\"$primary_ip\""
+        fi
+        if [ -n "$mycelium_ip" ]; then
+            json="$json,\"myceliumIp\":\"$mycelium_ip\""
+        fi
+        if [ -n "$contract_id" ]; then
+            json="$json,\"contractId\":\"$contract_id\""
+        fi
+        json="$json}"
+
+        echo "$json"
+    fi
+
     # Disable error trap on success
     trap - ERR
     
