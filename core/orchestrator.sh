@@ -155,6 +155,11 @@ deploy_app() {
             log_info "Resources: $DEPLOY_CPU CPU, ${DEPLOY_MEM}MB RAM, ${DEPLOY_DISK}GB disk"
             log_info "Auto-selecting best available node..."
             echo ""
+            # For automatic selection during deployments, use blacklist/whitelist
+            # preferences but do NOT enforce global CPU/disk/uptime thresholds.
+            # Those thresholds are still honored by the standalone node browser
+            # (tfgrid-compose nodes) via query_gridproxy.
+            #
             # select_best_node(cpu, mem_mb, disk_gb, network,
             #   cli_blacklist_nodes, cli_blacklist_farms, cli_whitelist_farms,
             #   cli_max_cpu, cli_max_disk, cli_min_uptime)
@@ -166,9 +171,9 @@ deploy_app() {
                 "$CUSTOM_BLACKLIST_NODES" \
                 "$CUSTOM_BLACKLIST_FARMS" \
                 "$CUSTOM_WHITELIST_FARMS" \
-                "$CUSTOM_MAX_CPU_USAGE" \
-                "$CUSTOM_MAX_DISK_USAGE" \
-                "$CUSTOM_MIN_UPTIME_DAYS")
+                "" \
+                "" \
+                "")
             # Clean any whitespace/newlines from node ID
             DEPLOY_NODE=$(echo "$DEPLOY_NODE" | tr -d '[:space:]')
             if [ -z "$DEPLOY_NODE" ] || [ "$DEPLOY_NODE" = "null" ]; then
