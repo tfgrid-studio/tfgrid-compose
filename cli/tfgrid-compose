@@ -100,60 +100,193 @@ get_app_command_script() {
 app_has_command() {
     local command="$1"
     
-    # Get current app
     local current_app=$(get_current_app)
     if [ -z "$current_app" ]; then
         return 1
     fi
     
-    # Resolve app path (handles both deployment IDs and app names)
-    local app_path=$(resolve_app_path "$current_app" "true")
-    if [ -z "$app_path" ] || [ ! -f "$app_path/tfgrid-compose.yaml" ]; then
+    if ! get_deployment_context "$current_app" >/dev/null 2>&1; then
         return 1
     fi
     
-    # Check if command exists in manifest
-    local script_path=$(get_app_command_script "$app_path" "$command")
+    if ! load_app_for_deployment "$DEPLOYMENT_ID" >/dev/null 2>&1; then
+        return 1
+    fi
+    
+    local script_path=$(get_app_command_script "$APP_DIR" "$command")
     if [ -n "$script_path" ]; then
         return 0
     fi
     
     return 1
 }
+
+get_deployment_context() {
+    local identifier="$1"
+    local base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
+    local resolved=""
+    local result=0
+    
+    DEPLOYMENT_ID=""
+    STATE_DIR=""
+    
+    if [ -n "$identifier" ]; then
+        resolved=$(resolve_deployment "$identifier" 2>/dev/null || echo "")
+        result=$?
+        case $result in
+            0)
+                DEPLOYMENT_ID="$resolved"
+                ;;
+            3)
+                echo ""
+                echo "📱 Multiple deployments match: $identifier"
+                echo ""
+                local IFS=$'\n'
+                local options=($resolved)
+                local deployment_info=()
+                local i
+                for i in "${!options[@]}"; do
+                    local deployment_id="${options[$i]}"
+                    local details=$(get_deployment_by_id "$deployment_id" 2>/dev/null)
+                    if [ -n "$details" ]; then
+                        local app_name=$(echo "$details" | grep "^app_name:" | awk '{print $2}' | tr -d '"')
+                        local vm_ip=$(echo "$details" | grep "^vm_ip:" | awk '{print $2}' | tr -d '"')
+                        local created_at=$(echo "$details" | grep "^created_at:" | awk '{print $2}' | tr -d '"')
+                        local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
+                        echo "$((i+1))) $deployment_id $app_name ($vm_ip) - $age"
+                        deployment_info+=("$deployment_id")
+                    fi
+                done
+                echo ""
+                read -p "Select deployment [1-${#options[@]}]: " choice
+                if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#options[@]} ]; then
+                    log_error "Invalid choice"
+                    return 1
+                fi
+                DEPLOYMENT_ID="${deployment_info[$((choice-1))]}"
+                ;;
+            *)
+                log_error "Deployment not found: $identifier"
+                log_info "Use 'tfgrid-compose ps' to see available deployments"
+                return 1
+                ;;
+        esac
+    else
+        local ctx=$(get_smart_context)
+        if [ -z "$ctx" ]; then
+            log_error "No deployment selected"
+            echo ""
+            log_info "Use 'tfgrid-compose select' or pass a deployment/app name"
+            return 1
+        fi
+        DEPLOYMENT_ID="$ctx"
+    fi
+    
+    local details=$(get_deployment_by_id "$DEPLOYMENT_ID" 2>/dev/null || echo "")
+    if [ -z "$details" ]; then
+        log_error "Deployment not found: $DEPLOYMENT_ID"
+        log_info "Use 'tfgrid-compose ps' to see available deployments"
+        return 1
+    fi
+    
+    local state_dir=""
+    if command_exists yq; then
+        state_dir=$(echo "$details" | yq eval '.state_dir // ""' - 2>/dev/null || echo "")
+    else
+        state_dir=$(echo "$details" | grep "^state_dir:" | awk '{print $2}' | tr -d '"' || echo "")
+    fi
+    if [ -z "$state_dir" ]; then
+        state_dir="$base_dir/$DEPLOYMENT_ID"
+    fi
+    if [ ! -d "$state_dir" ]; then
+        log_error "Deployment state not found for: $DEPLOYMENT_ID"
+        log_info "State directory: $state_dir"
+        return 1
+    fi
+    
+    STATE_DIR="$state_dir"
+    export STATE_DIR
+    
+    local app_name=$(echo "$details" | grep "^app_name:" | awk '{print $2}' | tr -d '"' || echo "")
+    if [ -z "$app_name" ] && [ -f "$STATE_DIR/state.yaml" ]; then
+        app_name=$(grep "^app_name:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+    fi
+    APP_NAME="$app_name"
+    export APP_NAME
+    
+    return 0
+}
+
+load_app_for_deployment() {
+    local deployment_id="$1"
+    local base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
+    
+    if [ -z "$deployment_id" ]; then
+        log_error "Deployment ID is required"
+        return 1
+    fi
+    
+    local state_dir="${STATE_DIR:-$base_dir/$deployment_id}"
+    if [ ! -f "$state_dir/state.yaml" ]; then
+        log_error "Deployment state not found for: $deployment_id"
+        return 1
+    fi
+    
+    local app_dir=""
+    if command_exists yq; then
+        app_dir=$(yq eval '.app_dir // ""' "$state_dir/state.yaml" 2>/dev/null || echo "")
+    else
+        app_dir=$(grep "^app_dir:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+    fi
+    
+    if [ -z "$app_dir" ]; then
+        local app_name="$APP_NAME"
+        if [ -z "$app_name" ]; then
+            app_name=$(grep "^app_name:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+        fi
+        if [ -n "$app_name" ]; then
+            local repo_url=$(get_app_repo "$app_name" 2>/dev/null || echo "")
+            if [ -n "$repo_url" ]; then
+                app_dir=$(get_app "$app_name" "$repo_url")
+            elif [ -d "$APP_CACHE_DIR/$app_name" ]; then
+                app_dir="$APP_CACHE_DIR/$app_name"
+            fi
+        fi
+    fi
+    
+    if [ -z "$app_dir" ] || [ ! -d "$app_dir" ]; then
+        log_error "Failed to locate app source for deployment: $deployment_id"
+        return 1
+    fi
+    
+    APP_PATH="$app_dir"
+    export APP_PATH
+    
+    if ! load_app "$APP_PATH"; then
+        return 1
+    fi
+    
+    return 0
+}
+
 # Execute app-specific command
 execute_app_command() {
     local command="$1"
     shift
     local args="$@"
     
-    # Get smart context (auto-detect or use current)
-    CONTEXT_APP=$(get_smart_context)
-    
-    if [ -z "$CONTEXT_APP" ]; then
-        # Multiple or no apps, need explicit context
-        log_error "No app selected"
-        echo ""
-        log_info "Deployed apps:"
-        list_deployed_apps
-        echo ""
-        log_info "Select an app with: tfgrid-compose select <app>"
+    # Get deployment context (auto-detect or use current)
+    if ! get_deployment_context ""; then
         return 1
     fi
     
-    # Resolve app path (handles both deployment IDs and app names)
-    APP_PATH=$(resolve_app_path "$CONTEXT_APP")
-    if [ -z "$APP_PATH" ]; then
-        log_error "Failed to resolve app: $CONTEXT_APP"
+    # Load app manifest for this deployment
+    if ! load_app_for_deployment "$DEPLOYMENT_ID"; then
         return 1
     fi
     
-    # Set APP_NAME from resolved path
-    APP_NAME=$(basename "$APP_PATH")
-    export APP_NAME
-    
-    # Get command script
-    SCRIPT_PATH=$(get_app_command_script "$APP_PATH" "$command")
-    
+    # Get command script from app manifest
+    SCRIPT_PATH=$(get_app_command_script "$APP_DIR" "$command")
     if [ -z "$SCRIPT_PATH" ]; then
         log_error "Unknown command: $command"
         log_info "App '$APP_NAME' does not support command '$command'"
@@ -164,92 +297,15 @@ execute_app_command() {
     
     export APP_NAME
     
-    # Get VM IP from state using network-aware resolution
-    base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
-
-    # Resolve app name to deployment ID via registry with enhanced resolution
-    RESOLVED_DEPLOYMENT=$(resolve_deployment "$APP_NAME" 2>/dev/null)
-    RESOLVE_RESULT=$?
-
-    case $RESOLVE_RESULT in
-        0)
-            # Single match found
-            DEPLOYMENT_ID="$RESOLVED_DEPLOYMENT"
-            ;;
-        3)
-            # Multiple matches - show selection menu
-            echo ""
-            echo "📱 Multiple deployments found for: $APP_NAME"
-            echo ""
-
-            # Parse ambiguous results and show options
-            local IFS=$'\n'
-            local options=($RESOLVED_DEPLOYMENT)
-            local deployment_info=()
-
-            for i in "${!options[@]}"; do
-                local deployment_id="${options[$i]}"
-                local details=$(get_deployment_by_id "$deployment_id" 2>/dev/null)
-
-                if [ -n "$details" ]; then
-                    local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
-                    local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
-                    local created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
-                    local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
-
-                    echo "$((i+1))) $deployment_id $app_name ($vm_ip) - $age"
-                    deployment_info+=("$deployment_id")
-                fi
-            done
-
-            echo ""
-            read -p "Select deployment [1-${#options[@]}]: " choice
-
-            # Validate choice
-            if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#options[@]} ]; then
-                log_error "Invalid choice"
-                return 1
-            fi
-
-            # Get selected deployment
-            DEPLOYMENT_ID="${deployment_info[$((choice-1))]}"
-            echo ""
-            local details=$(get_deployment_by_id "$DEPLOYMENT_ID" 2>/dev/null)
-            if [ -n "$details" ]; then
-                local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
-                local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
-                log_success "✅ Selected $DEPLOYMENT_ID ($app_name) - VM: $vm_ip"
-            else
-                log_success "✅ Selected $DEPLOYMENT_ID"
-            fi
-            ;;
-        *)
-            # No matches found
-            log_error "No deployment found for: $APP_NAME"
-            log_info "Deploy first with: tfgrid-compose up $APP_NAME"
-            log_info "Or use 'tfgrid-compose ps' to see available deployments"
-            return 1
-            ;;
-    esac
-
-    state_dir="$base_dir/$DEPLOYMENT_ID"
-
-    if [ ! -d "$state_dir" ]; then
-        log_error "Deployment state not found (inconsistent state)"
-        log_info "Try redeploying: tfgrid-compose up $APP_NAME --force"
-        return 1
-    fi
-
-    # Use network-aware IP resolution instead of direct vm_ip lookup
+    # Resolve network-aware IP for this deployment
     vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
-
     if [ -z "$vm_ip" ]; then
         log_error "No IP found in state for $APP_NAME"
         return 1
     fi
     
     # Check if this command should save to context
-    MANIFEST="$APP_PATH/tfgrid-compose.yaml"
+    MANIFEST="$APP_DIR/tfgrid-compose.yaml"
     SAVE_TO_CONTEXT=$(grep -A 5 "^  $command:" "$MANIFEST" 2>/dev/null | grep "save_to_context:" | awk '{print $2}')
     
     # Check if this command needs TTY allocation (defaults to true for backwards compatibility)
@@ -301,89 +357,50 @@ execute_app_command() {
     fi
 }
 
-# Resolve app input to path (handles both registry names and local paths)
+# Resolve app input to path (handles registry names and local paths only)
 resolve_app_path() {
-    local app_input="$1"
-    local quiet="${2:-false}"
-    
-    if [ -z "$app_input" ]; then
-        return 1
-    fi
-    
-    # If it's a path (contains / or starts with .), return as-is
-    if [[ "$app_input" == */* ]] || [[ "$app_input" == .* ]]; then
-        echo "$app_input"
-        return 0
-    fi
-    
-    # Check if it's a deployment ID - get deployment details and use state_dir
-    local deployment_details=$(get_deployment_by_id "$app_input" 2>/dev/null || echo "")
-    if [ -n "$deployment_details" ]; then
-        # It's a deployment ID - get the state_dir
-        local state_dir=""
-        if command_exists yq; then
-            state_dir=$(echo "$deployment_details" | yq eval '.state_dir // empty' - 2>/dev/null || echo "")
-        else
-            state_dir=$(echo "$deployment_details" | grep "state_dir:" | awk '{print $2}' | tr -d '"' || echo "")
-        fi
-        
-        if [ -n "$state_dir" ] && [ "$state_dir" != "empty" ] && [ -d "$state_dir" ]; then
-            echo "$state_dir"
-            return 0
-        fi
-    fi
-    
-    # Try to find existing deployment by app name
-    local deployment_id=$(get_active_deployment_for_app "$app_input" 2>/dev/null || echo "")
-    if [ -n "$deployment_id" ]; then
-        # Found deployment - get its state_dir
-        local deployment_details=$(get_deployment_by_id "$deployment_id" 2>/dev/null || echo "")
-        if [ -n "$deployment_details" ]; then
-            local state_dir=""
-            if command_exists yq; then
-                state_dir=$(echo "$deployment_details" | yq eval '.state_dir // empty' - 2>/dev/null || echo "")
-            else
-                state_dir=$(echo "$deployment_details" | grep "state_dir:" | awk '{print $2}' | tr -d '"' || echo "")
-            fi
-            
-            if [ -n "$state_dir" ] && [ "$state_dir" != "empty" ] && [ -d "$state_dir" ]; then
-                echo "$state_dir"
-                return 0
-            fi
-        fi
-    fi
-    
-    # No deployment found - treat as registry app name
-    local app_name="$app_input"
-    local cached_path="$APP_CACHE_DIR/$app_name"
-    
-    if [ -d "$cached_path" ]; then
-        echo "$cached_path"
-        return 0
-    fi
-    
-    # Not cached - try to download
-    if [ "$quiet" != "true" ]; then
-        log_info "Looking up $app_name in registry..."
-    fi
-    
-    local repo_url=$(get_app_repo "$app_name")
-    if [ -z "$repo_url" ]; then
-        if [ "$quiet" != "true" ]; then
-            log_error "App '$app_name' not found in registry"
-            log_info "Available deployments:"
-            list_deployments 2>/dev/null || true
-        fi
-        return 1
-    fi
-    
-    local app_path=$(get_app "$app_name" "$repo_url")
-    if [ -z "$app_path" ]; then
-        return 1
-    fi
-    
-    echo "$app_path"
-    return 0
+	local app_input="$1"
+	local quiet="${2:-false}"
+	
+	if [ -z "$app_input" ]; then
+		return 1
+	fi
+	
+	# If it's a path (contains / or starts with .), return as-is
+	if [[ "$app_input" == */* ]] || [[ "$app_input" == .* ]]; then
+		echo "$app_input"
+		return 0
+	fi
+	
+	# Treat as registry app name (no deployment resolution here)
+	local app_name="$app_input"
+	local cached_path="$APP_CACHE_DIR/$app_name"
+	
+	if [ -d "$cached_path" ]; then
+		echo "$cached_path"
+		return 0
+	fi
+	
+	# Not cached - try to download from registry
+	if [ "$quiet" != "true" ]; then
+		log_info "Looking up $app_name in registry..."
+	fi
+	
+	local repo_url=$(get_app_repo "$app_name")
+	if [ -z "$repo_url" ]; then
+		if [ "$quiet" != "true" ]; then
+			log_error "App '$app_name' not found in registry"
+		fi
+		return 1
+	fi
+	
+	local app_path=$(get_app "$app_name" "$repo_url")
+	if [ -z "$app_path" ]; then
+		return 1
+	fi
+	
+	echo "$app_path"
+	return 0
 }
 
 # Parse global flags
@@ -1145,46 +1162,17 @@ case "$COMMAND" in
             exit $?
         fi
         
-        # Use built-in logs (pattern-based)
-        # Try to get app from argument or context
+        # Use built-in logs (pattern-based) on a deployment
         APP_INPUT="$1"
-        if [ -z "$APP_INPUT" ]; then
-            APP_INPUT=$(load_context)
-            if [ -z "$APP_INPUT" ]; then
-                log_error "No app specified and no app selected"
-                log_info "Usage: tfgrid-compose logs <app>"
-                log_info "   Or: tfgrid-compose select <app> && tfgrid-compose logs"
-                exit 1
-            fi
-        fi
-        
-        # Resolve app path (handles both deployment IDs and app names)
-        APP_PATH=$(resolve_app_path "$APP_INPUT")
-        if [ -z "$APP_PATH" ]; then
-            log_error "Failed to resolve app: $APP_INPUT"
+        if ! get_deployment_context "$APP_INPUT"; then
             exit 1
         fi
         
-        # Set app name for validation
-        APP_NAME=$(basename "$APP_PATH")
-        export APP_NAME
-        
-        # Validate app path
-        if ! validate_app_path "$APP_PATH"; then
+        if ! load_app_for_deployment "$DEPLOYMENT_ID"; then
             exit 1
         fi
         
-        # Check deployment exists
-        if ! validate_deployment_exists; then
-            exit 1
-        fi
-        
-        # Load app to get pattern
-        if ! load_app "$APP_PATH"; then
-            exit 1
-        fi
-        
-        # Get pattern from state (for now, use recommended)
+        # Get pattern from manifest (recommended pattern)
         PATTERN_NAME=$(get_recommended_pattern)
         
         if [ -z "$PATTERN_NAME" ]; then
@@ -1202,41 +1190,13 @@ case "$COMMAND" in
         ;;
         
     status)
-        # Status command
-        # Try to get app from argument or context
+        # Status command (deployment-centric)
         APP_INPUT="$1"
-        if [ -z "$APP_INPUT" ]; then
-            APP_INPUT=$(load_context)
-            if [ -z "$APP_INPUT" ]; then
-                log_error "No app specified and no context file found"
-                log_info "Usage: tfgrid-compose status <app>"
-                exit 1
-            fi
-        fi
-        
-        # Resolve app path (registry name or local path)
-        APP_PATH=$(resolve_app_path "$APP_INPUT")
-        if [ -z "$APP_PATH" ]; then
-            log_error "Failed to resolve app: $APP_INPUT"
+        if ! get_deployment_context "$APP_INPUT"; then
             exit 1
         fi
         
-        # Set app name for validation
-        APP_NAME=$(basename "$APP_PATH")
-        export APP_NAME
-        
-        # Validate app path
-        if ! validate_app_path "$APP_PATH"; then
-            exit 1
-        fi
-        
-        # Check deployment exists
-        if ! validate_deployment_exists; then
-            exit 1
-        fi
-        
-        # Load app
-        if ! load_app "$APP_PATH"; then
+        if ! load_app_for_deployment "$DEPLOYMENT_ID"; then
             exit 1
         fi
         
@@ -1258,31 +1218,13 @@ case "$COMMAND" in
         ;;
         
     ssh|connect)
-        # SSH command
-        # Try to get app from argument or context
+        # SSH command (deployment-centric)
         APP_INPUT="$1"
-        if [ -z "$APP_INPUT" ]; then
-            APP_INPUT=$(load_context)
-            if [ -z "$APP_INPUT" ]; then
-                log_error "No app specified and no context file found"
-                log_info "Usage: tfgrid-compose ssh <app>"
-                exit 1
-            fi
-        fi
-        
-        # Resolve app path (registry name or local path)
-        APP_PATH=$(resolve_app_path "$APP_INPUT")
-        if [ -z "$APP_PATH" ]; then
-            log_error "Failed to resolve app: $APP_INPUT"
+        if ! get_deployment_context "$APP_INPUT"; then
             exit 1
         fi
         
-        # Set and export app name
-        APP_NAME=$(basename "$APP_PATH")
-        export APP_NAME
-        
-        # Load app
-        if ! load_app "$APP_PATH"; then
+        if ! load_app_for_deployment "$DEPLOYMENT_ID"; then
             exit 1
         fi
         
@@ -1670,105 +1612,58 @@ EOF
         
     exec)
         # Execute command on deployed VM
-        # Usage: tfgrid-compose exec [app] <command> [args...]
-        # If app is not specified, uses context from switch
+        # Usage: tfgrid-compose exec [deployment-id|app-name] <command> [args...]
+        # If target is not specified, uses current deployment context
         
         if [ -z "$1" ]; then
             log_error "No command specified"
-            log_info "Usage: tfgrid-compose exec [app] <command> [args...]"
+            log_info "Usage: tfgrid-compose exec [deployment|app] <command> [args...]"
             log_info "Examples:"
             log_info "  tfgrid-compose exec ls /opt"
-            log_info "  tfgrid-compose exec tfgrid-ai-agent ls /opt"
+            log_info "  tfgrid-compose exec c5f21d4f04623526 ls /opt"
             exit 1
         fi
-        
-        # Simplified detection: Check if first arg is a deployed app
-        FIRST_ARG="$1"
-        APP_INPUT=""
-        USE_CONTEXT=false
-        
-        # Check if first arg looks like an app (path or has context)
-        if [[ "$FIRST_ARG" == */* ]] || [[ "$FIRST_ARG" == .* ]]; then
-            # It's a path
-            APP_INPUT="$1"
-            shift
-        else
-            # Check if it's a deployed app name
-            if [ -d "$STATE_BASE_DIR/$FIRST_ARG" ]; then
-                # It's a deployed app
-                APP_INPUT="$1"
+
+        local FIRST_ARG="$1"
+        local APP_INPUT=""
+
+        # Heuristic: if we have more than one argument and FIRST_ARG
+        # resolves as a deployment/app identifier, treat it as target
+        if [ $# -gt 1 ]; then
+            if resolve_deployment "$FIRST_ARG" >/dev/null 2>&1; then
+                APP_INPUT="$FIRST_ARG"
                 shift
-            else
-                # Not a deployed app, use context
-                APP_INPUT=$(load_context)
-                USE_CONTEXT=true
-                if [ -z "$APP_INPUT" ]; then
-                    log_error "No app specified and no context found"
-                    log_info "Run 'tfgrid-compose switch <app>' first or specify app:"
-                    log_info "  tfgrid-compose exec <app> <command>"
-                    exit 1
-                fi
-                # Don't shift, $1 is the command
             fi
         fi
-        
-        # Check we have a command after figuring out the app
+
+        # After optional target shift, we must still have a command
         if [ $# -eq 0 ]; then
             log_error "No command specified"
-            log_info "Usage: tfgrid-compose exec [app] <command> [args...]"
-            exit 1
-        fi
-        
-        # Resolve app path
-        APP_PATH=$(resolve_app_path "$APP_INPUT")
-        if [ -z "$APP_PATH" ]; then
-            log_error "Failed to resolve app: $APP_INPUT"
-            exit 1
-        fi
-        
-        APP_NAME=$(basename "$APP_PATH")
-        export APP_NAME
-        
-        # Get VM IP from state
-        base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
-        
-        # Resolve app name to deployment ID via registry
-        DEPLOYMENT_ID=$(resolve_deployment "$APP_NAME")
-        if [ -z "$DEPLOYMENT_ID" ]; then
-            log_error "No deployment found for: $APP_NAME"
-            log_info "Deploy first with: tfgrid-compose up $APP_NAME"
-            exit 1
-        fi
-        
-        state_dir="$base_dir/$DEPLOYMENT_ID"
-
-        if [ ! -d "$state_dir" ]; then
-            log_error "Deployment state not found (inconsistent state)"
-            log_info "Try redeploying: tfgrid-compose up $APP_NAME --force"
+            log_info "Usage: tfgrid-compose exec [deployment|app] <command> [args...]"
             exit 1
         fi
 
-        # Use network-aware IP resolution
+        # Resolve deployment context (APP_INPUT may be empty to use current)
+        if ! get_deployment_context "$APP_INPUT"; then
+            exit 1
+        fi
+
+        # Resolve network-aware IP
         vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
-
         if [ -z "$vm_ip" ]; then
             log_error "No IP found in state for $APP_NAME"
             exit 1
         fi
-        
-        # Get the command and arguments
+
+        # Remaining args form the remote command
         REMOTE_CMD="$@"
-        
-        if [ "$USE_CONTEXT" = "true" ]; then
-            log_info "Using context: $APP_NAME"
-        fi
-        log_info "Executing on $APP_NAME ($vm_ip): $REMOTE_CMD"
+
+        log_info "Executing on $APP_NAME ($DEPLOYMENT_ID @ $vm_ip): $REMOTE_CMD"
         echo ""
-        
-        # Execute command on VM
+
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
             root@$vm_ip "$REMOTE_CMD"
-        
+
         exit $?
         ;;
         
@@ -1793,6 +1688,46 @@ EOF
         # Signin command - always use tfgrid-compose version
         # Apps don't have signin commands, only login commands
         cmd_signin "$@"
+        ;;
+
+    login)
+        # Login command - app-specific, deployment-centric
+        # 1) If current deployment's app manifest defines a 'login' command,
+        #    run it via execute_app_command.
+        # 2) Otherwise, for tfgrid-ai-stack, use the Qwen login helper
+        #    (backwards-compatible path).
+        # 3) For other apps, show a clear error.
+
+        # Try manifest-based login first
+        if app_has_command "login"; then
+            execute_app_command "login" "$@"
+            exit $?
+        fi
+
+        # No manifest login; fall back to tfgrid-ai-stack helper when applicable
+        if ! get_deployment_context ""; then
+            exit 1
+        fi
+
+        # If we know the app name from deployment, use that
+        case "$APP_NAME" in
+            tfgrid-ai-stack)
+                # Resolve IP for this deployment and export VM_IP for the helper
+                vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
+                if [ -z "$vm_ip" ]; then
+                    log_error "No IP found in state for $APP_NAME"
+                    exit 1
+                fi
+                log_info "Using deployment $DEPLOYMENT_ID ($APP_NAME @ $vm_ip) for login"
+                echo ""
+                VM_IP="$vm_ip" bash "$DEPLOYER_ROOT/scripts/qwen-login.sh"
+                exit $?
+                ;;
+        esac
+
+        log_error "App '$APP_NAME' does not define a 'login' command"
+        log_info "Supported login: 'tfgrid-ai-stack' (Qwen) or app-specific 'login' in manifest"
+        exit 1
         ;;
 
 

@@ -421,6 +421,13 @@ EOF
     echo "  • Connect: tfgrid-compose ssh $APP_NAME"
     echo ""
 
+    # Automatically set this deployment as the active context for UX convenience
+    local current_app_file="$HOME/.config/tfgrid-compose/current-app"
+    mkdir -p "$(dirname "$current_app_file")"
+    echo "$DEPLOYMENT_ID" > "$current_app_file"
+    log_info "Active deployment context set to: $DEPLOYMENT_ID"
+    echo ""
+
     # If JSON output was requested (for programmatic callers like control planes),
     # emit a final machine-readable summary line that external tools can parse
     # without depending on log formatting.
@@ -630,6 +637,18 @@ deploy_app_source() {
         log_error "Failed to copy state.yaml to VM ($scp_host)"
         return 1
     fi
+
+    # Copy VM-side helper for IP resolution so hooks can use network preference
+    if [ -f "$DEPLOYER_ROOT/scripts/get_deployment_ip_vm.sh" ]; then
+        log_info "Copying get_deployment_ip_vm helper to VM..."
+        if ! scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "$DEPLOYER_ROOT/scripts/get_deployment_ip_vm.sh" "root@$scp_host:/tmp/app-deployment/get_deployment_ip_vm.sh" 2>/dev/null; then
+            log_warning "Failed to copy get_deployment_ip_vm helper to VM ($scp_host)"
+        else
+            log_success "get_deployment_ip_vm helper copied to VM"
+        fi
+    fi
+
     log_success "Deployment hooks and state copied to VM"
 
     # Copy app source directory contents if it exists (for scripts, templates, etc.)

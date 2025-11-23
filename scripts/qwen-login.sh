@@ -2,11 +2,13 @@
 # Qwen OAuth login helper - automated with expect
 set -e
 
-# Get VM IP from state
-VM_IP=$(cat .tfgrid-compose/state.yaml 2>/dev/null | grep '^vm_ip:' | awk '{print $2}')
+# Get VM IP from environment or state
+if [ -z "$VM_IP" ]; then
+    VM_IP=$(cat .tfgrid-compose/state.yaml 2>/dev/null | grep '^vm_ip:' | awk '{print $2}')
+fi
 
 if [ -z "$VM_IP" ]; then
-    echo "❌ No deployment found. Run 'make up' first."
+    echo "❌ No deployment found. Run 'make up' or 'tfgrid-compose up' first."
     exit 1
 fi
 
