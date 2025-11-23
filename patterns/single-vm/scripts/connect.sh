@@ -16,7 +16,9 @@ fi
 DEPLOYMENT_ID=$(basename "$STATE_DIR")
 
 # Source network functions for preference lookup
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" ../../../.." && pwd)"
+# NOTE: use a simple, robust path computation to avoid nested command
+# substitution parsing issues on some shells
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"/../../../.. && pwd)"
 source "$SCRIPT_DIR/core/common.sh"
 source "$SCRIPT_DIR/core/network.sh"
 
