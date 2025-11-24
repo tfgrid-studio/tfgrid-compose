@@ -496,8 +496,8 @@ function buildAiStackCreatePreview(body) {
   if (body.template) parts.push(`--template=${body.template}`);
   if (body.git_name) parts.push(`--git-name=${body.git_name}`);
   if (body.git_email) parts.push(`--git-email=${body.git_email}`);
-  if (body.auto_run) parts.push('--run');
-  if (body.auto_publish) parts.push('--publish');
+  if (body.auto_run) parts.push('--run=yes');
+  if (body.auto_publish) parts.push('--publish=yes');
   if (body.non_interactive !== false) parts.push('--non-interactive');
   return parts.join(' ');
 }

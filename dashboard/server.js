@@ -800,10 +800,10 @@ app.post('/api/deployments/:id/create', async (req, res) => {
   if (gitEmail) args.push(`--git-email=${gitEmail}`);
 
   if (body.auto_run === true) {
-    args.push('--run');
+    args.push('--run=yes');
   }
   if (body.auto_publish === true) {
-    args.push('--publish');
+    args.push('--publish=yes');
   }
 
   // For dashboard usage, non-interactive flow should always be the default
