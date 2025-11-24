@@ -162,14 +162,8 @@ elif [ "$CONNECT_METHOD" = "mycelium" ]; then
     fi
 fi
 
-# Format IP for SSH (add brackets for IPv6)
-if [[ "$CONNECT_IP" == *":"* ]]; then
-    # IPv6 address (Mycelium)
-    SSH_TARGET="root@[$CONNECT_IP]"
-else
-    # IPv4 address (WireGuard)
-    SSH_TARGET="root@$CONNECT_IP"
-fi
+# Format IP for SSH; use raw IP (IPv4 or IPv6)
+SSH_TARGET="root@$CONNECT_IP"
 
 echo "🔌 Connecting via $CONNECT_METHOD to $CONNECT_IP..."
 echo ""
