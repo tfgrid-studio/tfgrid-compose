@@ -759,12 +759,15 @@ app.get('/api/jobs/:id', (req, res) => {
 });
 
 // Create project on a specific deployment (tfgrid-compose select + create)
+// Supports both simple payloads ({ projectName }) and rich non-interactive flags
+// for tfgrid-ai-stack create flow.
 app.post('/api/deployments/:id/create', async (req, res) => {
   const id = req.params.id;
   const body = req.body || {};
-  const projectName = body.projectName;
+  const projectNameRaw = body.projectName;
+  const projectName = typeof projectNameRaw === 'string' ? projectNameRaw.trim() : '';
 
-  if (!projectName || typeof projectName !== 'string') {
+  if (!projectName) {
     return res.status(400).json({ error: 'projectName is required' });
   }
 
@@ -777,7 +780,39 @@ app.post('/api/deployments/:id/create', async (req, res) => {
     return res.status(500).json({ error: 'Failed to select deployment', details: err.message });
   }
 
-  const job = spawnJob(TFGRID_COMPOSE_BIN, ['create', projectName]);
+  // Always use non-interactive create interface from the dashboard so we never
+  // trigger interactive prompts that the UI cannot answer.
+  const args = ['create', '--project', projectName];
+
+  const time = typeof body.time === 'string' ? body.time.trim() : '';
+  if (time) args.push(`--time=${time}`);
+
+  const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+  if (prompt) args.push(`--prompt=${prompt}`);
+
+  const template = typeof body.template === 'string' ? body.template.trim() : '';
+  if (template) args.push(`--template=${template}`);
+
+  const gitName = typeof body.git_name === 'string' ? body.git_name.trim() : '';
+  if (gitName) args.push(`--git-name=${gitName}`);
+
+  const gitEmail = typeof body.git_email === 'string' ? body.git_email.trim() : '';
+  if (gitEmail) args.push(`--git-email=${gitEmail}`);
+
+  if (body.auto_run === true) {
+    args.push('--run');
+  }
+  if (body.auto_publish === true) {
+    args.push('--publish');
+  }
+
+  // For dashboard usage, non-interactive flow should always be the default
+  // unless explicitly disabled (which we do not currently expose in the UI).
+  if (body.non_interactive !== false) {
+    args.push('--non-interactive');
+  }
+
+  const job = spawnJob(TFGRID_COMPOSE_BIN, args);
   log('Started create job', job.id, 'for deployment', id, 'project', projectName);
 
   res.status(202).json({
@@ -788,12 +823,14 @@ app.post('/api/deployments/:id/create', async (req, res) => {
 });
 
 // Run project on a specific deployment (tfgrid-compose select + run)
+// Supports optional { wait: true } to add --wait flag.
 app.post('/api/deployments/:id/run', async (req, res) => {
   const id = req.params.id;
   const body = req.body || {};
-  const projectName = body.projectName;
+  const projectNameRaw = body.projectName;
+  const projectName = typeof projectNameRaw === 'string' ? projectNameRaw.trim() : '';
 
-  if (!projectName || typeof projectName !== 'string') {
+  if (!projectName) {
     return res.status(400).json({ error: 'projectName is required' });
   }
 
@@ -806,7 +843,12 @@ app.post('/api/deployments/:id/run', async (req, res) => {
     return res.status(500).json({ error: 'Failed to select deployment', details: err.message });
   }
 
-  const job = spawnJob(TFGRID_COMPOSE_BIN, ['run', projectName]);
+  const args = ['run', projectName];
+  if (body.wait === true) {
+    args.push('--wait');
+  }
+
+  const job = spawnJob(TFGRID_COMPOSE_BIN, args);
   log('Started run job', job.id, 'for deployment', id, 'project', projectName);
 
   res.status(202).json({
@@ -817,12 +859,14 @@ app.post('/api/deployments/:id/run', async (req, res) => {
 });
 
 // Publish project on a specific deployment (tfgrid-compose select + publish)
+// Supports optional { force: true } to add --force flag for fresh analysis.
 app.post('/api/deployments/:id/publish', async (req, res) => {
   const id = req.params.id;
   const body = req.body || {};
-  const projectName = body.projectName;
+  const projectNameRaw = body.projectName;
+  const projectName = typeof projectNameRaw === 'string' ? projectNameRaw.trim() : '';
 
-  if (!projectName || typeof projectName !== 'string') {
+  if (!projectName) {
     return res.status(400).json({ error: 'projectName is required' });
   }
 
@@ -835,7 +879,12 @@ app.post('/api/deployments/:id/publish', async (req, res) => {
     return res.status(500).json({ error: 'Failed to select deployment', details: err.message });
   }
 
-  const job = spawnJob(TFGRID_COMPOSE_BIN, ['publish', projectName]);
+  const args = ['publish', projectName];
+  if (body.force === true) {
+    args.push('--force');
+  }
+
+  const job = spawnJob(TFGRID_COMPOSE_BIN, args);
   log('Started publish job', job.id, 'for deployment', id, 'project', projectName);
 
   res.status(202).json({

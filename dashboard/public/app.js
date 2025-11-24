@@ -461,10 +461,392 @@ function updateCommandsContextUI() {
 
   updateDeploymentSelectionUI();
 }
+function renderAppActionsPanel() {
+  const panel = document.getElementById('app-actions-panel');
+  if (!panel) return;
+
+  if (!deploymentContext) {
+    panel.innerHTML = '<div class="card"><div class="card-body">Select a deployment in the table below to see app-specific actions.</div></div>';
+    return;
+  }
+
+  const appName = deploymentContext.app_name || '';
+
+  if (appName === 'tfgrid-ai-stack') {
+    renderAiStackActions(panel);
+  } else if (appName === 'tfgrid-ai-agent') {
+    panel.innerHTML = '<div class="card"><div class="card-header"><h3 class="card-title">AI Agent</h3></div><div class="card-body"><p>Use the CLI Commands panel and the selected deployment context to run tfgrid-compose commands for this AI agent (for example: status, logs, ssh, exec).</p></div></div>';
+  } else if (appName === 'tfgrid-gitea') {
+    panel.innerHTML = '<div class="card"><div class="card-header"><h3 class="card-title">Gitea Git Hosting</h3></div><div class="card-body"><p>Use the Address button in the deployments table to open the Gitea web UI for this deployment. You can also use CLI Commands with this deployment context for advanced operations.</p></div></div>';
+  } else {
+    panel.innerHTML = '<div class="card"><div class="card-body">No app-specific actions are defined for this application.</div></div>';
+  }
+}
 
 function setDeploymentContext(deployment) {
   deploymentContext = deployment || null;
   updateCommandsContextUI();
+  renderAppActionsPanel();
+}
+
+function buildAiStackCreatePreview(body) {
+  const parts = ['tfgrid-compose', 'create', '--project', body.projectName || '<project>'];
+  if (body.time) parts.push(`--time=${body.time}`);
+  if (body.prompt) parts.push(`--prompt=${body.prompt}`);
+  if (body.template) parts.push(`--template=${body.template}`);
+  if (body.git_name) parts.push(`--git-name=${body.git_name}`);
+  if (body.git_email) parts.push(`--git-email=${body.git_email}`);
+  if (body.auto_run) parts.push('--run');
+  if (body.auto_publish) parts.push('--publish');
+  if (body.non_interactive !== false) parts.push('--non-interactive');
+  return parts.join(' ');
+}
+
+function buildAiStackRunPreview(body) {
+  const parts = ['tfgrid-compose', 'run', body.projectName || '<project>'];
+  if (body.wait) parts.push('--wait');
+  return parts.join(' ');
+}
+
+function buildAiStackPublishPreview(body) {
+  const parts = ['tfgrid-compose', 'publish', body.projectName || '<project>'];
+  if (body.force) parts.push('--force');
+  return parts.join(' ');
+}
+
+function renderAiStackActions(panel) {
+  const deployment = deploymentContext;
+  if (!deployment) {
+    panel.innerHTML = '<div class="card"><div class="card-body">Select a tfgrid-ai-stack deployment to manage AI projects.</div></div>';
+    return;
+  }
+
+  panel.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">AI Projects (tfgrid-ai-stack)</h3>
+        <p class="card-subtitle">Create, run, and publish AI projects on the selected deployment.</p>
+      </div>
+      <div class="card-body">
+        <div class="form-section">
+          <h4>Create Project</h4>
+          <form id="ai-stack-create-form">
+            <div class="form-field">
+              <label>
+                <span>Project name *</span>
+                <input type="text" name="project-name" placeholder="my-project" />
+              </label>
+            </div>
+            <div class="form-field">
+              <label>
+                <span>Time / budget (optional)</span>
+                <input type="text" name="time" placeholder="30m, 2h, etc." />
+              </label>
+            </div>
+            <div class="form-field">
+              <label>
+                <span>Prompt (optional)</span>
+                <textarea name="prompt" rows="3" placeholder="High-level description of the project."></textarea>
+              </label>
+            </div>
+            <div class="form-field">
+              <label>
+                <span>Template (optional)</span>
+                <input type="text" name="template" placeholder="template name" />
+              </label>
+            </div>
+            <div class="form-field">
+              <label>
+                <span>Git name (optional)</span>
+                <input type="text" name="git-name" placeholder="Override git user.name" />
+              </label>
+            </div>
+            <div class="form-field">
+              <label>
+                <span>Git email (optional)</span>
+                <input type="text" name="git-email" placeholder="Override git user.email" />
+              </label>
+            </div>
+            <div class="form-section">
+              <div class="form-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" name="auto-run" />
+                  <span>Auto-run after create (--run)</span>
+                </label>
+              </div>
+              <div class="form-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" name="auto-publish" />
+                  <span>Auto-publish after run (--publish)</span>
+                </label>
+              </div>
+              <div class="form-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" name="non-interactive" checked />
+                  <span>Non-interactive mode (--non-interactive)</span>
+                </label>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Create project</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="form-section">
+          <h4>Run Project</h4>
+          <form id="ai-stack-run-form">
+            <div class="form-field">
+              <label>
+                <span>Project name *</span>
+                <input type="text" name="project-name-run" placeholder="my-project" />
+              </label>
+            </div>
+            <div class="form-field">
+              <label class="checkbox-label">
+                <input type="checkbox" name="wait" />
+                <span>Wait for completion (--wait)</span>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Run project</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="form-section">
+          <h4>Publish Project</h4>
+          <form id="ai-stack-publish-form">
+            <div class="form-field">
+              <label>
+                <span>Project name *</span>
+                <input type="text" name="project-name-publish" placeholder="my-project" />
+              </label>
+            </div>
+            <div class="form-field">
+              <label class="checkbox-label">
+                <input type="checkbox" name="force" />
+                <span>Force fresh analysis (--force)</span>
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Publish project</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const createForm = panel.querySelector('#ai-stack-create-form');
+  if (createForm) {
+    createForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const deploymentNow = deploymentContext;
+      if (!deploymentNow) {
+        showLogPanel('No deployment selected', '');
+        setLogContent('Select a tfgrid-ai-stack deployment first.');
+        return;
+      }
+
+      const submitButton = createForm.querySelector('button[type="submit"]');
+      const originalText = submitButton ? submitButton.textContent : '';
+
+      const projectName = (createForm.querySelector('input[name="project-name"]')?.value || '').trim();
+      if (!projectName) {
+        showLogPanel('Missing project name', `Deployment ${deploymentNow.id}`);
+        setLogContent('Please enter a project name before creating.');
+        return;
+      }
+
+      const time = (createForm.querySelector('input[name="time"]')?.value || '').trim();
+      const prompt = (createForm.querySelector('textarea[name="prompt"]')?.value || '').trim();
+      const template = (createForm.querySelector('input[name="template"]')?.value || '').trim();
+      const gitName = (createForm.querySelector('input[name="git-name"]')?.value || '').trim();
+      const gitEmail = (createForm.querySelector('input[name="git-email"]')?.value || '').trim();
+      const autoRun = !!createForm.querySelector('input[name="auto-run"]')?.checked;
+      const autoPublish = !!createForm.querySelector('input[name="auto-publish"]')?.checked;
+      const nonInteractive = createForm.querySelector('input[name="non-interactive"]')?.checked !== false;
+
+      const payload = {
+        projectName,
+        time,
+        prompt,
+        template,
+        git_name: gitName,
+        git_email: gitEmail,
+        auto_run: autoRun,
+        auto_publish: autoPublish,
+        non_interactive: nonInteractive,
+      };
+
+      const preview = buildAiStackCreatePreview({
+        projectName,
+        time,
+        prompt,
+        template,
+        git_name: gitName,
+        git_email: gitEmail,
+        auto_run: autoRun,
+        auto_publish: autoPublish,
+        non_interactive: nonInteractive,
+      });
+
+      showLogPanel(`Create ${projectName}`, `Deployment ${deploymentNow.id} (${deploymentNow.app_name || ''})`);
+      setLogContent(`Running: ${preview}`);
+
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Creating...';
+      }
+
+      try {
+        const res = await fetchJSON(`/api/deployments/${deploymentNow.id}/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const jobId = res.job_id;
+        if (!jobId) throw new Error('Dashboard backend did not return job_id');
+        registerJob(jobId, {
+          title: `Create ${projectName}`,
+          subtitle: preview,
+          initialLog: `Running: ${preview}`,
+        });
+        pollJob(jobId, submitButton, originalText || 'Create project');
+      } catch (err) {
+        setLogContent(`Failed to start create: ${err.message}`);
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = originalText || 'Create project';
+        }
+      }
+    });
+  }
+
+  const runForm = panel.querySelector('#ai-stack-run-form');
+  if (runForm) {
+    runForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const deploymentNow = deploymentContext;
+      if (!deploymentNow) {
+        showLogPanel('No deployment selected', '');
+        setLogContent('Select a tfgrid-ai-stack deployment first.');
+        return;
+      }
+
+      const submitButton = runForm.querySelector('button[type="submit"]');
+      const originalText = submitButton ? submitButton.textContent : '';
+
+      const projectName = (runForm.querySelector('input[name="project-name-run"]')?.value || '').trim();
+      if (!projectName) {
+        showLogPanel('Missing project name', `Deployment ${deploymentNow.id}`);
+        setLogContent('Please enter a project name before running.');
+        return;
+      }
+
+      const wait = !!runForm.querySelector('input[name="wait"]')?.checked;
+
+      const payload = {
+        projectName,
+        wait,
+      };
+
+      const preview = buildAiStackRunPreview({ projectName, wait });
+
+      showLogPanel(`Run ${projectName}`, `Deployment ${deploymentNow.id} (${deploymentNow.app_name || ''})`);
+      setLogContent(`Running: ${preview}`);
+
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Running...';
+      }
+
+      try {
+        const res = await fetchJSON(`/api/deployments/${deploymentNow.id}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const jobId = res.job_id;
+        if (!jobId) throw new Error('Dashboard backend did not return job_id');
+        registerJob(jobId, {
+          title: `Run ${projectName}`,
+          subtitle: preview,
+          initialLog: `Running: ${preview}`,
+        });
+        pollJob(jobId, submitButton, originalText || 'Run project');
+      } catch (err) {
+        setLogContent(`Failed to start run: ${err.message}`);
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = originalText || 'Run project';
+        }
+      }
+    });
+  }
+
+  const publishForm = panel.querySelector('#ai-stack-publish-form');
+  if (publishForm) {
+    publishForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const deploymentNow = deploymentContext;
+      if (!deploymentNow) {
+        showLogPanel('No deployment selected', '');
+        setLogContent('Select a tfgrid-ai-stack deployment first.');
+        return;
+      }
+
+      const submitButton = publishForm.querySelector('button[type="submit"]');
+      const originalText = submitButton ? submitButton.textContent : '';
+
+      const projectName = (publishForm.querySelector('input[name="project-name-publish"]')?.value || '').trim();
+      if (!projectName) {
+        showLogPanel('Missing project name', `Deployment ${deploymentNow.id}`);
+        setLogContent('Please enter a project name before publishing.');
+        return;
+      }
+
+      const force = !!publishForm.querySelector('input[name="force"]')?.checked;
+
+      const payload = {
+        projectName,
+        force,
+      };
+
+      const preview = buildAiStackPublishPreview({ projectName, force });
+
+      showLogPanel(`Publish ${projectName}`, `Deployment ${deploymentNow.id} (${deploymentNow.app_name || ''})`);
+      setLogContent(`Running: ${preview}`);
+
+      if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Publishing...';
+      }
+
+      try {
+        const res = await fetchJSON(`/api/deployments/${deploymentNow.id}/publish`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const jobId = res.job_id;
+        if (!jobId) throw new Error('Dashboard backend did not return job_id');
+        registerJob(jobId, {
+          title: `Publish ${projectName}`,
+          subtitle: preview,
+          initialLog: `Running: ${preview}`,
+        });
+        pollJob(jobId, submitButton, originalText || 'Publish project');
+      } catch (err) {
+        setLogContent(`Failed to start publish: ${err.message}`);
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = originalText || 'Publish project';
+        }
+      }
+    });
+  }
 }
 
 function renderCommandList(commands) {
@@ -1304,11 +1686,7 @@ async function loadDeployments() {
           <td>${formatIPs(d.vm_ip, d.mycelium_ip)}</td>
           <td>${d.contract_id ? `<span class="ip-text">${d.contract_id}</span>` : ''}</td>
           <td style="text-align:right">
-            <input type="text" class="project-input" placeholder="project name" />
             <div class="actions-row">
-              <button class="btn btn-primary" data-action="create" data-id="${d.id}">Create</button>
-              <button class="btn btn-ghost" data-action="run" data-id="${d.id}">Run</button>
-              <button class="btn btn-ghost" data-action="publish" data-id="${d.id}">Publish</button>
               <button class="btn btn-ghost" data-action="address" data-id="${d.id}">Address</button>
               <button class="btn btn-ghost" data-action="commands" data-id="${d.id}">Commands</button>
               <button class="btn btn-ghost" data-action="connect" data-id="${d.id}">Connect</button>
@@ -1341,9 +1719,13 @@ async function loadDeployments() {
           btn.addEventListener('click', () => setDeploymentContext(d));
         } else if (action === 'connect') {
           btn.addEventListener('click', () => openShellForDeployment(d));
-        } else {
-          const input = tr.querySelector('.project-input');
-          btn.addEventListener('click', () => handleProjectAction(d, action, input, btn));
+        }
+      });
+
+      tr.addEventListener('click', (e) => {
+        const isButton = e.target.closest('button');
+        if (!isButton) {
+          setDeploymentContext(d);
         }
       });
 
@@ -1351,6 +1733,22 @@ async function loadDeployments() {
     });
 
     updateDeploymentSelectionUI();
+
+    // Auto-select a sensible default deployment when none is selected yet.
+    if (!deploymentContext && deployments.length) {
+      let preferred = null;
+      deployments.forEach((dep) => {
+        if (dep.app_name === 'tfgrid-ai-stack') {
+          preferred = dep; // last tfgrid-ai-stack wins
+        }
+      });
+      if (!preferred) {
+        preferred = deployments[deployments.length - 1];
+      }
+      if (preferred) {
+        setDeploymentContext(preferred);
+      }
+    }
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="6">Failed to load deployments: ${err.message}</td></tr>`;
   }
@@ -1455,7 +1853,6 @@ async function startDeployment(appName, button) {
   }
 }
 
-// ... (rest of the code remains the same)
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('log-close').addEventListener('click', hideLogPanel);
 
@@ -1567,4 +1964,5 @@ window.addEventListener('DOMContentLoaded', () => {
   loadDeployments();
   loadCommands();
   loadPreferences();
+  renderAppActionsPanel();
 });
