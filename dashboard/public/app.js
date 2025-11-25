@@ -528,6 +528,14 @@ function renderAiStackActions(panel) {
         <p class="card-subtitle">Create, run, and publish AI projects on the selected deployment.</p>
       </div>
       <div class="card-body">
+        <div class="ai-stack-auth-banner">
+          <div id="ai-stack-auth-text">Checking Qwen authentication...</div>
+          <div class="ai-stack-auth-actions">
+            <button type="button" id="ai-stack-login-btn" class="btn btn-ghost btn-small">Login to Qwen</button>
+            <button type="button" id="ai-stack-auth-refresh" class="btn btn-ghost btn-small">Check again</button>
+          </div>
+        </div>
+
         <div class="form-section">
           <h4>Create Project</h4>
           <form id="ai-stack-create-form">
@@ -639,6 +647,93 @@ function renderAiStackActions(panel) {
   `;
 
   const createForm = panel.querySelector('#ai-stack-create-form');
+  const runForm = panel.querySelector('#ai-stack-run-form');
+  const publishForm = panel.querySelector('#ai-stack-publish-form');
+
+  const createButton = createForm?.querySelector('button[type="submit"]') || null;
+  const runButton = runForm?.querySelector('button[type="submit"]') || null;
+  const publishButton = publishForm?.querySelector('button[type="submit"]') || null;
+
+  const authText = panel.querySelector('#ai-stack-auth-text');
+  const loginButton = panel.querySelector('#ai-stack-login-btn');
+  const refreshButton = panel.querySelector('#ai-stack-auth-refresh');
+
+  function setProjectButtonsEnabled(enabled) {
+    if (createButton) createButton.disabled = !enabled;
+    if (runButton) runButton.disabled = !enabled;
+    if (publishButton) publishButton.disabled = !enabled;
+  }
+
+  async function refreshQwenAuth() {
+    if (!authText) return;
+    authText.textContent = 'Checking Qwen authentication...';
+    setProjectButtonsEnabled(false);
+
+    try {
+      const res = await fetchJSON(`/api/deployments/${deployment.id}/qwen-auth`);
+      if (res && res.authenticated) {
+        authText.textContent = 'Qwen: Connected. You can create, run, and publish projects.';
+        setProjectButtonsEnabled(true);
+      } else {
+        authText.textContent = 'Qwen: Not authenticated. Click "Login to Qwen" to start the OAuth flow, then complete it in your browser.';
+        setProjectButtonsEnabled(false);
+      }
+    } catch (err) {
+      authText.textContent = `Failed to check Qwen authentication: ${err.message}`;
+      setProjectButtonsEnabled(false);
+    }
+  }
+
+  if (refreshButton) {
+    refreshButton.addEventListener('click', () => {
+      refreshQwenAuth();
+    });
+  }
+
+  if (loginButton) {
+    loginButton.addEventListener('click', async () => {
+      const deploymentNow = deploymentContext;
+      if (!deploymentNow) {
+        showLogPanel('No deployment selected', '');
+        setLogContent('Select a tfgrid-ai-stack deployment first.');
+        return;
+      }
+
+      const originalText = loginButton.textContent || 'Login to Qwen';
+
+      showLogPanel('Login to Qwen', `Deployment ${deploymentNow.id} (${deploymentNow.app_name || ''})`);
+      setLogContent('Starting tfgrid-compose login --non-interactive... This will print an OAuth URL; open it in your browser and complete the flow.');
+
+      loginButton.disabled = true;
+      loginButton.textContent = 'Logging in...';
+
+      try {
+        const res = await fetchJSON(`/api/deployments/${deploymentNow.id}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const jobId = res.job_id;
+        if (!jobId) throw new Error('Dashboard backend did not return job_id');
+        registerJob(jobId, {
+          title: 'Login to Qwen',
+          subtitle: `Deployment ${deploymentNow.id} (${deploymentNow.app_name || ''})`,
+          initialLog: 'Starting tfgrid-compose login --non-interactive...',
+        });
+        await pollJob(jobId, loginButton, originalText);
+        await refreshQwenAuth();
+      } catch (err) {
+        setLogContent(`Failed to start login: ${err.message}`);
+        loginButton.disabled = false;
+        loginButton.textContent = originalText;
+      }
+    });
+  }
+
+  // Initially disable project actions until we know auth state
+  setProjectButtonsEnabled(false);
+  refreshQwenAuth();
+
   if (createForm) {
     createForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -724,7 +819,6 @@ function renderAiStackActions(panel) {
     });
   }
 
-  const runForm = panel.querySelector('#ai-stack-run-form');
   if (runForm) {
     runForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -786,7 +880,6 @@ function renderAiStackActions(panel) {
     });
   }
 
-  const publishForm = panel.querySelector('#ai-stack-publish-form');
   if (publishForm) {
     publishForm.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1719,13 +1812,6 @@ async function loadDeployments() {
           btn.addEventListener('click', () => setDeploymentContext(d));
         } else if (action === 'connect') {
           btn.addEventListener('click', () => openShellForDeployment(d));
-        }
-      });
-
-      tr.addEventListener('click', (e) => {
-        const isButton = e.target.closest('button');
-        if (!isButton) {
-          setDeploymentContext(d);
         }
       });
 

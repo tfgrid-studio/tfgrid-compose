@@ -758,6 +758,64 @@ app.get('/api/jobs/:id', (req, res) => {
   });
 });
 
+// Check Qwen authentication status for a specific deployment (tfgrid-ai-stack)
+// Uses the app-level 'whoami' command when available.
+app.get('/api/deployments/:id/qwen-auth', async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    await execAsync(`${TFGRID_COMPOSE_BIN} select ${id}`, {
+      cwd: HOME_DIR || process.cwd(),
+    });
+  } catch (err) {
+    log('Error selecting deployment for qwen-auth', id, '-', err.message);
+    return res.status(500).json({ error: 'Failed to select deployment', details: err.message });
+  }
+
+  let stdout = '';
+  try {
+    const result = await execAsync(`${TFGRID_COMPOSE_BIN} whoami`, {
+      cwd: HOME_DIR || process.cwd(),
+    });
+    stdout = result.stdout || '';
+  } catch (err) {
+    stdout = (err && err.stdout) || '';
+    log('Error running whoami for qwen-auth', id, '-', err.message || err);
+  }
+
+  const authenticated = stdout.includes('✅ Authenticated');
+
+  res.json({
+    authenticated,
+  });
+});
+
+// Login to Qwen on a specific deployment (tfgrid-compose select + login --non-interactive)
+// This uses the app's manifest-defined 'login' command when available, with a
+// non-interactive mode so it can be run as a dashboard job.
+app.post('/api/deployments/:id/login', async (req, res) => {
+  const id = req.params.id;
+
+  try {
+    await execAsync(`${TFGRID_COMPOSE_BIN} select ${id}`, {
+      cwd: HOME_DIR || process.cwd(),
+    });
+  } catch (err) {
+    log('Error selecting deployment for login', id, '-', err.message);
+    return res.status(500).json({ error: 'Failed to select deployment', details: err.message });
+  }
+
+  const args = ['login', '--non-interactive'];
+  const job = spawnJob(TFGRID_COMPOSE_BIN, args);
+  log('Started login job', job.id, 'for deployment', id);
+
+  res.status(202).json({
+    job_id: job.id,
+    status: job.status,
+    command: job.command,
+  });
+});
+
 // Create project on a specific deployment (tfgrid-compose select + create)
 // Supports both simple payloads ({ projectName }) and rich non-interactive flags
 // for tfgrid-ai-stack create flow.
