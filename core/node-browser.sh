@@ -53,7 +53,7 @@ show_node_row() {
     local total_disk_gb_raw=$(awk "BEGIN {printf \"%.2f\", $total_disk_bytes / 1024 / 1024 / 1024}")
     local total_disk_gb=$(echo "$total_disk_gb_raw" | sed 's/0*$//' | sed 's/\.$//')
 
-    local ipv4=$(echo "$node" | jq -r 'if .public_config.ipv4 | length > 0 then "Yes" else "No" end')
+    local ipv4=$(echo "$node" | jq -r 'if (.publicConfig.ipv4 // .public_config.ipv4) | length > 0 then "Yes" else "No" end')
     local uptime_days=$(( $(echo "$node" | jq -r '.uptime // 0') / 86400 ))
 
     if is_favorite "$node_id"; then
@@ -110,8 +110,8 @@ show_node_details() {
     echo "  Disk: ${used_disk_gb}/${total_disk_gb} GB"
 
     # Network
-    local ipv4_count=$(echo "$node" | jq -r '.public_config.ipv4 | length')
-    local ipv6_count=$(echo "$node" | jq -r '.public_config.ipv6 | length')
+    local ipv4_count=$(echo "$node" | jq -r 'if (.publicConfig.ipv4 // .public_config.ipv4) | length > 0 then 1 else 0 end')
+    local ipv6_count=$(echo "$node" | jq -r 'if (.publicConfig.ipv6 // .public_config.ipv6) | length > 0 then 1 else 0 end')
 
     echo ""
     echo "Network:"
@@ -585,7 +585,7 @@ show_farm_nodes() {
         sort_by(.status != "up") |
         sort_by(.uptime) | reverse |
         .[] |
-        "\(.nodeId) \(.farmName) \(.country) \(.total_resources.cru) \((.total_resources.mru / 1024 / 1024 / 1024)) \(.public_config.ipv4 | length > 0) \(((.used_resources.cru / (.total_resources.cru | tostring | tonumber)) * 100 | floor)) \(.uptime / 86400 | floor)"
+        "\(.nodeId) \(.farmName) \(.country) \(.total_resources.cru) \((.total_resources.mru / 1024 / 1024 / 1024)) \(((.publicConfig.ipv4 // .public_config.ipv4) | length > 0)) \(((.used_resources.cru / (.total_resources.cru | tostring | tonumber)) * 100 | floor)) \(.uptime / 86400 | floor)"
     ' | while IFS= read -r line; do
         local node_id=$(echo "$line" | awk '{print $1}')
         local farm=$(echo "$line" | awk '{print $2}')
