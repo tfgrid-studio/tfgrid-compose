@@ -48,7 +48,8 @@ show_node_row() {
     local total_ram_gb=$(( $(echo "$node" | jq -r '.total_resources.mru // 0') / 1024 / 1024 / 1024 ))
 
     local total_disk_bytes=$(echo "$node" | jq -r '.total_resources.sru // 0')
-    local total_disk_tb=$(awk "BEGIN {printf \"%.1f\", $total_disk_bytes / 1024 / 1024 / 1024 / 1024}")
+    local total_disk_gb_raw=$(awk "BEGIN {printf \"%.2f\", $total_disk_bytes / 1024 / 1024 / 1024}")
+    local total_disk_gb=$(echo "$total_disk_gb_raw" | sed 's/0*$//' | sed 's/\.$//')
 
     local ipv4=$(echo "$node" | jq -r 'if .public_config.ipv4 | length > 0 then "Yes" else "No" end')
     local uptime_days=$(( $(echo "$node" | jq -r '.uptime // 0') / 86400 ))
@@ -58,7 +59,7 @@ show_node_row() {
     fi
 
     printf "%-6s %-20s %-15s %-6s %-6s %-6s %-6s %-8s %-10s\n" \
-        "${node_id}${is_fav}${status_indicator}" "$farm" "$location" "$total_cpu" "${total_ram_gb}G" "${total_disk_tb}T" "$ipv4" "${cpu_load}%" "${uptime_days}d"
+        "${node_id}${is_fav}${status_indicator}" "$farm" "$location" "$total_cpu" "${total_ram_gb}G" "${total_disk_gb}GB" "$ipv4" "${cpu_load}%" "${uptime_days}d"
 }
 
 # Show detailed node information
@@ -91,14 +92,16 @@ show_node_details() {
 
     local total_disk_bytes=$(echo "$node" | jq -r '.total_resources.sru // 0')
     local used_disk_bytes=$(echo "$node" | jq -r '.used_resources.sru // 0')
-    local total_disk_tb=$(awk "BEGIN {printf \"%.1f\", $total_disk_bytes / 1024 / 1024 / 1024 / 1024}")
-    local used_disk_tb=$(awk "BEGIN {printf \"%.1f\", $used_disk_bytes / 1024 / 1024 / 1024 / 1024}")
+    local total_disk_gb_raw=$(awk "BEGIN {printf \"%.2f\", $total_disk_bytes / 1024 / 1024 / 1024}")
+    local used_disk_gb_raw=$(awk "BEGIN {printf \"%.2f\", $used_disk_bytes / 1024 / 1024 / 1024}")
+    local total_disk_gb=$(echo "$total_disk_gb_raw" | sed 's/0*$//' | sed 's/\.$//')
+    local used_disk_gb=$(echo "$used_disk_gb_raw" | sed 's/0*$//' | sed 's/\.$//')
 
     echo ""
-    echo "Resources:"
+    echo "Utilized Resources:"
     echo "  CPU: ${used_cpu}/${total_cpu} cores (${cpu_load}% used)"
     echo "  RAM: ${used_ram_gb}/${total_ram_gb} GB"
-    echo "  Disk: ${used_disk_tb}/${total_disk_tb} TB"
+    echo "  Disk: ${used_disk_gb}/${total_disk_gb} GB"
 
     # Network
     local ipv4_count=$(echo "$node" | jq -r '.public_config.ipv4 | length')
@@ -474,7 +477,7 @@ show_favorites() {
     rm -f "$tmp_online" "$tmp_offline"
     echo ""
     echo "Legend: ID=Node ID, Farm=Farm Name, Location=City/Country, CPU=Total Cores"
-    echo "        RAM=Total GB, Disk=Total TB, IPv4=IPv4 Available, Load=CPU Usage %, Uptime=Days"
+    echo "        RAM=Total GB, Disk=Total GB, IPv4=IPv4 Available, Load=CPU Usage %, Uptime=Days"
     echo "        🟢 = Online node | 🔴 = Offline node | ★ = Favorite"
 }
 
