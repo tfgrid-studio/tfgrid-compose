@@ -478,6 +478,7 @@ show_help() {
     echo -e "      ${GREEN}--disk-type${NC} <type> Disk type hint (e.g., ssd, hdd)"
     echo -e "      ${GREEN}--ssd${NC} <size>      Shorthand for --disk=<size> --disk-type=ssd"
     echo -e "      ${GREEN}--size${NC} <profile>  Size profile: dev, small, medium, large, xlarge"
+    echo -e "      ${GREEN}--ipv4${NC}             Enable public IPv4 for single-vm pattern (can be overridden in manifest)"
     echo -e "  ${GREEN}down${NC} [app]            Destroy a deployment"
     echo -e "  ${GREEN}clean${NC}                 Clean up local state directory"
     echo ""

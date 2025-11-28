@@ -575,6 +575,7 @@ case "$COMMAND" in
         CUSTOM_MIN_UPTIME_DAYS=""
         CUSTOM_SIZE=""
         CUSTOM_DISK_TYPE=""
+        CUSTOM_IPV4=""
         
         while [[ $# -gt 0 ]]; do
             case $1 in
@@ -633,6 +634,30 @@ case "$COMMAND" in
                         --network)
                             CUSTOM_NETWORK="$2"
                             shift 2
+                            ;;
+                        --ipv4)
+                            # Optional boolean argument (true/false); default true when omitted
+                            if [ $# -gt 1 ] && { [ "$2" = "true" ] || [ "$2" = "false" ]; }; then
+                                CUSTOM_IPV4="$2"
+                                shift 2
+                            else
+                                CUSTOM_IPV4="true"
+                                shift
+                            fi
+                            ;;
+                        --ipv4=*)
+                            local ipv4_value
+                            ipv4_value="${1#--ipv4=}"
+                            if [ "$ipv4_value" = "true" ] || [ "$ipv4_value" = "false" ]; then
+                                CUSTOM_IPV4="$ipv4_value"
+                            else
+                                CUSTOM_IPV4="true"
+                            fi
+                            shift
+                            ;;
+                        --no-ipv4)
+                            CUSTOM_IPV4="false"
+                            shift
                             ;;
                         --disk-type)
                             CUSTOM_DISK_TYPE="$2"
@@ -743,6 +768,7 @@ case "$COMMAND" in
         export CUSTOM_MIN_UPTIME_DAYS
         export CUSTOM_SIZE
         export CUSTOM_DISK_TYPE
+        export CUSTOM_IPV4
         
         # Handle cache refresh logic
         # --force implies --refresh unless --no-refresh is specified

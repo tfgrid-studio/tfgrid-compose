@@ -123,7 +123,7 @@ deploy_app() {
     MANIFEST_DISK=$(yaml_get "$APP_MANIFEST" "resources.disk.recommended" || yaml_get "$APP_MANIFEST" "resources.disk.min" || echo "50")
 
     # Read manifest minimums (used for size profiles and validation)
-    local MIN_CPU MIN_MEM MIN_DISK
+    local MIN_CPU MIN_MEM MIN_DISK MANIFEST_IPV4 DEPLOY_IPV4
     MIN_CPU=$(yaml_get "$APP_MANIFEST" "resources.cpu.min" 2>/dev/null || echo "")
     MIN_MEM=$(yaml_get "$APP_MANIFEST" "resources.memory.min" 2>/dev/null || echo "")
     MIN_DISK=$(yaml_get "$APP_MANIFEST" "resources.disk.min" 2>/dev/null || echo "")
@@ -135,6 +135,21 @@ deploy_app() {
     [ -z "$MIN_CPU" ] && MIN_CPU="$MANIFEST_CPU"
     [ -z "$MIN_MEM" ] && MIN_MEM="$MANIFEST_MEM"
     [ -z "$MIN_DISK" ] && MIN_DISK="$MANIFEST_DISK"
+
+    # Determine default public IPv4 behavior from manifest (network.public_ipv4)
+    MANIFEST_IPV4=$(yaml_get "$APP_MANIFEST" "network.public_ipv4" 2>/dev/null || echo "")
+    [ "$MANIFEST_IPV4" = "null" ] && MANIFEST_IPV4=""
+    case "$MANIFEST_IPV4" in
+        true|True|TRUE|yes|on|1)
+            MANIFEST_IPV4="true"
+            ;;
+        false|False|FALSE|no|off|0)
+            MANIFEST_IPV4="false"
+            ;;
+        *)
+            MANIFEST_IPV4=""
+            ;;
+    esac
 
     # Apply size profiles when requested (dev/small/medium/large/xlarge)
     if [ -n "${CUSTOM_SIZE:-}" ]; then
@@ -190,6 +205,23 @@ deploy_app() {
     elif [ -n "${TF_VAR_vm_disk_type:-}" ]; then
         DEPLOY_DISK_TYPE="$TF_VAR_vm_disk_type"
     fi
+
+    # Determine IPv4 behavior (default from manifest, override via CLI)
+    if [ -n "${CUSTOM_IPV4:-}" ]; then
+        case "$CUSTOM_IPV4" in
+            true|false)
+                DEPLOY_IPV4="$CUSTOM_IPV4"
+                ;;
+            *)
+                log_warning "Invalid value for --ipv4: $CUSTOM_IPV4 (expected true|false). Using 'true'."
+                DEPLOY_IPV4="true"
+                ;;
+        esac
+    else
+        DEPLOY_IPV4="$MANIFEST_IPV4"
+    fi
+
+    [ -z "$DEPLOY_IPV4" ] && DEPLOY_IPV4="false"
 
     if [ "$PATTERN_NAME" = "single-vm" ]; then
         # Override manifest resources from single-vm specific config when available
@@ -311,6 +343,7 @@ deploy_app() {
             export TF_VAR_vm_cpu=$DEPLOY_CPU
             export TF_VAR_vm_mem=$DEPLOY_MEM
             export TF_VAR_vm_disk=$DEPLOY_DISK
+            export TF_VAR_vm_public_ipv4=$DEPLOY_IPV4
             if [ -n "$DEPLOY_DISK_TYPE" ]; then
                 export TF_VAR_vm_disk_type=$DEPLOY_DISK_TYPE
             fi
@@ -375,6 +408,7 @@ EOF
     if [ -n "$DEPLOY_DISK_TYPE" ]; then
         echo "deploy_disk_type: $DEPLOY_DISK_TYPE" >> "$STATE_DIR/state.yaml"
     fi
+    echo "deploy_ipv4: $DEPLOY_IPV4" >> "$STATE_DIR/state.yaml"
     
     log_success "Metadata saved"
     echo ""

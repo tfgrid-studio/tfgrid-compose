@@ -57,6 +57,12 @@ variable "vm_disk" {
   default = 50 # 50GB storage
 }
 
+variable "vm_public_ipv4" {
+  type        = bool
+  default     = false
+  description = "Whether the VM should get a public IPv4 address"
+}
+
 # ==============================================================================
 # LOCALS
 # ==============================================================================
@@ -130,6 +136,7 @@ resource "grid_deployment" "vm" {
     memory           = var.vm_mem
     rootfs_size      = var.vm_disk * 1024  # Convert GB to MB
     entrypoint       = "/sbin/zinit init"
+    publicip         = var.vm_public_ipv4
     mycelium_ip_seed = random_bytes.vm_ip_seed.hex
     env_vars = {
       SSH_KEY = local.ssh_key
@@ -147,12 +154,16 @@ resource "grid_deployment" "vm" {
 # ==============================================================================
 
 output "primary_ip" {
-  value       = try(grid_deployment.vm.vms[0].ip, "")
-  description = "Primary IP address for SSH connection (WireGuard IP)"
+  value = var.vm_public_ipv4 ? (
+    try(grid_deployment.vm.vms[0].computedip, "")
+  ) : (
+    try(grid_deployment.vm.vms[0].ip, "")
+  )
+  description = "Primary IP address for SSH connection (public IPv4 when enabled, otherwise WireGuard IP)"
 }
 
 output "primary_ip_type" {
-  value       = "wireguard"
+  value       = var.vm_public_ipv4 ? "public" : "wireguard"
   description = "Type of primary IP (wireguard, public, or mycelium)"
 }
 
@@ -173,6 +184,16 @@ output "node_ids" {
 output "deployment_id" {
   value       = random_string.deployment_id.result
   description = "Unique deployment identifier (8 char random string)"
+}
+
+output "public_ip" {
+  value       = try(grid_deployment.vm.vms[0].computedip, "")
+  description = "Public IPv4 address of the VM (if enabled)"
+}
+
+output "wireguard_ip" {
+  value       = try(grid_deployment.vm.vms[0].ip, "")
+  description = "WireGuard IP of the VM"
 }
 
 output "mycelium_ip" {
