@@ -137,6 +137,59 @@ yaml_get() {
     yq eval ".${key}" "$file" 2>/dev/null || echo ""
 }
 
+parse_memory_to_mb() {
+    local value="$1"
+    if [ -z "$value" ]; then
+        echo ""
+        return 0
+    fi
+    local v
+    v=$(echo "$value" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+    if [[ "$v" =~ ^[0-9]+$ ]]; then
+        echo "$v"
+        return 0
+    fi
+    if [[ "$v" =~ ^([0-9]+)g(b)?$ ]]; then
+        local n="${BASH_REMATCH[1]}"
+        echo $((n * 1024))
+        return 0
+    fi
+    if [[ "$v" =~ ^([0-9]+)m(b)?$ ]]; then
+        local n="${BASH_REMATCH[1]}"
+        echo "$n"
+        return 0
+    fi
+    log_error "Invalid memory value: $value (expected like 8192, 8G, 8GB)"
+    return 1
+}
+
+parse_disk_to_gb() {
+    local value="$1"
+    if [ -z "$value" ]; then
+        echo ""
+        return 0
+    fi
+    local v
+    v=$(echo "$value" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+    if [[ "$v" =~ ^[0-9]+$ ]]; then
+        echo "$v"
+        return 0
+    fi
+    if [[ "$v" =~ ^([0-9]+)g(b)?$ ]]; then
+        local n="${BASH_REMATCH[1]}"
+        echo "$n"
+        return 0
+    fi
+    if [[ "$v" =~ ^([0-9]+)m(b)?$ ]]; then
+        local mb="${BASH_REMATCH[1]}"
+        local gb=$(((mb + 1023) / 1024))
+        echo "$gb"
+        return 0
+    fi
+    log_error "Invalid disk value: $value (expected like 200, 200G, 200GB)"
+    return 1
+}
+
 # Validate directory exists
 validate_directory() {
     local dir="$1"
@@ -584,6 +637,8 @@ export -f command_exists
 export -f validate_directory
 export -f validate_file
 export -f yaml_get
+export -f parse_memory_to_mb
+export -f parse_disk_to_gb
 export -f state_save
 export -f state_get
 export -f state_clear

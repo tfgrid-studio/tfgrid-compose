@@ -122,6 +122,75 @@ deploy_app() {
     MANIFEST_MEM=$(yaml_get "$APP_MANIFEST" "resources.memory.recommended" || yaml_get "$APP_MANIFEST" "resources.memory.min" || echo "4096")
     MANIFEST_DISK=$(yaml_get "$APP_MANIFEST" "resources.disk.recommended" || yaml_get "$APP_MANIFEST" "resources.disk.min" || echo "50")
 
+    # Read manifest minimums (used for size profiles and validation)
+    local MIN_CPU MIN_MEM MIN_DISK
+    MIN_CPU=$(yaml_get "$APP_MANIFEST" "resources.cpu.min" 2>/dev/null || echo "")
+    MIN_MEM=$(yaml_get "$APP_MANIFEST" "resources.memory.min" 2>/dev/null || echo "")
+    MIN_DISK=$(yaml_get "$APP_MANIFEST" "resources.disk.min" 2>/dev/null || echo "")
+
+    [ "$MIN_CPU" = "null" ] && MIN_CPU=""
+    [ "$MIN_MEM" = "null" ] && MIN_MEM=""
+    [ "$MIN_DISK" = "null" ] && MIN_DISK=""
+
+    [ -z "$MIN_CPU" ] && MIN_CPU="$MANIFEST_CPU"
+    [ -z "$MIN_MEM" ] && MIN_MEM="$MANIFEST_MEM"
+    [ -z "$MIN_DISK" ] && MIN_DISK="$MANIFEST_DISK"
+
+    # Apply size profiles when requested (dev/small/medium/large/xlarge)
+    if [ -n "${CUSTOM_SIZE:-}" ]; then
+        local size_lc
+        size_lc=$(echo "$CUSTOM_SIZE" | tr '[:upper:]' '[:lower:]')
+        case "$size_lc" in
+            dev)
+                MANIFEST_CPU="$MIN_CPU"
+                MANIFEST_MEM="$MIN_MEM"
+                MANIFEST_DISK="$MIN_DISK"
+                ;;
+            small)
+                # Use recommended values (already MANIFEST_*)
+                ;;
+            medium)
+                MANIFEST_CPU=$((MANIFEST_CPU * 2))
+                MANIFEST_MEM=$((MANIFEST_MEM * 2))
+                MANIFEST_DISK=$((MANIFEST_DISK * 2))
+                ;;
+            large)
+                MANIFEST_CPU=$((MANIFEST_CPU * 4))
+                MANIFEST_MEM=$((MANIFEST_MEM * 4))
+                MANIFEST_DISK=$((MANIFEST_DISK * 4))
+                ;;
+            xlarge)
+                MANIFEST_CPU=$((MANIFEST_CPU * 8))
+                MANIFEST_MEM=$((MANIFEST_MEM * 8))
+                MANIFEST_DISK=$((MANIFEST_DISK * 8))
+                ;;
+            *)
+                log_warning "Unknown size profile: $CUSTOM_SIZE (expected: dev/small/medium/large/xlarge)"
+                ;;
+        esac
+    fi
+
+    # Normalize CLI overrides for memory/disk (accept 8G, 8192M, 200G, etc.)
+    if [ -n "${CUSTOM_MEM:-}" ]; then
+        local parsed_mem
+        parsed_mem=$(parse_memory_to_mb "$CUSTOM_MEM") || return 1
+        CUSTOM_MEM="$parsed_mem"
+    fi
+
+    if [ -n "${CUSTOM_DISK:-}" ]; then
+        local parsed_disk
+        parsed_disk=$(parse_disk_to_gb "$CUSTOM_DISK") || return 1
+        CUSTOM_DISK="$parsed_disk"
+    fi
+
+    # Disk type (e.g. ssd/hdd) can be passed from CLI or env and forwarded to Terraform
+    local DEPLOY_DISK_TYPE=""
+    if [ -n "${CUSTOM_DISK_TYPE:-}" ]; then
+        DEPLOY_DISK_TYPE="$CUSTOM_DISK_TYPE"
+    elif [ -n "${TF_VAR_vm_disk_type:-}" ]; then
+        DEPLOY_DISK_TYPE="$TF_VAR_vm_disk_type"
+    fi
+
     if [ "$PATTERN_NAME" = "single-vm" ]; then
         # Override manifest resources from single-vm specific config when available
         local vm_cpu vm_mem vm_disk
@@ -144,6 +213,20 @@ deploy_app() {
         DEPLOY_CPU=${CUSTOM_CPU:-${TF_VAR_ai_agent_cpu:-$MANIFEST_CPU}}
         DEPLOY_MEM=${CUSTOM_MEM:-${TF_VAR_ai_agent_mem:-$MANIFEST_MEM}}
         DEPLOY_DISK=${CUSTOM_DISK:-${TF_VAR_ai_agent_disk:-$MANIFEST_DISK}}
+    fi
+
+    # Enforce manifest minimums to prevent under-provisioning
+    if [ -n "$MIN_CPU" ] && [ "$DEPLOY_CPU" -lt "$MIN_CPU" ]; then
+        log_error "Requested CPU ($DEPLOY_CPU) below app minimum ($MIN_CPU)"
+        return 1
+    fi
+    if [ -n "$MIN_MEM" ] && [ "$DEPLOY_MEM" -lt "$MIN_MEM" ]; then
+        log_error "Requested memory (${DEPLOY_MEM}MB) below app minimum (${MIN_MEM}MB)"
+        return 1
+    fi
+    if [ -n "$MIN_DISK" ] && [ "$DEPLOY_DISK" -lt "$MIN_DISK" ]; then
+        log_error "Requested disk (${DEPLOY_DISK}GB) below app minimum (${MIN_DISK}GB)"
+        return 1
     fi
 
     DEPLOY_NETWORK=${CUSTOM_NETWORK:-${TF_VAR_tfgrid_network:-"main"}}
@@ -228,6 +311,9 @@ deploy_app() {
             export TF_VAR_vm_cpu=$DEPLOY_CPU
             export TF_VAR_vm_mem=$DEPLOY_MEM
             export TF_VAR_vm_disk=$DEPLOY_DISK
+            if [ -n "$DEPLOY_DISK_TYPE" ]; then
+                export TF_VAR_vm_disk_type=$DEPLOY_DISK_TYPE
+            fi
             log_info "Exporting single-vm variables: node=$DEPLOY_NODE, cpu=$DEPLOY_CPU, mem=$DEPLOY_MEM, disk=$DEPLOY_DISK"
             ;;
         gateway)
@@ -236,6 +322,9 @@ deploy_app() {
             export TF_VAR_gateway_cpu=$DEPLOY_CPU
             export TF_VAR_gateway_mem=$DEPLOY_MEM
             export TF_VAR_gateway_disk=$DEPLOY_DISK
+            if [ -n "$DEPLOY_DISK_TYPE" ]; then
+                export TF_VAR_gateway_disk_type=$DEPLOY_DISK_TYPE
+            fi
             # Backend nodes would need additional selection logic
             log_warning "Gateway pattern: Using single node for gateway. Multi-node selection coming in v0.11.0"
             ;;
@@ -245,6 +334,9 @@ deploy_app() {
             export TF_VAR_management_cpu=$DEPLOY_CPU
             export TF_VAR_management_mem=$DEPLOY_MEM
             export TF_VAR_management_disk=$DEPLOY_DISK
+            if [ -n "$DEPLOY_DISK_TYPE" ]; then
+                export TF_VAR_management_disk_type=$DEPLOY_DISK_TYPE
+            fi
             log_warning "K3s pattern: Using single node for management. Multi-node selection coming in v0.11.0"
             ;;
         *)
@@ -253,6 +345,9 @@ deploy_app() {
             export TF_VAR_vm_cpu=$DEPLOY_CPU
             export TF_VAR_vm_mem=$DEPLOY_MEM
             export TF_VAR_vm_disk=$DEPLOY_DISK
+            if [ -n "$DEPLOY_DISK_TYPE" ]; then
+                export TF_VAR_vm_disk_type=$DEPLOY_DISK_TYPE
+            fi
             log_warning "Unknown pattern '$PATTERN_NAME', using generic vm_* variables"
             ;;
     esac
