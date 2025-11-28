@@ -46,7 +46,9 @@ show_node_row() {
     local cpu_load=$(( used_cpu * 100 / (total_cpu > 0 ? total_cpu : 1) ))
 
     local total_ram_gb=$(( $(echo "$node" | jq -r '.total_resources.mru // 0') / 1024 / 1024 / 1024 ))
-    local total_disk_tb=$(( $(echo "$node" | jq -r '.total_resources.sru // 0') / 1024 / 1024 / 1024 / 1024 ))
+
+    local total_disk_bytes=$(echo "$node" | jq -r '.total_resources.sru // 0')
+    local total_disk_tb=$(awk "BEGIN {printf \"%.1f\", $total_disk_bytes / 1024 / 1024 / 1024 / 1024}")
 
     local ipv4=$(echo "$node" | jq -r 'if .public_config.ipv4 | length > 0 then "Yes" else "No" end')
     local uptime_days=$(( $(echo "$node" | jq -r '.uptime // 0') / 86400 ))
@@ -87,8 +89,10 @@ show_node_details() {
     local total_ram_gb=$(( $(echo "$node" | jq -r '.total_resources.mru // 0') / 1024 / 1024 / 1024 ))
     local used_ram_gb=$(( $(echo "$node" | jq -r '.used_resources.mru // 0') / 1024 / 1024 / 1024 ))
 
-    local total_disk_tb=$(( $(echo "$node" | jq -r '.total_resources.sru // 0') / 1024 / 1024 / 1024 / 1024 ))
-    local used_disk_tb=$(( $(echo "$node" | jq -r '.used_resources.sru // 0') / 1024 / 1024 / 1024 / 1024 ))
+    local total_disk_bytes=$(echo "$node" | jq -r '.total_resources.sru // 0')
+    local used_disk_bytes=$(echo "$node" | jq -r '.used_resources.sru // 0')
+    local total_disk_tb=$(awk "BEGIN {printf \"%.1f\", $total_disk_bytes / 1024 / 1024 / 1024 / 1024}")
+    local used_disk_tb=$(awk "BEGIN {printf \"%.1f\", $used_disk_bytes / 1024 / 1024 / 1024 / 1024}")
 
     echo ""
     echo "Resources:"
