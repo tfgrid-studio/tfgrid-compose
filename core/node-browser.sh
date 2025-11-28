@@ -45,7 +45,9 @@ show_node_row() {
     local used_cpu=$(echo "$node" | jq -r '.used_resources.cru // 0')
     local cpu_load=$(( used_cpu * 100 / (total_cpu > 0 ? total_cpu : 1) ))
 
-    local total_ram_gb=$(( $(echo "$node" | jq -r '.total_resources.mru // 0') / 1024 / 1024 / 1024 ))
+    local total_ram_bytes=$(echo "$node" | jq -r '.total_resources.mru // 0')
+    local total_ram_gb_raw=$(awk "BEGIN {printf \"%.2f\", $total_ram_bytes / 1024 / 1024 / 1024}")
+    local total_ram_gb=$(echo "$total_ram_gb_raw" | sed 's/0*$//' | sed 's/\.$//')
 
     local total_disk_bytes=$(echo "$node" | jq -r '.total_resources.sru // 0')
     local total_disk_gb_raw=$(awk "BEGIN {printf \"%.2f\", $total_disk_bytes / 1024 / 1024 / 1024}")
@@ -59,7 +61,7 @@ show_node_row() {
     fi
 
     printf "%-6s %-20s %-15s %-6s %-6s %-6s %-6s %-8s %-10s\n" \
-        "${node_id}${is_fav}${status_indicator}" "$farm" "$location" "$total_cpu" "${total_ram_gb}G" "${total_disk_gb}GB" "$ipv4" "${cpu_load}%" "${uptime_days}d"
+        "${node_id}${is_fav}${status_indicator}" "$farm" "$location" "$total_cpu" "${total_ram_gb}GB" "${total_disk_gb}GB" "$ipv4" "${cpu_load}%" "${uptime_days}d"
 }
 
 # Show detailed node information
@@ -87,8 +89,12 @@ show_node_details() {
     local used_cpu=$(echo "$node" | jq -r '.used_resources.cru // 0')
     local cpu_load=$(( used_cpu * 100 / (total_cpu > 0 ? total_cpu : 1) ))
 
-    local total_ram_gb=$(( $(echo "$node" | jq -r '.total_resources.mru // 0') / 1024 / 1024 / 1024 ))
-    local used_ram_gb=$(( $(echo "$node" | jq -r '.used_resources.mru // 0') / 1024 / 1024 / 1024 ))
+    local total_ram_bytes=$(echo "$node" | jq -r '.total_resources.mru // 0')
+    local used_ram_bytes=$(echo "$node" | jq -r '.used_resources.mru // 0')
+    local total_ram_gb_raw=$(awk "BEGIN {printf \"%.2f\", $total_ram_bytes / 1024 / 1024 / 1024}")
+    local used_ram_gb_raw=$(awk "BEGIN {printf \"%.2f\", $used_ram_bytes / 1024 / 1024 / 1024}")
+    local total_ram_gb=$(echo "$total_ram_gb_raw" | sed 's/0*$//' | sed 's/\.$//')
+    local used_ram_gb=$(echo "$used_ram_gb_raw" | sed 's/0*$//' | sed 's/\.$//')
 
     local total_disk_bytes=$(echo "$node" | jq -r '.total_resources.sru // 0')
     local used_disk_bytes=$(echo "$node" | jq -r '.used_resources.sru // 0')
