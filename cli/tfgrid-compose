@@ -573,6 +573,8 @@ case "$COMMAND" in
         CUSTOM_MAX_CPU_USAGE=""
         CUSTOM_MAX_DISK_USAGE=""
         CUSTOM_MIN_UPTIME_DAYS=""
+        CUSTOM_SIZE=""
+        CUSTOM_DISK_TYPE=""
         
         while [[ $# -gt 0 ]]; do
             case $1 in
@@ -631,6 +633,32 @@ case "$COMMAND" in
                         --network)
                             CUSTOM_NETWORK="$2"
                             shift 2
+                            ;;
+                        --disk-type)
+                            CUSTOM_DISK_TYPE="$2"
+                            shift 2
+                            ;;
+                        --disk-type=*)
+                            CUSTOM_DISK_TYPE="${1#--disk-type=}"
+                            shift
+                            ;;
+                        --ssd)
+                            CUSTOM_DISK="$2"
+                            CUSTOM_DISK_TYPE="ssd"
+                            shift 2
+                            ;;
+                        --ssd=*)
+                            CUSTOM_DISK="${1#--ssd=}"
+                            CUSTOM_DISK_TYPE="ssd"
+                            shift
+                            ;;
+                        --size)
+                            CUSTOM_SIZE="$2"
+                            shift 2
+                            ;;
+                        --size=*)
+                            CUSTOM_SIZE="${1#--size=}"
+                            shift
                             ;;
                         --blacklist-node)
                             CUSTOM_BLACKLIST_NODES="$2"
@@ -713,6 +741,8 @@ case "$COMMAND" in
         export CUSTOM_MAX_CPU_USAGE
         export CUSTOM_MAX_DISK_USAGE
         export CUSTOM_MIN_UPTIME_DAYS
+        export CUSTOM_SIZE
+        export CUSTOM_DISK_TYPE
         
         # Handle cache refresh logic
         # --force implies --refresh unless --no-refresh is specified

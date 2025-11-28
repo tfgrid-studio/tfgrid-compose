@@ -371,6 +371,10 @@ deploy_mem: $DEPLOY_MEM
 deploy_disk: $DEPLOY_DISK
 deploy_network: $DEPLOY_NETWORK
 EOF
+
+    if [ -n "$DEPLOY_DISK_TYPE" ]; then
+        echo "deploy_disk_type: $DEPLOY_DISK_TYPE" >> "$STATE_DIR/state.yaml"
+    fi
     
     log_success "Metadata saved"
     echo ""
