@@ -771,6 +771,19 @@ deploy_app_source() {
         return 1
     fi
 
+    # Copy app .env to VM so hooks can load the same configuration
+    if [ -f "$APP_DIR/.env" ]; then
+        log_info "Copying app .env to VM..."
+        if ! scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "$APP_DIR/.env" "root@$scp_host:/tmp/app-source/.env" 2>/dev/null; then
+            log_warning "Failed to copy .env to VM ($scp_host)"
+        else
+            log_success ".env copied to VM"
+        fi
+    else
+        log_info "No .env found in app directory; skipping .env copy"
+    fi
+
     # Copy VM-side helper for IP resolution so hooks can use network preference
     if [ -f "$DEPLOYER_ROOT/scripts/get_deployment_ip_vm.sh" ]; then
         log_info "Copying get_deployment_ip_vm helper to VM..."
