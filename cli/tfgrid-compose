@@ -1447,6 +1447,20 @@ address)
         fi
     fi
 
+    # Load primary IP metadata from state (if available)
+    primary_ip=""
+    primary_ip_type=""
+
+    if [ -n "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
+        primary_ip=$(grep "^primary_ip:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
+        primary_ip_type=$(grep "^primary_ip_type:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
+    fi
+
+    # Fallback: if no explicit primary_ip, use network-aware vm_ip
+    if [ -z "$primary_ip" ]; then
+        primary_ip="$vm_ip"
+    fi
+
     echo "📋 Deployment: $DEPLOYMENT_ID"
     echo "🏷️  App: $app_name"
     if [ -n "$contract_id" ] && [ "$contract_id" != "null" ]; then
@@ -1523,16 +1537,35 @@ address)
             # Generic display for other apps
             echo "🌐 Network Addresses:"
             echo ""
-            if [ -n "$vm_ip" ]; then
-                echo "📡 WireGuard (VPN):   $vm_ip"
+
+            if [ -n "$primary_ip" ]; then
+                case "$primary_ip_type" in
+                    public)
+                        echo "📡 Primary IP (public): $primary_ip"
+                        ;;
+                    wireguard)
+                        echo "📡 WireGuard (VPN):     $primary_ip"
+                        ;;
+                    mycelium)
+                        echo "📡 Mycelium (Global):   $primary_ip"
+                        ;;
+                    *)
+                        echo "📡 Primary IP:          $primary_ip"
+                        ;;
+                esac
+                echo ""
+            elif [ -n "$vm_ip" ]; then
+                echo "📡 Primary IP:          $vm_ip"
                 echo ""
             fi
-            if [ -n "$mycelium_ip" ]; then
-                echo "🫚 Mycelium (Global):  $mycelium_ip"
+
+            if [ -n "$mycelium_ip" ] && [ "$primary_ip_type" != "mycelium" ]; then
+                echo "🫚 Mycelium (Global):   $mycelium_ip"
                 echo ""
                 echo "💡 Mycelium provides global IPv6 connectivity!"
                 echo ""
             fi
+
             echo "🔧 Management:"
             echo "  • SSH:             tfgrid-compose ssh $DEPLOYMENT_ID"
             echo "  • Status:          tfgrid-compose status $app_name"
