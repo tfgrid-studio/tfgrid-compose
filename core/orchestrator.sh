@@ -387,6 +387,19 @@ deploy_app() {
     
     log_success "Configuration complete"
     echo ""
+
+    # Show concise deployment summary so operators can verify settings
+    log_step "Deployment configuration summary"
+    local ipv4_status="disabled"
+    if [ "${DEPLOY_IPV4:-false}" = "true" ]; then
+        ipv4_status="enabled"
+    fi
+    local disk_type_summary="${DEPLOY_DISK_TYPE:-auto}"
+    log_info "App: $APP_NAME v$APP_VERSION ($PATTERN_NAME pattern)"
+    log_info "Node: $DEPLOY_NODE (grid network: ${DEPLOY_NETWORK:-main})"
+    log_info "Resources: CPU=${DEPLOY_CPU} vcores, MEM=${DEPLOY_MEM}MB, DISK=${DEPLOY_DISK}GB (type=${disk_type_summary})"
+    log_info "Public IPv4: $ipv4_status"
+    echo ""
     
     # Save deployment metadata
     log_step "Saving deployment metadata..."
