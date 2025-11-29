@@ -37,6 +37,19 @@ case "$PREFERRED_NETWORK" in
         ;;
 esac
 
+# Also capture primary connectivity type and IP (e.g., public vs wireguard)
+PRIMARY_TYPE=""
+PRIMARY_IP_RAW=""
+PRIMARY_IP=""
+if [ -f "$STATE_DIR/state.yaml" ]; then
+    PRIMARY_TYPE=$(grep "^primary_ip_type:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+    PRIMARY_IP_RAW=$(grep "^primary_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+    # Strip CIDR if present (e.g., 185.69.167.160/24 -> 185.69.167.160)
+    if [ -n "$PRIMARY_IP_RAW" ]; then
+        PRIMARY_IP=$(echo "$PRIMARY_IP_RAW" | cut -d'/' -f1)
+    fi
+fi
+
 if [ -z "$VM_IP" ]; then
     log_error "No VM IP found in state"
     exit 1
@@ -88,6 +101,46 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
 done
 
 echo ""
+
+# If Mycelium was preferred but SSH never became ready, and we have a public
+# primary IP, fall back to public IPv4 before giving up.
+if [ "$NETWORK_TYPE" = "Mycelium" ] && [ "$PRIMARY_TYPE" = "public" ] && [ -n "$PRIMARY_IP" ] && [ "$PRIMARY_IP" != "$VM_IP" ]; then
+    log_warning "SSH did not become ready over Mycelium; falling back to public IPv4 ($PRIMARY_IP)"
+
+    VM_IP="$PRIMARY_IP"
+    NETWORK_TYPE="Public IPv4"
+    MAX_ATTEMPTS=10
+    SLEEP_TIME=5
+    ATTEMPT=0
+
+    log_info "Network: $NETWORK_TYPE"
+    log_info "IP: $VM_IP"
+    echo ""
+
+    while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+        ATTEMPT=$((ATTEMPT + 1))
+
+        if ssh -o ConnectTimeout=5 \
+               -o StrictHostKeyChecking=no \
+               -o UserKnownHostsFile=/dev/null \
+               -o BatchMode=yes \
+               -o LogLevel=ERROR \
+               root@"$VM_IP" "echo 'SSH Ready'" >/dev/null 2>&1; then
+            echo ""
+            log_success "SSH is ready over public IPv4! (attempt $ATTEMPT/$MAX_ATTEMPTS)"
+            exit 0
+        fi
+
+        echo -n "."
+
+        if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+            sleep $SLEEP_TIME
+        fi
+    done
+
+    echo ""
+fi
+
 log_error "SSH did not become ready after $MAX_ATTEMPTS attempts"
 echo ""
 log_info "Troubleshooting:"
