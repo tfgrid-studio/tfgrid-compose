@@ -522,15 +522,18 @@ case "$COMMAND" in
         # Determine if input is app name or path
         APP_NAME=""
         APP_PATH=""
+        APP_ORIGIN=""
         
         if [[ "$APP_INPUT" == */* ]] || [[ "$APP_INPUT" == .* ]]; then
             # It's a path (contains / or starts with .)
             APP_PATH="$APP_INPUT"
             APP_NAME=$(basename "$APP_PATH")
+            APP_ORIGIN="custom"
             log_info "Deploying from path: $APP_PATH"
         else
             # It's an app name from registry
             APP_NAME="$APP_INPUT"
+            APP_ORIGIN="registry"
             log_info "Looking up $APP_NAME in registry..."
             
             # Get repo URL from registry
@@ -869,6 +872,9 @@ case "$COMMAND" in
         if ! load_app "$APP_PATH"; then
             exit 1
         fi
+
+        # Export app origin (registry vs custom path) for orchestrator/registry
+        export APP_ORIGIN
         
         # Determine pattern to use
         if [ -z "$PATTERN_NAME" ]; then

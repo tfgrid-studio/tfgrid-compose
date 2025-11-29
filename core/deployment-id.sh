@@ -51,6 +51,23 @@ register_deployment() {
         mycelium_ip=$(grep "^mycelium_ip:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}' || echo "")
     fi
 
+    local origin="${APP_ORIGIN:-}"
+
+    if [ -z "$origin" ] && [ -n "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
+        local app_dir=""
+        app_dir=$(grep "^app_dir:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}' || echo "")
+        if [ -n "$app_dir" ] && [ -n "${APPS_CACHE_DIR:-}" ]; then
+            case "$app_dir" in
+                "$APPS_CACHE_DIR"/*)
+                    origin="registry"
+                    ;;
+                *)
+                    origin="custom"
+                    ;;
+            esac
+        fi
+    fi
+
     # Validate deployment ID format (16 hex chars)
     if ! [[ "$deployment_id" =~ ^[a-f0-9]{16}$ ]]; then
         log_error "register_deployment: invalid deployment ID format: $deployment_id"
@@ -71,6 +88,10 @@ register_deployment() {
     if command_exists yq; then
         # Construct the JSON object safely (include mycelium_ip when available)
         local json_obj="{\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"vm_ip\": \"$vm_ip\", \"mycelium_ip\": \"$mycelium_ip\", \"created_at\": \"$timestamp\", \"status\": \"active\"}"
+
+        if [ -n "$origin" ]; then
+            json_obj=$(echo "$json_obj" | sed 's/}$/, "origin": "'$origin'"}/')
+        fi
 
         if [ -n "$contract_id" ]; then
             json_obj=$(echo "$json_obj" | sed 's/}$/, "contract_id": "'$contract_id'"}/')
@@ -171,19 +192,19 @@ get_all_deployments() {
 		return 0
 	fi
 
-	# Minimal YAML parser for deployments: { id: {app_name, vm_ip, contract_id, status, created_at} }
-	local id="" app_name="" vm_ip="" contract_id="" status="" created_at="" in_vm_ip_block=false
+	# Minimal YAML parser for deployments: { id: {app_name, vm_ip, contract_id, status, created_at, origin} }
+	local id="" app_name="" vm_ip="" contract_id="" status="" created_at="" origin="" in_vm_ip_block=false
 
 	while IFS= read -r line; do
 		# Detect new deployment block: two-space indented 16-hex key ending with ':'
 		if [[ "$line" =~ ^[[:space:]]{2}([a-f0-9]{16}):[[:space:]]*$ ]]; then
 			# Flush previous record if any
 			if [ -n "$id" ]; then
-				echo "$id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+				echo "$id|$app_name|$vm_ip|$contract_id|$status|$created_at|$origin"
 			fi
 
 			id="${BASH_REMATCH[1]}"
-			app_name="" vm_ip="" contract_id="" status="" created_at=""
+			app_name="" vm_ip="" contract_id="" status="" created_at="" origin=""
 			in_vm_ip_block=false
 			continue
 		fi
@@ -230,12 +251,16 @@ get_all_deployments() {
 				created_at="${BASH_REMATCH[1]//\"/}"
 				continue
 			fi
+			if [[ "$line" =~ ^[[:space:]]{4}origin:[[:space:]]*(.*)$ ]]; then
+				origin="${BASH_REMATCH[1]//\"/}"
+				continue
+			fi
 		fi
 	done < "$DEPLOYMENT_REGISTRY"
 
 	# Flush last record
 	if [ -n "$id" ]; then
-		echo "$id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+		echo "$id|$app_name|$vm_ip|$contract_id|$status|$created_at|$origin"
 	fi
 }
 
@@ -415,26 +440,26 @@ list_deployments_docker_style() {
         return 0
     fi
 
-    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS      CONTRACT    AGE"
+    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS      CONTRACT    SOURCE    AGE"
     echo "────────────────────────────────────────────────────────────────────────────"
 
     # Display all deployments
-    echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+    echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at origin; do
         local age=$(calculate_deployment_age "$created_at")
-
-        # Format contract_id - show "N/A" if empty, truncate if too long
-        if [ -z "$contract_id" ] || [ "$contract_id" = "unknown" ]; then
-            contract_id="N/A"
-        elif [ ${#contract_id} -gt 9 ]; then
-            contract_id="${contract_id:0:9}..."
+        local display_contract="$contract_id"
+        if [ -z "$display_contract" ] || [ "$display_contract" = "unknown" ]; then
+            display_contract="N/A"
+        elif [ ${#display_contract} -gt 9 ]; then
+            display_contract="${display_contract:0:9}..."
         fi
 
-        printf "%-16s %-19s %-9s %-12s %-9s %s\n" \
+        printf "%-16s %-19s %-9s %-12s %-9s %-9s %s\n" \
                "$deployment_id" \
                "${app_name:0:19}" \
                "${status:0:9}" \
                "${vm_ip:0:12}" \
-               "$contract_id" \
+               "$display_contract" \
+               "${origin:0:9}" \
                "$age"
     done
 }
@@ -467,10 +492,10 @@ list_deployments_docker_style_active_contracts() {
 
     echo "Deployments (Docker-style):"
     echo ""
-    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS      CONTRACT    AGE"
+    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS      CONTRACT    SOURCE    AGE"
     echo "────────────────────────────────────────────────────────────────────────────"
 
-    echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+    echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at origin; do
         if [ -z "$deployment_id" ]; then
             continue
         fi
@@ -486,6 +511,34 @@ list_deployments_docker_style_active_contracts() {
         local age
         age=$(calculate_deployment_age "$created_at")
 
+        local origin=""
+
+        if command_exists yq; then
+            origin=$(yq eval ".deployments.\"$deployment_id\".origin // \"\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
+            if [ -z "$origin" ]; then
+                local state_dir=""
+                state_dir=$(yq eval ".deployments.\"$deployment_id\".state_dir // \"\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
+                if [ -n "$state_dir" ] && [ -f "$state_dir/state.yaml" ] && [ -n "${APPS_CACHE_DIR:-}" ]; then
+                    local app_dir=""
+                    app_dir=$(grep "^app_dir:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}' || echo "")
+                    if [ -n "$app_dir" ]; then
+                        case "$app_dir" in
+                            "$APPS_CACHE_DIR"/*)
+                                origin="registry"
+                                ;;
+                            *)
+                                origin="custom"
+                                ;;
+                        esac
+                    fi
+                fi
+            fi
+        fi
+
+        if [ -z "$origin" ]; then
+            origin="unknown"
+        fi
+
         local display_contract="$contract_id"
         if [ -z "$display_contract" ] || [ "$display_contract" = "unknown" ]; then
             display_contract="N/A"
@@ -493,12 +546,13 @@ list_deployments_docker_style_active_contracts() {
             display_contract="${display_contract:0:9}..."
         fi
 
-        printf "%-16s %-19s %-9s %-12s %-9s %s\n" \
+        printf "%-16s %-19s %-9s %-12s %-9s %-9s %s\n" \
                "$deployment_id" \
                "${app_name:0:19}" \
                "${status:0:9}" \
                "${vm_ip:0:12}" \
                "$display_contract" \
+               "${origin:0:9}" \
                "$age"
     done
 }
