@@ -797,6 +797,26 @@ deploy_app_source() {
         log_info "No .env found in app directory; skipping .env copy"
     fi
 
+    # Copy prebuilt artifacts tarball to VM if present (optional, app-specific)
+    local artifacts_source=""
+    if [ -n "${APP_ARTIFACT_TARBALL:-}" ]; then
+        artifacts_source="$APP_ARTIFACT_TARBALL"
+    else
+        artifacts_source="$APP_DIR/artifacts/latest.tar.gz"
+    fi
+
+    if [ -n "$artifacts_source" ] && [ -f "$artifacts_source" ]; then
+        log_info "Copying app artifacts tarball to VM from $artifacts_source..."
+        if ! scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "$artifacts_source" "root@$scp_host:/tmp/app-source/artifacts.tar.gz" 2>/dev/null; then
+            log_warning "Failed to copy artifacts tarball to VM ($scp_host)"
+        else
+            log_success "Artifacts tarball copied to VM"
+        fi
+    else
+        log_info "No artifacts tarball found for app; skipping artifacts copy"
+    fi
+
     # Copy VM-side helper for IP resolution so hooks can use network preference
     if [ -f "$DEPLOYER_ROOT/scripts/get_deployment_ip_vm.sh" ]; then
         log_info "Copying get_deployment_ip_vm helper to VM..."
