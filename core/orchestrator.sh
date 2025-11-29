@@ -877,8 +877,10 @@ run_app_hooks() {
     log_info "Running setup hook..."
     if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
         # Verbose mode: Show output in real-time
-        if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" 2>&1 | tee "$STATE_DIR/hook-setup.log"; then
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" 2>&1 | tee "$STATE_DIR/hook-setup.log"
+        local setup_status=${PIPESTATUS[0]}
+        if [ "$setup_status" -ne 0 ]; then
             log_error "Setup hook failed. Check: $STATE_DIR/hook-setup.log"
             return 1
         fi
@@ -938,8 +940,10 @@ run_app_hooks() {
     log_info "Running healthcheck..."
     if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
         # Verbose mode: Show output in real-time
-        if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "cd /tmp/app-deployment && chmod +x healthcheck.sh && ./healthcheck.sh" 2>&1 | tee "$STATE_DIR/hook-healthcheck.log"; then
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "cd /tmp/app-deployment && chmod +x healthcheck.sh && ./healthcheck.sh" 2>&1 | tee "$STATE_DIR/hook-healthcheck.log"
+        local health_status=${PIPESTATUS[0]}
+        if [ "$health_status" -ne 0 ]; then
             log_warning "Health check had issues. Check: $STATE_DIR/hook-healthcheck.log"
             # Don't fail on healthcheck issues
         else
