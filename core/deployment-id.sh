@@ -440,8 +440,10 @@ list_deployments_docker_style() {
         return 0
     fi
 
-    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS      CONTRACT    SOURCE    AGE"
-    echo "────────────────────────────────────────────────────────────────────────────"
+    # Header aligned with data columns
+    printf "%-16s %-19s %-9s %-15s %-9s %-9s %s\n" \
+           "CONTAINER ID" "APP NAME" "STATUS" "IP ADDRESS" "CONTRACT" "SOURCE" "AGE"
+    echo "────────────────────────────────────────────────────────────────────────────────────────"
 
     # Display all deployments
     echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at origin; do
@@ -505,7 +507,9 @@ list_deployments_docker_style_active_contracts() {
 
     echo "Deployments (Docker-style):"
     echo ""
-    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS         CONTRACT    SOURCE    AGE"
+    # Header aligned with data columns
+    printf "%-16s %-19s %-9s %-15s %-9s %-9s %s\n" \
+           "CONTAINER ID" "APP NAME" "STATUS" "IP ADDRESS" "CONTRACT" "SOURCE" "AGE"
     echo "────────────────────────────────────────────────────────────────────────────────────────"
 
     echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at origin; do
