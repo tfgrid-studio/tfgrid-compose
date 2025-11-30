@@ -2615,30 +2615,49 @@ EOF
         
         case "$SUBCOMMAND" in
             list|ls)
-                # List all deployments with status
+                # List all deployments with status (uses Docker-style registry)
                 echo "All deployments:"
                 echo ""
-                
-                get_all_deployments | while IFS='|' read -r name status timestamp last_check; do
-                    case "$status" in
-                        "active")
-                            echo "✅ $name ($status) - $timestamp"
-                            ;;
-                        "failed")
-                            echo "❌ $name ($status) - $timestamp"
-                            ;;
-                        "deploying")
-                            echo "⏳ $name ($status) - $timestamp"
-                            ;;
-                        *)
-                            echo "❓ $name ($status) - $timestamp"
-                            ;;
-                    esac
-                done
-                
-                if [ -z "$(get_all_deployments)" ]; then
+
+                deployments=$(get_all_deployments 2>/dev/null || echo "")
+                if [ -z "$deployments" ]; then
                     echo "(no deployments found)"
+                    break
                 fi
+
+                # Header aligned with data columns
+                printf "%-16s %-19s %-10s %-8s %-9s %-9s\n" \
+                       "ID" "APP NAME" "STATUS" "AGE" "CONTRACT" "SOURCE"
+                echo "────────────────────────────────────────────────────────────────────────────"
+
+                echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at origin; do
+                    # Skip if missing basic fields
+                    if [ -z "$deployment_id" ] || [ -z "$app_name" ]; then
+                        continue
+                    fi
+
+                    age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
+
+                    display_contract="$contract_id"
+                    if [ -z "$display_contract" ] || [ "$display_contract" = "unknown" ] || [ "$display_contract" = "null" ]; then
+                        display_contract="N/A"
+                    elif [ ${#display_contract} -gt 9 ]; then
+                        display_contract="${display_contract:0:9}..."
+                    fi
+
+                    display_origin="$origin"
+                    if [ -z "$display_origin" ] || [ "$display_origin" = "unknown" ]; then
+                        display_origin=""
+                    fi
+
+                    printf "%-16s %-19s %-10s %-8s %-9s %-9s\n" \
+                           "$deployment_id" \
+                           "${app_name:0:19}" \
+                           "${status:0:10}" \
+                           "$age" \
+                           "$display_contract" \
+                           "${display_origin:0:9}"
+                done
                 ;;
             health|check)
                 # Check health of specific deployment
@@ -2721,13 +2740,14 @@ EOF
                 log_error "Unknown status subcommand: $SUBCOMMAND"
                 echo ""
                 echo "Available subcommands:"
-                echo "  list, ls          List all deployments with status"
-                echo "  health, check      Check health of a deployment"
-                echo "  retry              Retry a failed deployment"
-                echo "  logs              Show deployment logs"
-                echo "  reset             Reset deployment status"
-                echo "  show, details     Show detailed status"
-                echo "  stats, statistics Show deployment statistics"
+                # Align subcommand names and descriptions
+                printf "  %-18s %s\n" "list, ls"         "List all deployments with status"
+                printf "  %-18s %s\n" "health, check"    "Check health of a deployment"
+                printf "  %-18s %s\n" "retry"            "Retry a failed deployment"
+                printf "  %-18s %s\n" "logs"             "Show deployment logs"
+                printf "  %-18s %s\n" "reset"            "Reset deployment status"
+                printf "  %-18s %s\n" "show, details"    "Show detailed status"
+                printf "  %-18s %s\n" "stats, statistics" "Show deployment statistics"
                 echo ""
                 echo "Usage: tfgrid-compose status <subcommand> [options]"
                 exit 1
