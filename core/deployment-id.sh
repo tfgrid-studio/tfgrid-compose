@@ -453,11 +453,11 @@ list_deployments_docker_style() {
             display_contract="${display_contract:0:9}..."
         fi
 
-        printf "%-16s %-19s %-9s %-12s %-9s %-9s %s\n" \
+        printf "%-16s %-19s %-9s %-15s %-9s %-9s %s\n" \
                "$deployment_id" \
                "${app_name:0:19}" \
                "${status:0:9}" \
-               "${vm_ip:0:12}" \
+               "$vm_ip" \
                "$display_contract" \
                "${origin:0:9}" \
                "$age"
@@ -492,8 +492,8 @@ list_deployments_docker_style_active_contracts() {
 
     echo "Deployments (Docker-style):"
     echo ""
-    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS      CONTRACT    SOURCE    AGE"
-    echo "────────────────────────────────────────────────────────────────────────────"
+    echo "CONTAINER ID    APP NAME           STATUS    IP ADDRESS         CONTRACT    SOURCE    AGE"
+    echo "────────────────────────────────────────────────────────────────────────────────────────"
 
     echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at origin; do
         if [ -z "$deployment_id" ]; then
