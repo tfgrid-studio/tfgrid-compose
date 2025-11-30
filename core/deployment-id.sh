@@ -468,6 +468,26 @@ list_deployments_docker_style() {
             fi
         fi
 
+        # Best-effort: infer origin (registry vs custom) when missing and yq + state_dir available
+        if [ -z "$origin" ] && command_exists yq; then
+            local state_dir=""
+            state_dir=$(yq eval ".deployments.\"$deployment_id\".state_dir // \"\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
+            if [ -n "$state_dir" ] && [ -f "$state_dir/state.yaml" ] && [ -n "${APPS_CACHE_DIR:-}" ]; then
+                local app_dir=""
+                app_dir=$(grep "^app_dir:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}' || echo "")
+                if [ -n "$app_dir" ]; then
+                    case "$app_dir" in
+                        "$APPS_CACHE_DIR"/*)
+                            origin="registry"
+                            ;;
+                        *)
+                            origin="custom"
+                            ;;
+                    esac
+                fi
+            fi
+        fi
+
         printf "%-16s %-19s %-9s %-15s %-9s %-9s %s\n" \
                "$deployment_id" \
                "${app_name:0:19}" \
