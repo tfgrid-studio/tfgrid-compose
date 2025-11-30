@@ -2577,6 +2577,31 @@ EOF
         cmd_contracts "$@"
         exit $?
         ;;
+
+    deployments)
+        # Deployment registry maintenance tools
+        SUBCOMMAND="${1:-}"
+        shift || true
+
+        case "$SUBCOMMAND" in
+            cleanup)
+                log_info "TFGrid Compose v$VERSION - Deployment Registry Cleanup"
+                echo ""
+                cleanup_orphaned_deployments
+                ;;
+            ""|help|-h|--help)
+                echo "Usage: tfgrid-compose deployments cleanup"
+                echo ""
+                echo "Subcommands:"
+                echo "  cleanup   Remove deployments whose contracts no longer exist on the grid"
+                ;;
+            *)
+                log_error "Unknown deployments subcommand: $SUBCOMMAND"
+                echo ""
+                echo "Usage: tfgrid-compose deployments cleanup"
+                ;;
+        esac
+        ;;
         
     whitelist|wl)
         # Whitelist command - manage preferred nodes/farms

@@ -431,10 +431,6 @@ resolve_deployment() {
 list_deployments_docker_style() {
     echo "Deployments (Docker-style):"
     echo ""
-
-    # Best-effort: keep registry in sync with on-grid contracts
-    cleanup_orphaned_deployments 2>/dev/null || true
-
     local deployments=$(get_all_deployments)
 
     # Show header only if there are deployments to display
@@ -503,9 +499,6 @@ list_deployments_docker_style() {
 }
 
 list_deployments_docker_style_active_contracts() {
-    # Best-effort: keep registry in sync with on-grid contracts
-    cleanup_orphaned_deployments 2>/dev/null || true
-
     local deployments=$(get_all_deployments)
 
     if [ -z "$deployments" ]; then
