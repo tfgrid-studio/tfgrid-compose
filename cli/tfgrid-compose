@@ -2587,7 +2587,13 @@ EOF
             cleanup)
                 log_info "TFGrid Compose v$VERSION - Deployment Registry Cleanup"
                 echo ""
-                cleanup_orphaned_deployments
+                # Run cleanup in a subshell with 'set +e' so it can
+                # process all deployments without being interrupted
+                # by non-fatal errors under 'set -e'.
+                (
+                    set +e
+                    cleanup_orphaned_deployments
+                ) || true
                 ;;
             ""|help|-h|--help)
                 echo "Usage: tfgrid-compose deployments cleanup"
