@@ -569,11 +569,11 @@ list_deployments_docker_style_active_contracts() {
             display_contract="${display_contract:0:9}..."
         fi
 
-        printf "%-16s %-19s %-9s %-12s %-9s %-9s %s\n" \
+        printf "%-16s %-19s %-9s %-15s %-9s %-9s %s\n" \
                "$deployment_id" \
                "${app_name:0:19}" \
                "${status:0:9}" \
-               "${vm_ip:0:12}" \
+               "$vm_ip" \
                "$display_contract" \
                "${origin:0:9}" \
                "$age"
