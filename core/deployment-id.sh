@@ -453,6 +453,19 @@ list_deployments_docker_style() {
             display_contract="${display_contract:0:9}..."
         fi
 
+        # Best-effort: override vm_ip with full value from registry when yq is available
+        if command_exists yq; then
+            local full_vm_ip
+            full_vm_ip=$(yq eval ".deployments.\"$deployment_id\".vm_ip // \"\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
+            if [ -n "$full_vm_ip" ]; then
+                # If multiline, take the first non-empty line
+                if [[ "$full_vm_ip" == *$'\n'* ]]; then
+                    full_vm_ip=$(printf '%s\n' "$full_vm_ip" | sed -n '1{/^[[:space:]]*$/d;p}')
+                fi
+                vm_ip="$full_vm_ip"
+            fi
+        fi
+
         printf "%-16s %-19s %-9s %-15s %-9s %-9s %s\n" \
                "$deployment_id" \
                "${app_name:0:19}" \
@@ -532,6 +545,16 @@ list_deployments_docker_style_active_contracts() {
                         esac
                     fi
                 fi
+            fi
+
+            # Also override vm_ip with the full value from the registry when available
+            local full_vm_ip
+            full_vm_ip=$(yq eval ".deployments.\"$deployment_id\".vm_ip // \"\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
+            if [ -n "$full_vm_ip" ]; then
+                if [[ "$full_vm_ip" == *$'\n'* ]]; then
+                    full_vm_ip=$(printf '%s\n' "$full_vm_ip" | sed -n '1{/^[[:space:]]*$/d;p}')
+                fi
+                vm_ip="$full_vm_ip"
             fi
         fi
 
