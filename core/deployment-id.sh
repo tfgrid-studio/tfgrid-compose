@@ -676,58 +676,50 @@ export -f cleanup_invalid_deployments
 # Clean up orphaned deployments (registry entries without corresponding grid contracts)
 cleanup_orphaned_deployments() {
     local deployments=$(get_all_deployments_raw 2>/dev/null || echo "")
-    
+
     if [ -z "$deployments" ]; then
         return 0
     fi
-    
-    # Check if we have tfcmd for contract validation
-    local has_tfcmd=false
-    if command -v tfcmd >/dev/null 2>&1; then
-        has_tfcmd=true
+
+    # Get current active contract IDs via tfgrid-compose contracts list
+    local contracts_output
+    if ! contracts_output=$(timeout 30 bash -c "tfgrid-compose contracts list 2>/dev/null" 2>/dev/null); then
+        log_warning "Skipping deployment cleanup: could not fetch contracts from tfgrid-compose"
+        return 0
     fi
-    
-    if [ "$has_tfcmd" = false ]; then
-        return 0  # Can't validate without tfcmd
+
+    local active_ids
+    active_ids=$(printf '%s\n' "$contracts_output" | awk '/^[0-9]+[[:space:]]/ {print $1}' | sort -u)
+
+    if [ -z "$active_ids" ]; then
+        log_warning "No active contracts found via tfgrid-compose; skipping deployment cleanup"
+        return 0
     fi
-    
-    # Load credentials for contract validation
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [ -f "$script_dir/../login.sh" ]; then
-        source "$script_dir/../login.sh" 2>/dev/null
-        if load_credentials 2>/dev/null; then
-            local cleaned_count=0
-            
-            if command_exists yq; then
-                while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
-                    if [ -n "$deployment_id" ] && [ -n "$contract_id" ]; then
-                        # Check if this contract exists on the grid
-                        local contract_exists="false"
-                        
-                        # Query tfgrid-compose contracts to get active contracts
-                        # Check if this specific contract exists on the grid (with timeout)
-                        if timeout 5 bash -c "tfgrid-compose contracts list 2>/dev/null | grep -q '$contract_id'" 2>/dev/null; then
-                            contract_exists="true"
-                        fi
-                        
-                        if [ "$contract_exists" = "false" ]; then
-                            log_info "Removing orphaned deployment: $deployment_id (contract $contract_id not found on grid)"
-                            unregister_deployment "$deployment_id"
-                            ((cleaned_count++))
-                        fi
-                    elif [ -n "$deployment_id" ] && [ -z "$contract_id" ]; then
-                        # Registry entry without contract ID - likely old format, remove it
-                        log_info "Removing legacy deployment without contract ID: $deployment_id"
-                        unregister_deployment "$deployment_id"
-                        ((cleaned_count++))
-                    fi
-                done <<< "$deployments"
-                
-                if [ $cleaned_count -gt 0 ]; then
-                    log_info "Cleaned up $cleaned_count orphaned deployment(s)"
-                fi
-            fi
+
+    local cleaned_count=0
+
+    while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+        if [ -z "$deployment_id" ]; then
+            continue
         fi
+
+        if [ -n "$contract_id" ]; then
+            # If this deployment's contract ID is not in the active list, remove it
+            if ! printf '%s\n' "$active_ids" | grep -q -E "^${contract_id}$"; then
+                log_info "Removing orphaned deployment: $deployment_id (contract $contract_id not found on grid)"
+                unregister_deployment "$deployment_id"
+                ((cleaned_count++))
+            fi
+        else
+            # Registry entry without contract ID - likely old format, remove it
+            log_info "Removing legacy deployment without contract ID: $deployment_id"
+            unregister_deployment "$deployment_id"
+            ((cleaned_count++))
+        fi
+    done <<< "$deployments"
+
+    if [ $cleaned_count -gt 0 ]; then
+        log_info "Cleaned up $cleaned_count orphaned deployment(s)"
     fi
 }
 
