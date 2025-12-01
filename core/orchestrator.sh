@@ -876,6 +876,12 @@ run_app_hooks() {
         log_info "Passing git email to deployment: $TFGRID_GIT_EMAIL"
     fi
 
+    # Pass application version from manifest so hooks can derive release layout
+    if [ -n "${APP_VERSION:-}" ]; then
+        env_vars="$env_vars export APP_VERSION='$APP_VERSION';"
+        log_info "Passing app version to deployment hooks: $APP_VERSION"
+    fi
+
     # Pass network preference to deployment hooks
     local network_preference=$(get_network_preference "$DEPLOYMENT_ID")
     env_vars="$env_vars export DEPLOYMENT_NETWORK_PREFERENCE='$network_preference';"
