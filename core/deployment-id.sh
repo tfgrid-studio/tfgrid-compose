@@ -520,7 +520,7 @@ list_deployments_docker_style_outside() {
             cid=$(printf '%s\n' "$line" | awk '{print $1}')
             if [ -n "$cid" ]; then
                 if [ -z "$registry_contract_ids" ] || ! printf '%s\n' "$registry_contract_ids" | grep -q -E "^${cid}$"; then
-                    outside_ids="${outside_ids}${cid}\n"
+                    outside_ids+="$cid"$'\n'
                 fi
             fi
         fi

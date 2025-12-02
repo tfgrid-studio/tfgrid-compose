@@ -505,6 +505,8 @@ show_help() {
     echo ""
     echo -e "${CYAN}Docker-Style Deployment Commands:${NC}"
     echo -e "  ${GREEN}ps${NC}                    List deployments with timestamps & ages"
+    echo -e "      --all                Show all tracked deployments (including non-active)"
+    echo -e "      --outside            Show grid contracts not tracked in the local registry (SOURCE=outside)"
     echo -e "  ${GREEN}inspect${NC} <id>          Show deployment details (supports partial IDs)"
     echo -e "  ${GREEN}select${NC} [id/app]       Select deployment (auto-resolves partial IDs)"
     echo ""
