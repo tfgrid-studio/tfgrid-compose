@@ -516,6 +516,13 @@ list_deployments_docker_style_outside() {
     local outside_ids=""
     while IFS= read -r line; do
         if printf '%s\n' "$line" | grep -qE '^[0-9]+[[:space:]]'; then
+            # Only consider VM node contracts; skip network and other types
+            local ctype
+            ctype=$(printf '%s\n' "$line" | awk '{print $3}' | tr '[:upper:]' '[:lower:]')
+            if [ "$ctype" != "vm" ]; then
+                continue
+            fi
+
             local cid
             cid=$(printf '%s\n' "$line" | awk '{print $1}')
             if [ -n "$cid" ]; then
