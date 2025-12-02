@@ -523,11 +523,12 @@ list_deployments_docker_style_outside() {
                 continue
             fi
 
-            local cid
+            local cid name
             cid=$(printf '%s\n' "$line" | awk '{print $1}')
+            name=$(printf '%s\n' "$line" | awk '{print $4}')
             if [ -n "$cid" ]; then
                 if [ -z "$registry_contract_ids" ] || ! printf '%s\n' "$registry_contract_ids" | grep -q -E "^${cid}$"; then
-                    outside_ids+="$cid"$'\n'
+                    outside_ids+="$cid|$name"$'\n'
                 fi
             fi
         fi
@@ -549,11 +550,14 @@ list_deployments_docker_style_outside() {
            "CONTAINER ID" "APP NAME" "STATUS" "IP ADDRESS" "CONTRACT" "SOURCE" "AGE"
     echo "────────────────────────────────────────────────────────────────────────────────────────"
 
-    while IFS= read -r cid; do
+    while IFS='|' read -r cid vm_name; do
         [ -z "$cid" ] && continue
 
         local app_name status vm_ip contract_id origin age display_contract
-        app_name="vm"
+        app_name="$vm_name"
+        if [ -z "$app_name" ]; then
+            app_name="vm"
+        fi
         status="active"
         vm_ip="N/A"
         contract_id="$cid"
