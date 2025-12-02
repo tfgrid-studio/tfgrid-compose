@@ -546,39 +546,27 @@ list_deployments_docker_style_outside() {
 
     echo "Deployments (Docker-style):"
     echo ""
-    printf "%-16s %-19s %-9s %-15s %-9s %-9s %s\n" \
-           "CONTAINER ID" "APP NAME" "STATUS" "IP ADDRESS" "CONTRACT" "SOURCE" "AGE"
-    echo "────────────────────────────────────────────────────────────────────────────────────────"
+    printf "%-12s %-24s %-9s %-9s\n" \
+           "CONTRACT ID" "APP NAME" "STATUS" "SOURCE"
+    echo "──────────────────────────────────────────────────────────────────────"
 
     while IFS='|' read -r cid vm_name; do
         [ -z "$cid" ] && continue
 
-        local app_name status vm_ip contract_id origin age display_contract
+        local app_name status contract_id origin
         app_name="$vm_name"
         if [ -z "$app_name" ]; then
             app_name="vm"
         fi
         status="active"
-        vm_ip="N/A"
         contract_id="$cid"
         origin="outside"
-        age="unknown"
 
-        display_contract="$contract_id"
-        if [ -z "$display_contract" ] || [ "$display_contract" = "unknown" ]; then
-            display_contract="N/A"
-        elif [ ${#display_contract} -gt 9 ]; then
-            display_contract="${display_contract:0:9}..."
-        fi
-
-        printf "%-16s %-19s %-9s %-15s %-9s %-9s %s\n" \
-               "$cid" \
-               "${app_name:0:19}" \
+        printf "%-12s %-24s %-9s %-9s\n" \
+               "$contract_id" \
+               "${app_name:0:24}" \
                "${status:0:9}" \
-               "$vm_ip" \
-               "$display_contract" \
-               "${origin:0:9}" \
-               "$age"
+               "${origin:0:9}"
     done <<< "$unique_outside_ids"
 
     return 0
