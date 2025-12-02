@@ -54,17 +54,36 @@ cmd_list() {
 cmd_ps() {
   # Docker-style process listing (summary)
   local show_all=false
+  local show_outside=false
 
   for arg in "$@"; do
     case "$arg" in
       --all|-a)
         show_all=true
         ;;
+      --outside)
+        show_outside=true
+        ;;
     esac
   done
 
   log_info "TFGrid Compose v$VERSION - Docker-Style Deployment Listing"
   echo ""
+
+  # When --outside is provided, show contracts that are not tracked in the
+  # local deployment registry. This is a read-only view and does not import
+  # or mutate state.
+  if [ "$show_outside" = true ]; then
+    if list_deployments_docker_style_outside >/dev/null 2>&1; then
+      list_deployments_docker_style_outside
+      echo ""
+      log_info "These deployments are outside tfgrid-compose (SOURCE=outside)"
+      log_info "They are visible on the grid but not tracked in the local registry"
+    else
+      log_warning "No outside deployments found"
+    fi
+    return 0
+  fi
 
   if [ "$show_all" = true ]; then
     if list_deployments_docker_style >/dev/null 2>&1; then

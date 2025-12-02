@@ -498,6 +498,81 @@ list_deployments_docker_style() {
     done
 }
 
+list_deployments_docker_style_outside() {
+    local deployments_raw
+    deployments_raw=$(get_all_deployments_raw 2>/dev/null || echo "")
+
+    local registry_contract_ids
+    registry_contract_ids=$(printf '%s\n' "$deployments_raw" | awk -F '|' 'NF>=4 && $4 != "" {print $4}' | sort -u || echo "")
+
+    local contracts_output
+    if ! contracts_output=$(timeout 15 bash -c "tfgrid-compose contracts list 2>/dev/null" 2>/dev/null); then
+        echo "Deployments (Docker-style):"
+        echo ""
+        echo "(could not fetch contracts from tfgrid-compose)"
+        return 1
+    fi
+
+    local outside_ids=""
+    while IFS= read -r line; do
+        if printf '%s\n' "$line" | grep -qE '^[0-9]+[[:space:]]'; then
+            local cid
+            cid=$(printf '%s\n' "$line" | awk '{print $1}')
+            if [ -n "$cid" ]; then
+                if [ -z "$registry_contract_ids" ] || ! printf '%s\n' "$registry_contract_ids" | grep -q -E "^${cid}$"; then
+                    outside_ids="${outside_ids}${cid}\n"
+                fi
+            fi
+        fi
+    done <<< "$contracts_output"
+
+    local unique_outside_ids
+    unique_outside_ids=$(printf '%s\n' "$outside_ids" | sed '/^$/d' | sort -u || echo "")
+
+    if [ -z "$unique_outside_ids" ]; then
+        echo "Deployments (Docker-style):"
+        echo ""
+        echo "(no outside deployments found)"
+        return 0
+    fi
+
+    echo "Deployments (Docker-style):"
+    echo ""
+    printf "%-16s %-19s %-9s %-15s %-9s %-9s %s\n" \
+           "CONTAINER ID" "APP NAME" "STATUS" "IP ADDRESS" "CONTRACT" "SOURCE" "AGE"
+    echo "────────────────────────────────────────────────────────────────────────────────────────"
+
+    while IFS= read -r cid; do
+        [ -z "$cid" ] && continue
+
+        local app_name status vm_ip contract_id origin age display_contract
+        app_name="vm"
+        status="active"
+        vm_ip="N/A"
+        contract_id="$cid"
+        origin="outside"
+        age="unknown"
+
+        display_contract="$contract_id"
+        if [ -z "$display_contract" ] || [ "$display_contract" = "unknown" ]; then
+            display_contract="N/A"
+        elif [ ${#display_contract} -gt 9 ]; then
+            display_contract="${display_contract:0:9}..."
+        fi
+
+        printf "%-16s %-19s %-9s %-15s %-9s %-9s %s\n" \
+               "$cid" \
+               "${app_name:0:19}" \
+               "${status:0:9}" \
+               "$vm_ip" \
+               "$display_contract" \
+               "${origin:0:9}" \
+               "$age"
+    done <<< "$unique_outside_ids"
+
+    return 0
+}
+
 list_deployments_docker_style_active_contracts() {
     local deployments=$(get_all_deployments)
 
@@ -617,6 +692,7 @@ export -f resolve_deployment
 export -f resolve_partial_deployment_id
 export -f calculate_deployment_age
 export -f list_deployments_docker_style
+export -f list_deployments_docker_style_outside
 export -f list_deployments_docker_style_active_contracts
 
 # Clean up invalid deployments from registry and mark as failed
