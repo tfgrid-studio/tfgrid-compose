@@ -32,6 +32,24 @@ configure_dns_provider() {
             
         "namecheap")
             echo "  → Namecheap API Configuration"
+            echo ""
+            log_warning "Namecheap requires IP whitelisting before API calls work."
+            echo "    Your current IP must be whitelisted at:"
+            echo "    Namecheap → Profile → Tools → API Access → Whitelisted IPs"
+            echo ""
+            local current_ip=$(curl -s https://api.ipify.org 2>/dev/null || echo "unknown")
+            echo "    Your current IP: $current_ip"
+            echo ""
+            read -p "    Have you whitelisted this IP? (y/N): " -n 1 -r ip_confirmed
+            echo ""
+            
+            if [[ ! $ip_confirmed =~ ^[Yy]$ ]]; then
+                log_warning "Please whitelist your IP first, then re-run with -i"
+                log_info "Falling back to manual DNS setup"
+                export DNS_PROVIDER="manual"
+                return 0
+            fi
+            
             read -p "    API User: " namecheap_user
             read -s -p "    API Key: " namecheap_key
             echo ""
