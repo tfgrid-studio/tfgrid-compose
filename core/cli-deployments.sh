@@ -96,6 +96,13 @@ cmd_select() {
     # Get all deployments from registry
     all_deployments=$(get_all_deployments 2>/dev/null || echo "")
     
+    # Batch fetch active contract IDs (single network call instead of per-deployment)
+    local active_contract_ids=""
+    local contracts_output=""
+    if contracts_output=$(timeout 15 bash -c "tfgrid-compose contracts list 2>/dev/null" 2>/dev/null); then
+      active_contract_ids=$(printf '%s\n' "$contracts_output" | awk '/^[0-9]+[[:space:]]/ {print $1}')
+    fi
+    
     if [ -n "$all_deployments" ] && command_exists yq; then
       # Use enhanced deployment listing with timestamps (include contract_id)
       while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
@@ -117,11 +124,11 @@ cmd_select() {
           continue
         fi
         
-        # PRIORITY: Only include deployments with valid contracts in selection
-        # Skip orphaned deployments even if they have VM IPs
+        # PRIORITY: Only include deployments with active contracts on the grid
+        # Use batch-fetched contract IDs for fast validation (no per-item network calls)
         if [ -n "$contract_id" ] && [ "$contract_id" != "null" ] && [ "$contract_id" != "" ]; then
-          # Validate contract exists on grid
-          if [ "$(validate_deployment_contracts "$deployment_id" 2>/dev/null)" = "true" ]; then
+          # Check if contract is in active list (local string match - fast)
+          if printf '%s\n' "$active_contract_ids" | grep -q -E "^${contract_id}$"; then
             # This deployment has a valid contract - include it
             DEPLOYMENTS+=("$deployment_id")
             
@@ -140,7 +147,7 @@ cmd_select() {
             
             ((i++))
           else
-            log_debug "Skipping deployment with invalid/cancelled contract: $deployment_id (contract: $contract_id)"
+            log_debug "Skipping deployment with inactive contract: $deployment_id (contract: $contract_id)"
           fi
         fi
       done <<< "$all_deployments"
@@ -193,12 +200,13 @@ cmd_select() {
         echo ""
         
         # Show deployments from registry that have active contracts but failed other validation
+        # Reuse the batch-fetched active_contract_ids from earlier
         if command_exists yq; then
           while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
             # Only show deployments with ACTIVE contracts on the grid
             if [ -n "$deployment_id" ] && [ -n "$contract_id" ] && [ "$contract_id" != "null" ] && [ "$contract_id" != "" ]; then
-              # Validate contract exists on grid
-              if [ "$(validate_deployment_contracts "$deployment_id" 2>/dev/null)" = "true" ]; then
+              # Check if contract is in active list (local string match - fast)
+              if printf '%s\n' "$active_contract_ids" | grep -q -E "^${contract_id}$"; then
                 age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
                 status_emoji="❓"
                 case "$status" in
