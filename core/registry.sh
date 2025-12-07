@@ -3,7 +3,7 @@
 # Handles fetching and caching the app registry from GitHub
 
 # Registry configuration
-REGISTRY_URL="https://raw.githubusercontent.com/tfgrid-studio/app-registry/main/registry/apps.yaml"
+REGISTRY_URL="https://raw.githubusercontent.com/tfgrid-studio/tfgrid-registry/main/registry/apps.yaml"
 REGISTRY_DIR="$HOME/.config/tfgrid-compose/registry"
 REGISTRY_FILE="$REGISTRY_DIR/apps.yaml"
 REGISTRY_CACHE_TTL=3600  # 1 hour in seconds

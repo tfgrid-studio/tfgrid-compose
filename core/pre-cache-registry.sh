@@ -10,7 +10,7 @@ RETRY_DELAY=10   # Delay before retrying (seconds)
 # Get registry file path - prioritize config directory, then source directory
 get_registry_file() {
     local config_registry="$HOME/.config/tfgrid-compose/registry/apps.yaml"
-    local source_registry="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/app-registry/registry/apps.yaml"
+    local source_registry="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/tfgrid-registry/registry/apps.yaml"
     
     if [ -f "$config_registry" ]; then
         echo "$config_registry"
