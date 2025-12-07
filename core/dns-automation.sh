@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # DNS Automation Module
-# Supports automatic DNS A record creation for Name.com, Namecheap, and Cloudflare
+# Supports automatic DNS A record creation for Name.com, Cloudflare, and Namecheap
+#
+# Recommended providers (fully automated):
+#   - name.com: API token auth, no IP restrictions
+#   - cloudflare: API token auth, no IP restrictions
+#
+# Limited automation:
+#   - namecheap: Requires manual IP whitelisting in dashboard before API works
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh" 2>/dev/null || true
@@ -13,8 +20,9 @@ configure_dns_provider() {
     local provider="$1"
     
     case "$provider" in
+        # Recommended: Name.com (fully automated, no IP restrictions)
         "name.com"|"namecom")
-            echo "  → Name.com API Configuration"
+            echo "  → Name.com API Configuration (recommended)"
             read -p "    Username: " namecom_user
             read -s -p "    API Token: " namecom_token
             echo ""
@@ -29,11 +37,29 @@ configure_dns_provider() {
             export NAMECOM_USERNAME="$namecom_user"
             export NAMECOM_API_TOKEN="$namecom_token"
             ;;
+        
+        # Recommended: Cloudflare (fully automated, no IP restrictions)
+        "cloudflare")
+            echo "  → Cloudflare API Configuration (recommended)"
+            read -s -p "    API Token: " cf_token
+            echo ""
             
+            if [ -z "$cf_token" ]; then
+                log_error "Cloudflare API token is required"
+                return 1
+            fi
+            
+            DNS_CREDENTIALS["CLOUDFLARE_API_TOKEN"]="$cf_token"
+            export CLOUDFLARE_API_TOKEN="$cf_token"
+            ;;
+        
+        # Limited: Namecheap (requires manual IP whitelisting)
         "namecheap")
             echo "  → Namecheap API Configuration"
             echo ""
-            log_warning "Namecheap requires IP whitelisting before API calls work."
+            log_warning "Namecheap is NOT fully automated - requires manual IP whitelisting."
+            log_warning "Consider using name.com or cloudflare for fully automated DNS setup."
+            echo ""
             echo "    Your current IP must be whitelisted at:"
             echo "    Namecheap → Profile → Tools → API Access → Whitelisted IPs"
             echo ""
@@ -63,20 +89,6 @@ configure_dns_provider() {
             DNS_CREDENTIALS["NAMECHEAP_API_KEY"]="$namecheap_key"
             export NAMECHEAP_API_USER="$namecheap_user"
             export NAMECHEAP_API_KEY="$namecheap_key"
-            ;;
-            
-        "cloudflare")
-            echo "  → Cloudflare API Configuration"
-            read -s -p "    API Token: " cf_token
-            echo ""
-            
-            if [ -z "$cf_token" ]; then
-                log_error "Cloudflare API token is required"
-                return 1
-            fi
-            
-            DNS_CREDENTIALS["CLOUDFLARE_API_TOKEN"]="$cf_token"
-            export CLOUDFLARE_API_TOKEN="$cf_token"
             ;;
             
         "manual"|"")
@@ -244,11 +256,11 @@ create_dns_record() {
         "name.com"|"namecom")
             create_namecom_record "$domain" "$ip"
             ;;
-        "namecheap")
-            create_namecheap_record "$domain" "$ip"
-            ;;
         "cloudflare")
             create_cloudflare_record "$domain" "$ip"
+            ;;
+        "namecheap")
+            create_namecheap_record "$domain" "$ip"
             ;;
         "manual"|"")
             echo ""
