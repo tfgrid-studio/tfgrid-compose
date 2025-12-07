@@ -3,54 +3,6 @@
 
 set -e
 
-cmd_list() {
-  # List deployed apps with Docker-style integration
-  log_info "TFGrid Compose v$VERSION - Deployed Apps"
-  echo ""
-  
-  # Try Docker-style listing first
-  if list_deployments_docker_style >/dev/null 2>&1; then
-    echo "Docker-style deployments:"
-    echo ""
-    list_deployments_docker_style
-    echo ""
-    
-    # Show smart context info for Docker-style deployments
-    SMART_CTX=$(get_smart_context)
-    CURRENT=$(get_current_app)
-    
-    if [ -n "$SMART_CTX" ] && [ -z "$CURRENT" ]; then
-      log_info "Using '$SMART_CTX' as default (only deployment active)"
-    elif [ -n "$CURRENT" ]; then
-      log_info "Active context: $CURRENT"
-      log_info "Change with: tfgrid-compose select"
-    else
-      log_info "Select a deployment: tfgrid-compose select"
-      log_info "Run commands: tfgrid-compose <command> [args]"
-    fi
-  else
-    # Fallback to legacy app-based listing
-    if ! list_deployed_apps; then
-      log_warning "No apps deployed"
-      echo ""
-      log_info "Deploy an app: tfgrid-compose up <app-name>"
-      log_info "Multi-deploy: tfgrid-compose up <app> --name=<suffix>"
-    else
-      echo ""
-      # Show smart context info
-      SMART_CTX=$(get_smart_context)
-      CURRENT=$(get_current_app)
-      
-      if [ -n "$SMART_CTX" ] && [ -z "$CURRENT" ]; then
-        log_info "Using '$SMART_CTX' as default (only app deployed)"
-      elif [ -n "$CURRENT" ]; then
-        log_info "Active context: $CURRENT"
-        log_info "Change with: tfgrid-compose select"
-      fi
-    fi
-  fi
-}
-
 cmd_ps() {
   # Docker-style process listing (summary)
   local show_all=false

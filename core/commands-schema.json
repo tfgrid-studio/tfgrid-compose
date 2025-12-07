@@ -40,15 +40,6 @@
       "flags": []
     },
     {
-      "id": "list",
-      "command": "list",
-      "label": "List Apps (Docker-style)",
-      "category": "deployments",
-      "description": "List deployed apps with Docker-style integration",
-      "args": [],
-      "flags": []
-    },
-    {
       "id": "ps",
       "command": "ps",
       "label": "Deployments (Docker-style)",

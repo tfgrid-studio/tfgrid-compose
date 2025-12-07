@@ -458,11 +458,6 @@ case "$COMMAND" in
         log_info "Multi-deploy: tfgrid-compose up <app> --name=<suffix>"
         exit 0
         ;;
-    
-    list)
-        cmd_list "$@"
-        exit $?
-        ;;
         
     ps)
         cmd_ps "$@"
