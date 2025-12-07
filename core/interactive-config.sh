@@ -30,7 +30,8 @@ prompt_env_var() {
     
     # Handle options (select from list)
     if [ -n "$options" ]; then
-        echo "  $description:"
+        # Display to stderr so it shows on screen (stdout is captured for return value)
+        echo "  $description:" >&2
         
         # Split options by comma into array
         local opt_array=()
@@ -41,13 +42,13 @@ prompt_env_var() {
         for opt in "${opt_array[@]}"; do
             opt=$(echo "$opt" | xargs)  # Trim whitespace
             if [ "$opt" = "$default" ]; then
-                echo "    $i) $opt (default)"
+                echo "    $i) $opt (default)" >&2
             else
-                echo "    $i) $opt"
+                echo "    $i) $opt" >&2
             fi
             ((i++))
         done
-        echo ""
+        echo "" >&2
         
         read -p "  Choose [1]: " choice
         choice=${choice:-1}
@@ -59,7 +60,7 @@ prompt_env_var() {
     elif [ "$secret" = "true" ]; then
         # Secret input (hidden)
         read -s -p "$prompt_text" value
-        echo ""  # New line after hidden input
+        echo "" >&2  # New line after hidden input
     else
         # Regular input
         read -p "$prompt_text" value
