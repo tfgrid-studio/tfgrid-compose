@@ -106,7 +106,7 @@ collect_app_environment() {
         local required=$(yq eval ".environment[$i].required" "$manifest" 2>/dev/null)
         local default=$(yq eval ".environment[$i].default" "$manifest" 2>/dev/null)
         local secret=$(yq eval ".environment[$i].secret" "$manifest" 2>/dev/null)
-        local options=$(yq eval ".environment[$i].options | join(\",\")" "$manifest" 2>/dev/null)
+        local options=$(yq eval ".environment[$i].options | join(\",\")" "$manifest" 2>/dev/null | tr -d '\n')
         local depends_on=$(yq eval ".environment[$i].depends_on" "$manifest" 2>/dev/null)
         
         # Clean up null values
