@@ -132,6 +132,14 @@ collect_app_environment() {
             fi
         fi
         
+        # Skip if already set by DNS provider configuration
+        if [[ "$name" =~ ^(CLOUDFLARE_API_TOKEN|NAMECOM_USERNAME|NAMECOM_API_TOKEN|GODADDY_API_KEY|GODADDY_API_SECRET)$ ]]; then
+            if [ -n "${DNS_CREDENTIALS[$name]}" ]; then
+                COLLECTED_ENV_VARS["$name"]="${DNS_CREDENTIALS[$name]}"
+                continue  # Already configured via configure_dns_provider
+            fi
+        fi
+        
         # Prompt for value
         local value
         value=$(prompt_env_var "$name" "$description" "$required" "$default" "$secret" "$options")
@@ -175,10 +183,18 @@ run_interactive_config() {
         return 1
     fi
     
-    # Get manifest defaults
-    local default_cpu=$(yaml_get "$APP_MANIFEST" "resources.cpu" || echo "2")
-    local default_mem=$(yaml_get "$APP_MANIFEST" "resources.memory" || echo "4096")
-    local default_disk=$(yaml_get "$APP_MANIFEST" "resources.disk" || echo "50")
+    # Get manifest defaults (prefer recommended, fallback to value or default)
+    local default_cpu=$(yaml_get "$APP_MANIFEST" "resources.cpu.recommended" 2>/dev/null)
+    [ -z "$default_cpu" ] || [ "$default_cpu" = "null" ] && default_cpu=$(yaml_get "$APP_MANIFEST" "resources.cpu" 2>/dev/null)
+    [ -z "$default_cpu" ] || [ "$default_cpu" = "null" ] && default_cpu="2"
+    
+    local default_mem=$(yaml_get "$APP_MANIFEST" "resources.memory.recommended" 2>/dev/null)
+    [ -z "$default_mem" ] || [ "$default_mem" = "null" ] && default_mem=$(yaml_get "$APP_MANIFEST" "resources.memory" 2>/dev/null)
+    [ -z "$default_mem" ] || [ "$default_mem" = "null" ] && default_mem="4096"
+    
+    local default_disk=$(yaml_get "$APP_MANIFEST" "resources.disk.recommended" 2>/dev/null)
+    [ -z "$default_disk" ] || [ "$default_disk" = "null" ] && default_disk=$(yaml_get "$APP_MANIFEST" "resources.disk" 2>/dev/null)
+    [ -z "$default_disk" ] || [ "$default_disk" = "null" ] && default_disk="50"
     
     # Show defaults
     echo "→ Resources Configuration"
