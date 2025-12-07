@@ -378,7 +378,8 @@ select_best_node() {
     log_success "Found $node_count nodes matching requirements"
 
     # Apply filtering
-    local filtered_nodes=$(apply_node_filters "$response" "$cli_blacklist_nodes" "$cli_blacklist_farms" "$cli_whitelist_farms" "$cli_max_cpu" "$cli_max_disk" "$cli_min_uptime")
+    # apply_node_filters(nodes_json, whitelist_nodes, blacklist_nodes, blacklist_farms, whitelist_farms, max_cpu, max_disk, min_uptime)
+    local filtered_nodes=$(apply_node_filters "$response" "" "$cli_blacklist_nodes" "$cli_blacklist_farms" "$cli_whitelist_farms" "$cli_max_cpu" "$cli_max_disk" "$cli_min_uptime")
     local filtered_count=$(echo "$filtered_nodes" | jq -r 'length')
 
     if [ "$filtered_count" -eq 0 ]; then
