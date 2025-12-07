@@ -468,7 +468,7 @@ show_help() {
     echo -e "      ${GREEN}--blacklist-node${NC} <ids> Exclude specific nodes (e.g., '617,892')"
     echo -e "      ${GREEN}--blacklist-farm${NC} <names> Exclude specific farm NAMES"
     echo -e "      ${GREEN}--whitelist-nodes${NC} <names> Only use specific nodes"
-    echo -e "      ${GREEN}--whitelist-farm${NC} <names> Only use specific farm NAMES"
+    echo -e "      ${GREEN}--farm${NC}, ${GREEN}--whitelist-farm${NC} <names> Only use specific farm NAMES"
     echo -e "      ${GREEN}--max-cpu-usage${NC} <0-100> Maximum CPU usage threshold"
     echo -e "      ${GREEN}--max-disk-usage${NC} <0-100> Maximum disk usage threshold"
     echo -e "      ${GREEN}--min-uptime-days${NC} <days> Minimum uptime in days"

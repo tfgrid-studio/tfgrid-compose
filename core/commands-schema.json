@@ -77,6 +77,7 @@
         { "name": "blacklist-node", "type": "string", "description": "Exclude specific nodes (comma-separated IDs)" },
         { "name": "blacklist-farm", "type": "string", "description": "Exclude specific farms (comma-separated names)" },
         { "name": "whitelist-nodes", "type": "string", "description": "Only use specific nodes (comma-separated IDs)" },
+        { "name": "farm", "type": "string", "description": "Only use specific farms (alias for --whitelist-farm)" },
         { "name": "whitelist-farm", "type": "string", "description": "Only use specific farms (comma-separated names)" },
         { "name": "max-cpu-usage", "type": "string", "description": "Maximum CPU usage threshold (0-100)" },
         { "name": "max-disk-usage", "type": "string", "description": "Maximum disk usage threshold (0-100)" },
