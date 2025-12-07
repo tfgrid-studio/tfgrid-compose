@@ -497,13 +497,14 @@ export_for_deployment() {
     local bl_farms=$(get_blacklist_farms)
 
     # Export blacklist/whitelist preferences for the deployment system.
+    # CLI flags take precedence over preferences - only set if not already set.
     # CPU/disk/uptime thresholds are read from config.yaml via
     # load_node_filter_config so that tfgrid-compose config controls
     # global thresholds consistently.
-    export CUSTOM_WHITELIST_NODES="$wl_nodes"
-    export CUSTOM_WHITELIST_FARMS="$wl_farms"
-    export CUSTOM_BLACKLIST_NODES="$bl_nodes"
-    export CUSTOM_BLACKLIST_FARMS="$bl_farms"
+    [ -z "$CUSTOM_WHITELIST_NODES" ] && export CUSTOM_WHITELIST_NODES="$wl_nodes"
+    [ -z "$CUSTOM_WHITELIST_FARMS" ] && export CUSTOM_WHITELIST_FARMS="$wl_farms"
+    [ -z "$CUSTOM_BLACKLIST_NODES" ] && export CUSTOM_BLACKLIST_NODES="$bl_nodes"
+    [ -z "$CUSTOM_BLACKLIST_FARMS" ] && export CUSTOM_BLACKLIST_FARMS="$bl_farms"
 }
 
 # Add individual node to whitelist (non-destructive)

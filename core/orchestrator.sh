@@ -300,6 +300,7 @@ deploy_app() {
             # select_best_node(cpu, mem_mb, disk_gb, network,
             #   cli_blacklist_nodes, cli_blacklist_farms, cli_whitelist_farms,
             #   cli_max_cpu, cli_max_disk, cli_min_uptime)
+            [ -n "$CUSTOM_WHITELIST_FARMS" ] && log_info "Farm filter: $CUSTOM_WHITELIST_FARMS"
             DEPLOY_NODE=$(select_best_node \
                 "$DEPLOY_CPU" \
                 "$DEPLOY_MEM" \
