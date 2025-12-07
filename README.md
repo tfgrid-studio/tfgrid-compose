@@ -377,10 +377,14 @@ Apache 2.0 - See LICENSE file
 
 ---
 
-## Links
+## Support
 
 - **📚 Documentation:** [docs.tfgrid.studio](https://docs.tfgrid.studio)
-- **🌐 Main Site:** [tfgrid.studio](https://tfgrid.studio)
-- **💬 Discussions:** [GitHub Discussions](https://github.com/orgs/tfgrid-studio/discussions)
 - **🐛 Issues:** [GitHub Issues](https://github.com/tfgrid-studio/tfgrid-compose/issues)
+- **💬 Discussions:** [GitHub Discussions](https://github.com/orgs/tfgrid-studio/discussions)
+- **📧 Contact:** [tfgrid.studio/contact](https://tfgrid.studio/contact)
+
+## Links
+
+- **🌐 Main Site:** [tfgrid.studio](https://tfgrid.studio)
 - **📝 Changelog:** [CHANGELOG.md](CHANGELOG.md)
