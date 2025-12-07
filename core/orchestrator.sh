@@ -833,15 +833,55 @@ deploy_app_source() {
 
     # Copy app source directory contents if it exists (for scripts, templates, etc.)
     if [ -d "$APP_DIR/src" ]; then
-        log_info "Copying app source files..."
+        log_info "Copying app source files from src/..."
         if ! scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
             "$APP_DIR"/src/* "root@$scp_host:/tmp/app-source/" 2>/dev/null; then
             log_error "Failed to copy app source files to VM ($scp_host)"
             return 1
         fi
         log_success "App source files copied to VM"
+    fi
+
+    # Copy essential app files (docker-compose.yaml, scripts/, etc.) from app root
+    log_info "Copying essential app files..."
+    local copied_files=0
+    
+    # Copy docker-compose.yaml if exists
+    if [ -f "$APP_DIR/docker-compose.yaml" ]; then
+        if scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "$APP_DIR/docker-compose.yaml" "root@$scp_host:/tmp/app-source/" 2>/dev/null; then
+            ((copied_files++))
+        fi
+    fi
+    
+    # Copy scripts directory if exists
+    if [ -d "$APP_DIR/scripts" ]; then
+        if scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "$APP_DIR/scripts" "root@$scp_host:/tmp/app-source/" 2>/dev/null; then
+            ((copied_files++))
+        fi
+    fi
+    
+    # Copy config directory if exists
+    if [ -d "$APP_DIR/config" ]; then
+        if scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "$APP_DIR/config" "root@$scp_host:/tmp/app-source/" 2>/dev/null; then
+            ((copied_files++))
+        fi
+    fi
+    
+    # Copy templates directory if exists
+    if [ -d "$APP_DIR/templates" ]; then
+        if scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            "$APP_DIR/templates" "root@$scp_host:/tmp/app-source/" 2>/dev/null; then
+            ((copied_files++))
+        fi
+    fi
+    
+    if [ $copied_files -gt 0 ]; then
+        log_success "Copied $copied_files essential app files/directories to VM"
     else
-        log_info "No app source directory to copy"
+        log_info "No essential app files to copy from app root"
     fi
 
     return 0
