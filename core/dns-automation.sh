@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # DNS Automation Module
-# Supports automatic DNS A record creation for Name.com, Cloudflare, and Namecheap
+# Supports automatic DNS A record creation for Name.com, Cloudflare, GoDaddy, and Namecheap
 #
 # Recommended providers (fully automated):
 #   - name.com: API token auth, no IP restrictions
 #   - cloudflare: API token auth, no IP restrictions
+#   - godaddy: API key + secret auth, no IP restrictions
 #
 # Limited automation:
 #   - namecheap: Requires manual IP whitelisting in dashboard before API works
@@ -51,6 +52,24 @@ configure_dns_provider() {
             
             DNS_CREDENTIALS["CLOUDFLARE_API_TOKEN"]="$cf_token"
             export CLOUDFLARE_API_TOKEN="$cf_token"
+            ;;
+        
+        # Recommended: GoDaddy (fully automated, no IP restrictions)
+        "godaddy")
+            echo "  → GoDaddy API Configuration (recommended)"
+            read -p "    API Key: " godaddy_key
+            read -s -p "    API Secret: " godaddy_secret
+            echo ""
+            
+            if [ -z "$godaddy_key" ] || [ -z "$godaddy_secret" ]; then
+                log_error "GoDaddy API key and secret are required"
+                return 1
+            fi
+            
+            DNS_CREDENTIALS["GODADDY_API_KEY"]="$godaddy_key"
+            DNS_CREDENTIALS["GODADDY_API_SECRET"]="$godaddy_secret"
+            export GODADDY_API_KEY="$godaddy_key"
+            export GODADDY_API_SECRET="$godaddy_secret"
             ;;
         
         # Limited: Namecheap (requires manual IP whitelisting)
@@ -239,6 +258,43 @@ create_cloudflare_record() {
     fi
 }
 
+# Create DNS A record using GoDaddy API
+create_godaddy_record() {
+    local domain="$1"
+    local ip="$2"
+    local api_key="${GODADDY_API_KEY}"
+    local api_secret="${GODADDY_API_SECRET}"
+    
+    if [ -z "$api_key" ] || [ -z "$api_secret" ]; then
+        log_error "GoDaddy API credentials not configured"
+        return 1
+    fi
+    
+    # Extract root domain and subdomain
+    local root_domain=$(echo "$domain" | rev | cut -d. -f1-2 | rev)
+    local subdomain=$(echo "$domain" | sed "s/\.$root_domain$//" | sed "s/$root_domain$//")
+    subdomain=${subdomain:-@}
+    
+    log_info "Creating A record: $subdomain.$root_domain -> $ip"
+    
+    local response
+    response=$(curl -s -X PUT \
+        -H "Authorization: sso-key ${api_key}:${api_secret}" \
+        -H "Content-Type: application/json" \
+        -d "[{\"data\":\"$ip\",\"ttl\":600}]" \
+        "https://api.godaddy.com/v1/domains/$root_domain/records/A/$subdomain")
+    
+    # GoDaddy returns empty response on success
+    if [ -z "$response" ]; then
+        log_success "DNS A record created successfully"
+        return 0
+    else
+        local error=$(echo "$response" | jq -r '.message // "Unknown error"' 2>/dev/null || echo "$response")
+        log_error "Failed to create DNS record: $error"
+        return 1
+    fi
+}
+
 # Main function to create DNS record based on configured provider
 create_dns_record() {
     local domain="$1"
@@ -258,6 +314,9 @@ create_dns_record() {
             ;;
         "cloudflare")
             create_cloudflare_record "$domain" "$ip"
+            ;;
+        "godaddy")
+            create_godaddy_record "$domain" "$ip"
             ;;
         "namecheap")
             create_namecheap_record "$domain" "$ip"
