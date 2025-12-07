@@ -31,11 +31,15 @@ prompt_env_var() {
     # Handle options (select from list)
     if [ -n "$options" ]; then
         echo "  $description:"
-        local IFS=','
-        local opt_array=($options)
+        
+        # Split options by comma into array
+        local opt_array=()
+        IFS=',' read -ra opt_array <<< "$options"
+        
+        # Display options
         local i=1
         for opt in "${opt_array[@]}"; do
-            opt=$(echo "$opt" | tr -d ' ')
+            opt=$(echo "$opt" | xargs)  # Trim whitespace
             if [ "$opt" = "$default" ]; then
                 echo "    $i) $opt (default)"
             else
@@ -43,15 +47,15 @@ prompt_env_var() {
             fi
             ((i++))
         done
+        echo ""
         
         read -p "  Choose [1]: " choice
         choice=${choice:-1}
         
         # Convert choice to value
         local idx=$((choice - 1))
-        IFS=',' read -ra opt_array <<< "$options"
         value="${opt_array[$idx]}"
-        value=$(echo "$value" | tr -d ' ')
+        value=$(echo "$value" | xargs)  # Trim whitespace
     elif [ "$secret" = "true" ]; then
         # Secret input (hidden)
         read -s -p "$prompt_text" value
