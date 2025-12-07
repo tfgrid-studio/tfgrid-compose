@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
 # DNS Automation Module
-# Supports automatic DNS A record creation for Name.com, Cloudflare, GoDaddy, and Namecheap
+# Supports automatic DNS A record creation for Name.com, Cloudflare, and GoDaddy
 #
-# Recommended providers (fully automated):
+# Supported providers (fully automated):
 #   - name.com: API token auth, no IP restrictions
 #   - cloudflare: API token auth, no IP restrictions
 #   - godaddy: API key + secret auth, no IP restrictions
-#
-# Limited automation:
-#   - namecheap: Requires manual IP whitelisting in dashboard before API works
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh" 2>/dev/null || true
@@ -71,44 +68,6 @@ configure_dns_provider() {
             export GODADDY_API_KEY="$godaddy_key"
             export GODADDY_API_SECRET="$godaddy_secret"
             ;;
-        
-        # Limited: Namecheap (requires manual IP whitelisting)
-        "namecheap")
-            echo "  → Namecheap API Configuration"
-            echo ""
-            log_warning "Namecheap is NOT fully automated - requires manual IP whitelisting."
-            log_warning "Consider using name.com or cloudflare for fully automated DNS setup."
-            echo ""
-            echo "    Your current IP must be whitelisted at:"
-            echo "    Namecheap → Profile → Tools → API Access → Whitelisted IPs"
-            echo ""
-            local current_ip=$(curl -s https://api.ipify.org 2>/dev/null || echo "unknown")
-            echo "    Your current IP: $current_ip"
-            echo ""
-            read -p "    Have you whitelisted this IP? (y/N): " -n 1 -r ip_confirmed
-            echo ""
-            
-            if [[ ! $ip_confirmed =~ ^[Yy]$ ]]; then
-                log_warning "Please whitelist your IP first, then re-run with -i"
-                log_info "Falling back to manual DNS setup"
-                export DNS_PROVIDER="manual"
-                return 0
-            fi
-            
-            read -p "    API User: " namecheap_user
-            read -s -p "    API Key: " namecheap_key
-            echo ""
-            
-            if [ -z "$namecheap_user" ] || [ -z "$namecheap_key" ]; then
-                log_error "Namecheap credentials are required"
-                return 1
-            fi
-            
-            DNS_CREDENTIALS["NAMECHEAP_API_USER"]="$namecheap_user"
-            DNS_CREDENTIALS["NAMECHEAP_API_KEY"]="$namecheap_key"
-            export NAMECHEAP_API_USER="$namecheap_user"
-            export NAMECHEAP_API_KEY="$namecheap_key"
-            ;;
             
         "manual"|"")
             log_info "Manual DNS configuration selected"
@@ -157,53 +116,6 @@ create_namecom_record() {
         return 0
     else
         log_error "Failed to create DNS record: $response"
-        return 1
-    fi
-}
-
-# Create DNS A record using Namecheap API
-create_namecheap_record() {
-    local domain="$1"
-    local ip="$2"
-    local api_user="${NAMECHEAP_API_USER}"
-    local api_key="${NAMECHEAP_API_KEY}"
-    
-    if [ -z "$api_user" ] || [ -z "$api_key" ]; then
-        log_error "Namecheap credentials not configured"
-        return 1
-    fi
-    
-    # Extract SLD and TLD
-    local tld=$(echo "$domain" | rev | cut -d. -f1 | rev)
-    local sld=$(echo "$domain" | rev | cut -d. -f2 | rev)
-    local subdomain=$(echo "$domain" | sed "s/\.$sld\.$tld$//" | sed "s/$sld\.$tld$//")
-    subdomain=${subdomain:-@}
-    
-    # Get client IP for API whitelist
-    local client_ip=$(curl -s https://api.ipify.org)
-    
-    log_info "Creating A record: $subdomain.$sld.$tld -> $ip"
-    
-    local response
-    response=$(curl -s "https://api.namecheap.com/xml.response" \
-        -d "ApiUser=$api_user" \
-        -d "ApiKey=$api_key" \
-        -d "UserName=$api_user" \
-        -d "ClientIp=$client_ip" \
-        -d "Command=namecheap.domains.dns.setHosts" \
-        -d "SLD=$sld" \
-        -d "TLD=$tld" \
-        -d "HostName1=$subdomain" \
-        -d "RecordType1=A" \
-        -d "Address1=$ip" \
-        -d "TTL1=300")
-    
-    if echo "$response" | grep -q 'Status="OK"'; then
-        log_success "DNS A record created successfully"
-        return 0
-    else
-        log_error "Failed to create DNS record"
-        log_error "Response: $response"
         return 1
     fi
 }
@@ -317,9 +229,6 @@ create_dns_record() {
             ;;
         "godaddy")
             create_godaddy_record "$domain" "$ip"
-            ;;
-        "namecheap")
-            create_namecheap_record "$domain" "$ip"
             ;;
         "manual"|"")
             echo ""
