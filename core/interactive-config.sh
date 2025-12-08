@@ -292,11 +292,8 @@ run_interactive_config() {
             ;;
     esac
     
-    # Network selection
-    echo "→ Network"
-    read -p "  Network (main/test/dev) [main]: " network_input
-    local final_network=${network_input:-main}
-    echo ""
+    # Network - always use main for production deployments
+    local final_network="main"
     
     # Summary
     log_success "Configuration complete!"
