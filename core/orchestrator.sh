@@ -956,8 +956,8 @@ run_app_hooks() {
     # Hook 1: setup.sh
     log_info "Running setup hook..."
     if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
-        # Verbose mode: Show output in real-time
-        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        # Verbose mode: Show ALL output in real-time with TTY for unbuffered streaming
+        ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
             root@$vm_ip "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" 2>&1 | tee "$STATE_DIR/hook-setup.log"
         local setup_status=${PIPESTATUS[0]}
         if [ "$setup_status" -ne 0 ]; then
@@ -965,9 +965,13 @@ run_app_hooks() {
             return 1
         fi
     else
-        # Normal mode: Buffer output to log file only
-        if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" > "$STATE_DIR/hook-setup.log" 2>&1; then
+        # Normal mode: Show milestone lines (emoji prefixed) while logging everything
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" 2>&1 | \
+            tee "$STATE_DIR/hook-setup.log" | \
+            grep -E '^[[:space:]]*(🚀|📦|🐳|🔧|🌐|📁|📋|🔐|✅|❌|⚠|ℹ|→|▶)' || true
+        local setup_status=${PIPESTATUS[0]}
+        if [ "$setup_status" -ne 0 ]; then
             log_error "Setup hook failed. Check: $STATE_DIR/hook-setup.log"
             cat "$STATE_DIR/hook-setup.log"
             return 1
@@ -982,9 +986,11 @@ run_app_hooks() {
     local configure_optional=$(yaml_get "$APP_MANIFEST" "hook_config.configure.optional" 2>/dev/null || echo "false")
 
     if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
-        # Verbose mode: Show output in real-time
-        if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" 2>&1 | tee "$STATE_DIR/hook-configure.log"; then
+        # Verbose mode: Show ALL output in real-time with TTY for unbuffered streaming
+        ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" 2>&1 | tee "$STATE_DIR/hook-configure.log"
+        local configure_status=${PIPESTATUS[0]}
+        if [ "$configure_status" -ne 0 ]; then
             if [ "$configure_optional" = "true" ]; then
                 log_warning "Configure hook failed (optional). Check: $STATE_DIR/hook-configure.log"
             else
@@ -993,9 +999,13 @@ run_app_hooks() {
             fi
         fi
     else
-        # Normal mode: Buffer output to log file only
-        if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" > "$STATE_DIR/hook-configure.log" 2>&1; then
+        # Normal mode: Show milestone lines (emoji prefixed) while logging everything
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" 2>&1 | \
+            tee "$STATE_DIR/hook-configure.log" | \
+            grep -E '^[[:space:]]*(🚀|📦|🐳|🔧|🌐|📁|📋|🔐|✅|❌|⚠|ℹ|→|▶)' || true
+        local configure_status=${PIPESTATUS[0]}
+        if [ "$configure_status" -ne 0 ]; then
             if [ "$configure_optional" = "true" ]; then
                 log_warning "Configure hook failed (optional). Check: $STATE_DIR/hook-configure.log"
             else
@@ -1019,8 +1029,8 @@ run_app_hooks() {
     # Hook 3: healthcheck.sh
     log_info "Running healthcheck..."
     if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
-        # Verbose mode: Show output in real-time
-        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+        # Verbose mode: Show ALL output in real-time with TTY for unbuffered streaming
+        ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
             root@$vm_ip "cd /tmp/app-deployment && chmod +x healthcheck.sh && ./healthcheck.sh" 2>&1 | tee "$STATE_DIR/hook-healthcheck.log"
         local health_status=${PIPESTATUS[0]}
         if [ "$health_status" -ne 0 ]; then
@@ -1030,11 +1040,14 @@ run_app_hooks() {
             log_success "Health check passed"
         fi
     else
-        # Normal mode: Buffer output to log file only
-        if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "cd /tmp/app-deployment && chmod +x healthcheck.sh && ./healthcheck.sh" > "$STATE_DIR/hook-healthcheck.log" 2>&1; then
+        # Normal mode: Show milestone lines (emoji prefixed) while logging everything
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$vm_ip "cd /tmp/app-deployment && chmod +x healthcheck.sh && ./healthcheck.sh" 2>&1 | \
+            tee "$STATE_DIR/hook-healthcheck.log" | \
+            grep -E '^[[:space:]]*(🚀|📦|🐳|🔧|🌐|📁|📋|🔐|✅|❌|⚠|ℹ|→|▶)' || true
+        local health_status=${PIPESTATUS[0]}
+        if [ "$health_status" -ne 0 ]; then
             log_warning "Health check had issues. Check: $STATE_DIR/hook-healthcheck.log"
-            cat "$STATE_DIR/hook-healthcheck.log"
             # Don't fail on healthcheck issues
         else
             log_success "Health check passed"
