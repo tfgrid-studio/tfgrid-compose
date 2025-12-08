@@ -276,7 +276,11 @@ _update_single_app() {
 
   if ! is_app_cached "$APP_NAME"; then
     log_error "App '$APP_NAME' is not cached"
-    log_info "Deploy the app first or install it from registry"
+    echo ""
+    echo "  To install from registry:"
+    echo "    tfgrid-compose up $APP_NAME        # Deploy the app"
+    echo "    tfgrid-compose update registry     # Or refresh all registry apps"
+    echo ""
     return 1
   fi
 
