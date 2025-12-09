@@ -519,10 +519,16 @@ EOF
     
     # Register deployment in Docker-style ID system with contract linkage
     local vm_ip=$(get_vm_ip_from_state)
+    local primary_ip_type=""
+
+    # Read primary IP type from state (public/wireguard/mycelium)
+    if [ -f "$STATE_DIR/state.yaml" ]; then
+        primary_ip_type=$(grep "^primary_ip_type:" "$STATE_DIR/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
+    fi
 
     # DNS automation: create A record when DOMAIN/DNS_PROVIDER are configured
-    # This uses the public VM IP written to state.yaml by the Terraform task.
-    if [ -n "$vm_ip" ]; then
+    # Only attempt DNS when we have a public IPv4 address
+    if [ -n "$vm_ip" ] && [ "$primary_ip_type" = "public" ]; then
         # Derive domain from common env vars used by apps/patterns
         local dns_domain=""
         if [ -n "${TFGRID_DOMAIN:-}" ]; then
