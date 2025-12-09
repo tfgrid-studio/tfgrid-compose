@@ -519,7 +519,41 @@ EOF
     
     # Register deployment in Docker-style ID system with contract linkage
     local vm_ip=$(get_vm_ip_from_state)
-    
+
+    # DNS automation: create A record when DOMAIN/DNS_PROVIDER are configured
+    # This uses the public VM IP written to state.yaml by the Terraform task.
+    if [ -n "$vm_ip" ]; then
+        # Derive domain from common env vars used by apps/patterns
+        local dns_domain=""
+        if [ -n "${TFGRID_DOMAIN:-}" ]; then
+            dns_domain="$TFGRID_DOMAIN"
+        elif [ -n "${DOMAIN:-}" ]; then
+            dns_domain="$DOMAIN"
+        elif [ -n "${DOMAIN_NAME:-}" ]; then
+            dns_domain="$DOMAIN_NAME"
+        fi
+
+        # Only attempt DNS automation for real domains (not localhost/IP) and non-manual provider
+        if [ -n "$dns_domain" ] && [ -n "${DNS_PROVIDER:-}" ] && [ "${DNS_PROVIDER:-manual}" != "manual" ]; then
+            if [ "$dns_domain" != "localhost" ] && ! [[ "$dns_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                log_step "Setting up DNS for $dns_domain -> $vm_ip (provider: $DNS_PROVIDER)"
+
+                if create_dns_record "$dns_domain" "$vm_ip"; then
+                    # DNS propagation is helpful for HTTPS challenges but should not block deployment
+                    if command -v dig >/dev/null 2>&1; then
+                        if ! verify_dns_propagation "$dns_domain" "$vm_ip" 12 5; then
+                            log_warning "DNS propagation not yet complete for $dns_domain. Continuing deployment."
+                        fi
+                    else
+                        log_info "dig command not found; skipping DNS propagation verification."
+                    fi
+                else
+                    log_warning "DNS record creation failed for $dns_domain. Continuing deployment."
+                fi
+            fi
+        fi
+    fi
+
     # Extract node IDs from terraform outputs for contract mapping
     local node_ids=""
     if [ -f "$STATE_DIR/terraform/terraform.tfstate" ]; then
