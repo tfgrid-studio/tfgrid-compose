@@ -274,12 +274,16 @@ apply_node_filters() {
     IFS=',' read -ra temp_farms <<< "$blacklist_farms"
     blacklist_farms_array=()
     for farm in "${temp_farms[@]}"; do
+        # Normalize spacing and lowercase for case-insensitive matching
+        farm=$(echo "$farm" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
         [[ -n "$farm" ]] && blacklist_farms_array+=("$farm")
     done
 
     IFS=',' read -ra temp_whitelist <<< "$whitelist_farms"
     whitelist_farms_array=()
     for farm in "${temp_whitelist[@]}"; do
+        # Normalize spacing and lowercase for case-insensitive matching
+        farm=$(echo "$farm" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
         [[ -n "$farm" ]] && whitelist_farms_array+=("$farm")
     done
 
