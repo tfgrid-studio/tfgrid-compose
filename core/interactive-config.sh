@@ -156,7 +156,11 @@ collect_app_environment() {
         if [ "$name" = "DNS_PROVIDER" ] && [ -n "$value" ] && [ "$value" != "manual" ]; then
             echo ""
             if ! configure_dns_provider "$value"; then
-                log_warning "DNS configuration skipped, you'll need to set up DNS manually"
+                # Make DNS provider misconfiguration (e.g. invalid Cloudflare
+                # token) a hard failure so users do not waste time running a
+                # full deployment that cannot update DNS.
+                log_error "DNS provider configuration failed. Please fix your credentials and try again."
+                return 1
             fi
         fi
     done

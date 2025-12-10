@@ -46,9 +46,28 @@ configure_dns_provider() {
                 log_error "Cloudflare API token is required"
                 return 1
             fi
-            
+
+            # Verify token with Cloudflare before proceeding, so we fail
+            # fast if credentials are invalid instead of wasting time on
+            # a deployment that cannot update DNS.
+            local verify_response
+            verify_response=$(curl -s -X GET \
+                -H "Authorization: Bearer $cf_token" \
+                -H "Content-Type: application/json" \
+                "https://api.cloudflare.com/client/v4/user/tokens/verify")
+
+            local verify_success
+            verify_success=$(echo "$verify_response" | jq -r '.success // "false"' 2>/dev/null || echo "false")
+            if [ "$verify_success" != "true" ]; then
+                local verify_error
+                verify_error=$(echo "$verify_response" | jq -r '.errors[0].message // "Unknown error"' 2>/dev/null || echo "Unknown error")
+                log_error "Cloudflare API token verification failed: $verify_error"
+                return 1
+            fi
+
             DNS_CREDENTIALS["CLOUDFLARE_API_TOKEN"]="$cf_token"
             export CLOUDFLARE_API_TOKEN="$cf_token"
+            log_success "Cloudflare API token verified successfully"
             ;;
         
         # Recommended: GoDaddy (fully automated, no IP restrictions)
@@ -144,13 +163,47 @@ create_cloudflare_record() {
         -H "Content-Type: application/json" \
         "https://api.cloudflare.com/client/v4/zones?name=$root_domain")
     
-    local zone_id=$(echo "$zone_response" | jq -r '.result[0].id // empty')
+    local zone_id
+    zone_id=$(echo "$zone_response" | jq -r '.result[0].id // empty')
     
     if [ -z "$zone_id" ]; then
         log_error "Could not find Cloudflare zone for $root_domain"
         return 1
     fi
-    
+
+    # Before creating the new record, remove any existing A records for
+    # this exact name so we do not leave behind old IPs (e.g. WireGuard
+    # addresses like 10.1.2.2) and only keep the latest public IPv4.
+    log_info "Cleaning up existing Cloudflare A records for $domain..."
+    local records_response
+    records_response=$(curl -s -X GET \
+        -H "Authorization: Bearer $token" \
+        -H "Content-Type: application/json" \
+        "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?type=A&name=$domain")
+
+    local record_ids
+    record_ids=$(echo "$records_response" | jq -r '.result[]?.id // empty' 2>/dev/null || echo "")
+
+    if [ -n "$record_ids" ]; then
+        while IFS= read -r record_id; do
+            [ -z "$record_id" ] && continue
+            log_info "Deleting existing A record (id: $record_id) for $domain"
+            local delete_resp
+            delete_resp=$(curl -s -X DELETE \
+                -H "Authorization: Bearer $token" \
+                -H "Content-Type: application/json" \
+                "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id")
+
+            if echo "$delete_resp" | jq -e '.success' 2>/dev/null | grep -q 'true'; then
+                log_info "Deleted A record $record_id for $domain"
+            else
+                local del_error
+                del_error=$(echo "$delete_resp" | jq -r '.errors[0].message // "Unknown error"' 2>/dev/null || echo "Unknown error")
+                log_warning "Failed to delete existing A record $record_id for $domain: $del_error"
+            fi
+        done <<< "$record_ids"
+    fi
+
     log_info "Creating A record: $domain -> $ip"
     
     local response
@@ -160,11 +213,12 @@ create_cloudflare_record() {
         -d "{\"type\":\"A\",\"name\":\"$domain\",\"content\":\"$ip\",\"ttl\":300,\"proxied\":false}" \
         "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records")
     
-    if echo "$response" | jq -e '.success' | grep -q 'true'; then
+    if echo "$response" | jq -e '.success' 2>/dev/null | grep -q 'true'; then
         log_success "DNS A record created successfully"
         return 0
     else
-        local error=$(echo "$response" | jq -r '.errors[0].message // "Unknown error"')
+        local error
+        error=$(echo "$response" | jq -r '.errors[0].message // "Unknown error"' 2>/dev/null || echo "Unknown error")
         log_error "Failed to create DNS record: $error"
         return 1
     fi
