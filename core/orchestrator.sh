@@ -450,14 +450,24 @@ EOF
     if [ -d "$STATE_DIR/terraform" ] && [ -f "$STATE_DIR/terraform/terraform.tfstate" ]; then
         cd "$STATE_DIR/terraform" || return 1
 
-        # Capture primary (WireGuard) IP for logging
+        # Capture primary IP for logging (public or WireGuard, depending on pattern)
         local real_primary_ip=""
+        local real_primary_type=""
         real_primary_ip=$(terraform output -raw primary_ip 2>/dev/null || echo "")
+        real_primary_type=$(terraform output -raw primary_ip_type 2>/dev/null || echo "")
 
         if [ -n "$real_primary_ip" ] && [ "$real_primary_ip" != "null" ]; then
-            log_success "Captured WireGuard IP: $real_primary_ip"
+            # Strip CIDR if present for cleaner logging
+            local display_primary_ip
+            display_primary_ip=$(echo "$real_primary_ip" | cut -d'/' -f1)
+
+            if [ -n "$real_primary_type" ] && [ "$real_primary_type" != "null" ]; then
+                log_success "Captured primary IP ($real_primary_type): $display_primary_ip"
+            else
+                log_success "Captured primary IP: $display_primary_ip"
+            fi
         else
-            log_warning "Could not extract WireGuard IP from terraform output"
+            log_warning "Could not extract primary IP from terraform output"
         fi
 
         # Capture Mycelium IPv6 for logging
