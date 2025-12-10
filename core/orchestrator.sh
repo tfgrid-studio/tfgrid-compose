@@ -223,6 +223,10 @@ deploy_app() {
 
     [ -z "$DEPLOY_IPV4" ] && DEPLOY_IPV4="false"
 
+    if [ "$DEPLOY_IPV4" = "true" ]; then
+        export CUSTOM_REQUIRE_PUBLIC_IPV4="true"
+    fi
+
     if [ "$PATTERN_NAME" = "single-vm" ]; then
         # Override manifest resources from single-vm specific config when available
         local vm_cpu vm_mem vm_disk

@@ -41,6 +41,31 @@ fetch_farm_cache() {
     fi
 }
 
+get_farms_with_free_proper_ips() {
+    fetch_farm_cache
+    if [ ! -f "$FARM_CACHE_FILE" ]; then
+        echo ""
+        return 0
+    fi
+
+    jq -r '
+      [ .[]
+        | select(.publicIps != null)
+        | select([
+            .publicIps[]? |
+            select(
+                (.contract_id == 0) and
+                ((.ip | split("/")[0]) as $ip |
+                  ($ip | test("^(10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.|100\\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\\.|127\\.|169\\.254\\.)")) | not)
+            )
+          ] | length > 0)
+        | .name
+      ]
+      | unique
+      | join(",")
+    ' "$FARM_CACHE_FILE" 2>/dev/null || echo ""
+}
+
 # Get farm name by ID (case-insensitive)
 get_farm_name_by_id() {
     local farm_id="$1"
@@ -145,6 +170,7 @@ load_node_filter_config() {
     MAX_CPU_USAGE=""
     MAX_DISK_USAGE=""
     MIN_UPTIME_DAYS=""
+    REQUIRE_PUBLIC_IPV4=""
 
     if [ -f "$config_file" ]; then
         # Parse YAML config (simple key=value extraction)
@@ -172,6 +198,7 @@ load_node_filter_config() {
     MAX_CPU_USAGE="${CUSTOM_MAX_CPU_USAGE:-$MAX_CPU_USAGE}"
     MAX_DISK_USAGE="${CUSTOM_MAX_DISK_USAGE:-$MAX_DISK_USAGE}"
     MIN_UPTIME_DAYS="${CUSTOM_MIN_UPTIME_DAYS:-$MIN_UPTIME_DAYS}"
+    REQUIRE_PUBLIC_IPV4="${CUSTOM_REQUIRE_PUBLIC_IPV4:-$REQUIRE_PUBLIC_IPV4}"
 
     # Validate and normalize farm lists (case-insensitive, remove non-existent farms)
     if [ -n "$WHITELIST_FARMS" ]; then
@@ -182,6 +209,32 @@ load_node_filter_config() {
     if [ -n "$BLACKLIST_FARMS" ]; then
         local validated_blacklist_farms=$(validate_farm_list "$BLACKLIST_FARMS")
         BLACKLIST_FARMS="$validated_blacklist_farms"
+    fi
+
+    if [ "${REQUIRE_PUBLIC_IPV4:-}" = "true" ]; then
+        local public_ip_farms
+        public_ip_farms=$(get_farms_with_free_proper_ips)
+
+        if [ -n "$public_ip_farms" ]; then
+            if [ -n "$WHITELIST_FARMS" ]; then
+                local intersected=""
+                IFS=',' read -ra wl_farms <<< "$WHITELIST_FARMS"
+                for farm in "${wl_farms[@]}"; do
+                    farm=$(echo "$farm" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+                    [ -z "$farm" ] && continue
+                    if echo "$public_ip_farms" | tr ',' '\n' | grep -Fxq "$farm"; then
+                        if [ -z "$intersected" ]; then
+                            intersected="$farm"
+                        else
+                            intersected="$intersected,$farm"
+                        fi
+                    fi
+                done
+                WHITELIST_FARMS="$intersected"
+            else
+                WHITELIST_FARMS="$public_ip_farms"
+            fi
+        fi
     fi
 }
 
