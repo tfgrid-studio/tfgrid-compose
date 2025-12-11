@@ -982,6 +982,37 @@ run_app_hooks() {
     env_vars="$env_vars export DEPLOYMENT_NETWORK_PREFERENCE='$network_preference';"
     log_info "Passing network preference to deployment hooks: $network_preference"
     
+    # Derive canonical domain for hooks (used by apps like tfgrid-wordpress
+    # to configure Caddy and TLS inside the VM). Prefer TFGRID_DOMAIN, then
+    # DOMAIN, then DOMAIN_NAME.
+    local hook_domain=""
+    if [ -n "${TFGRID_DOMAIN:-}" ]; then
+        hook_domain="$TFGRID_DOMAIN"
+    elif [ -n "${DOMAIN:-}" ]; then
+        hook_domain="$DOMAIN"
+    elif [ -n "${DOMAIN_NAME:-}" ]; then
+        hook_domain="$DOMAIN_NAME"
+    fi
+
+    if [ -n "$hook_domain" ]; then
+        env_vars="$env_vars export TFGRID_DOMAIN='$hook_domain'; export DOMAIN='$hook_domain';"
+        log_info "Passing domain to deployment hooks: $hook_domain"
+    fi
+
+    # Derive SSL email for ACME/Let’s Encrypt. Prefer TFGRID_SSL_EMAIL, then
+    # SSL_EMAIL.
+    local hook_ssl_email=""
+    if [ -n "${TFGRID_SSL_EMAIL:-}" ]; then
+        hook_ssl_email="$TFGRID_SSL_EMAIL"
+    elif [ -n "${SSL_EMAIL:-}" ]; then
+        hook_ssl_email="$SSL_EMAIL"
+    fi
+
+    if [ -n "$hook_ssl_email" ]; then
+        env_vars="$env_vars export TFGRID_SSL_EMAIL='$hook_ssl_email'; export SSL_EMAIL='$hook_ssl_email';"
+        log_info "Passing SSL email to deployment hooks: $hook_ssl_email"
+    fi
+    
     # Check if Ansible playbook exists (Option B: Ansible deployment)
     if [ -f "$APP_DIR/deployment/playbook.yml" ]; then
         log_info "Detected Ansible playbook deployment"
