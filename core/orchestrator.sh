@@ -818,8 +818,9 @@ EOF
     fi
     
     # Step 4: Run Ansible
-    # First copy pattern platform to state directory
-    cp -r "$PATTERN_PLATFORM_DIR" "$STATE_DIR/ansible"
+    # First copy pattern platform contents to state directory
+    mkdir -p "$STATE_DIR/ansible"
+    cp -r "$PATTERN_PLATFORM_DIR"/* "$STATE_DIR/ansible/"
     if ! bash "$DEPLOYER_ROOT/core/tasks/ansible.sh"; then
         log_error "Ansible configuration failed"
         return 1

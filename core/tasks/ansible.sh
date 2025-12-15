@@ -31,7 +31,8 @@ if [ ! -d "$STATE_DIR/ansible" ]; then
         exit 1
     fi
     
-    cp -r "$PATTERN_PLATFORM_DIR" "$STATE_DIR/ansible"
+    mkdir -p "$STATE_DIR/ansible"
+    cp -r "$PATTERN_PLATFORM_DIR"/* "$STATE_DIR/ansible/"
     log_success "Pattern platform copied"
 fi
 
