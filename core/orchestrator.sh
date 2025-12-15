@@ -251,18 +251,20 @@ deploy_app() {
         DEPLOY_DISK=${CUSTOM_DISK:-${TF_VAR_ai_agent_disk:-$MANIFEST_DISK}}
     fi
 
-    # Enforce manifest minimums to prevent under-provisioning
-    if [ -n "$MIN_CPU" ] && [ "$DEPLOY_CPU" -lt "$MIN_CPU" ]; then
-        log_error "Requested CPU ($DEPLOY_CPU) below app minimum ($MIN_CPU)"
-        return 1
-    fi
-    if [ -n "$MIN_MEM" ] && [ "$DEPLOY_MEM" -lt "$MIN_MEM" ]; then
-        log_error "Requested memory (${DEPLOY_MEM}MB) below app minimum (${MIN_MEM}MB)"
-        return 1
-    fi
-    if [ -n "$MIN_DISK" ] && [ "$DEPLOY_DISK" -lt "$MIN_DISK" ]; then
-        log_error "Requested disk (${DEPLOY_DISK}GB) below app minimum (${MIN_DISK}GB)"
-        return 1
+    # Enforce manifest minimums to prevent under-provisioning (skip for multi-node patterns like k3s)
+    if [ "$PATTERN_NAME" != "k3s" ]; then
+        if [ -n "$MIN_CPU" ] && [ -n "$DEPLOY_CPU" ] && [ "$DEPLOY_CPU" != "null" ] && [ "$DEPLOY_CPU" -lt "$MIN_CPU" ] 2>/dev/null; then
+            log_error "Requested CPU ($DEPLOY_CPU) below app minimum ($MIN_CPU)"
+            return 1
+        fi
+        if [ -n "$MIN_MEM" ] && [ -n "$DEPLOY_MEM" ] && [ "$DEPLOY_MEM" != "null" ] && [ "$DEPLOY_MEM" -lt "$MIN_MEM" ] 2>/dev/null; then
+            log_error "Requested memory (${DEPLOY_MEM}MB) below app minimum (${MIN_MEM}MB)"
+            return 1
+        fi
+        if [ -n "$MIN_DISK" ] && [ -n "$DEPLOY_DISK" ] && [ "$DEPLOY_DISK" != "null" ] && [ "$DEPLOY_DISK" -lt "$MIN_DISK" ] 2>/dev/null; then
+            log_error "Requested disk (${DEPLOY_DISK}GB) below app minimum (${MIN_DISK}GB)"
+            return 1
+        fi
     fi
 
     DEPLOY_NETWORK=${CUSTOM_NETWORK:-${TF_VAR_tfgrid_network:-"main"}}
@@ -292,42 +294,48 @@ deploy_app() {
             fi
             DEPLOY_NODE=$CUSTOM_NODE
         else
-            # Auto-select via GridProxy
-            log_info "Resources: $DEPLOY_CPU CPU, ${DEPLOY_MEM}MB RAM, ${DEPLOY_DISK}GB disk"
-            log_info "Auto-selecting best available node..."
-            echo ""
-            # For automatic selection during deployments, use blacklist/whitelist
-            # preferences but do NOT enforce global CPU/disk/uptime thresholds.
-            # Those thresholds are still honored by the standalone node browser
-            # (tfgrid-compose nodes) via query_gridproxy.
-            #
-            # select_best_node(cpu, mem_mb, disk_gb, network,
-            #   cli_blacklist_nodes, cli_blacklist_farms, cli_whitelist_farms,
-            #   cli_max_cpu, cli_max_disk, cli_min_uptime)
-            [ -n "$CUSTOM_WHITELIST_FARMS" ] && log_info "Farm filter: $CUSTOM_WHITELIST_FARMS"
-            DEPLOY_NODE=$(select_best_node \
-                "$DEPLOY_CPU" \
-                "$DEPLOY_MEM" \
-                "$DEPLOY_DISK" \
-                "$DEPLOY_NETWORK" \
-                "$CUSTOM_BLACKLIST_NODES" \
-                "$CUSTOM_BLACKLIST_FARMS" \
-                "$CUSTOM_WHITELIST_FARMS" \
-                "" \
-                "" \
-                "")
-            # Clean any whitespace/newlines from node ID
-            DEPLOY_NODE=$(echo "$DEPLOY_NODE" | tr -d '[:space:]')
-            if [ -z "$DEPLOY_NODE" ] || [ "$DEPLOY_NODE" = "null" ]; then
-                log_error "Failed to select node"
+            # K3s pattern handles its own multi-node selection later
+            if [ "$PATTERN_NAME" = "k3s" ]; then
+                log_info "K3s pattern: Multi-node selection will be performed"
+                DEPLOY_NODE="k3s-multi"  # Placeholder, actual selection happens in pattern-specific block
+            else
+                # Auto-select via GridProxy for single-node patterns
+                log_info "Resources: $DEPLOY_CPU CPU, ${DEPLOY_MEM}MB RAM, ${DEPLOY_DISK}GB disk"
+                log_info "Auto-selecting best available node..."
                 echo ""
-                echo "Try:"
-                echo "  - Use interactive mode: tfgrid-compose up $APP_NAME -i"
-                echo "  - Specify node manually: tfgrid-compose up $APP_NAME --node <id>"
-                echo "  - Browse available nodes: https://dashboard.grid.tf"
-                return 1
+                # For automatic selection during deployments, use blacklist/whitelist
+                # preferences but do NOT enforce global CPU/disk/uptime thresholds.
+                # Those thresholds are still honored by the standalone node browser
+                # (tfgrid-compose nodes) via query_gridproxy.
+                #
+                # select_best_node(cpu, mem_mb, disk_gb, network,
+                #   cli_blacklist_nodes, cli_blacklist_farms, cli_whitelist_farms,
+                #   cli_max_cpu, cli_max_disk, cli_min_uptime)
+                [ -n "$CUSTOM_WHITELIST_FARMS" ] && log_info "Farm filter: $CUSTOM_WHITELIST_FARMS"
+                DEPLOY_NODE=$(select_best_node \
+                    "$DEPLOY_CPU" \
+                    "$DEPLOY_MEM" \
+                    "$DEPLOY_DISK" \
+                    "$DEPLOY_NETWORK" \
+                    "$CUSTOM_BLACKLIST_NODES" \
+                    "$CUSTOM_BLACKLIST_FARMS" \
+                    "$CUSTOM_WHITELIST_FARMS" \
+                    "" \
+                    "" \
+                    "")
+                # Clean any whitespace/newlines from node ID
+                DEPLOY_NODE=$(echo "$DEPLOY_NODE" | tr -d '[:space:]')
+                if [ -z "$DEPLOY_NODE" ] || [ "$DEPLOY_NODE" = "null" ]; then
+                    log_error "Failed to select node"
+                    echo ""
+                    echo "Try:"
+                    echo "  - Use interactive mode: tfgrid-compose up $APP_NAME -i"
+                    echo "  - Specify node manually: tfgrid-compose up $APP_NAME --node <id>"
+                    echo "  - Browse available nodes: https://dashboard.grid.tf"
+                    return 1
+                fi
+                log_success "Selected node: $DEPLOY_NODE"
             fi
-            log_success "Selected node: $DEPLOY_NODE"
         fi
     fi
     
@@ -497,15 +505,26 @@ deploy_app() {
 
     # Show concise deployment summary so operators can verify settings
     log_step "Deployment configuration summary"
-    local ipv4_status="disabled"
-    if [ "${DEPLOY_IPV4:-false}" = "true" ]; then
-        ipv4_status="enabled"
-    fi
-    local disk_type_summary="${DEPLOY_DISK_TYPE:-auto}"
     log_info "App: $APP_NAME v$APP_VERSION ($PATTERN_NAME pattern)"
-    log_info "Node: $DEPLOY_NODE (grid network: ${DEPLOY_NETWORK:-main})"
-    log_info "Resources: CPU=${DEPLOY_CPU} vcores, MEM=${DEPLOY_MEM}MB, DISK=${DEPLOY_DISK}GB (type=${disk_type_summary})"
-    log_info "Public IPv4: $ipv4_status"
+    
+    if [ "$PATTERN_NAME" = "k3s" ]; then
+        # K3s-specific summary
+        log_info "Cluster: $K3S_CONTROL_COUNT control + $K3S_WORKER_COUNT worker + $K3S_INGRESS_COUNT ingress nodes"
+        log_info "Management: node $TF_VAR_management_node"
+        log_info "Control nodes: $TF_VAR_control_nodes"
+        log_info "Worker nodes: $TF_VAR_worker_nodes"
+        [ "$K3S_INGRESS_COUNT" -gt 0 ] && log_info "Ingress nodes: $TF_VAR_ingress_nodes (public IPv4)"
+    else
+        # Single-node summary
+        local ipv4_status="disabled"
+        if [ "${DEPLOY_IPV4:-false}" = "true" ]; then
+            ipv4_status="enabled"
+        fi
+        local disk_type_summary="${DEPLOY_DISK_TYPE:-auto}"
+        log_info "Node: $DEPLOY_NODE (grid network: ${DEPLOY_NETWORK:-main})"
+        log_info "Resources: CPU=${DEPLOY_CPU} vcores, MEM=${DEPLOY_MEM}MB, DISK=${DEPLOY_DISK}GB (type=${disk_type_summary})"
+        log_info "Public IPv4: $ipv4_status"
+    fi
     echo ""
     
     # Save deployment metadata
