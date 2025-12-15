@@ -588,6 +588,75 @@ get_node_from_list() {
     "
 }
 
+# Select multiple unique nodes matching requirements
+# Returns comma-separated list of node IDs
+select_multiple_nodes() {
+    local count=$1
+    local cpu=$2
+    local mem_mb=$3
+    local disk_gb=$4
+    local network=${5:-main}
+    local require_public_ipv4=${6:-false}
+    local exclude_nodes=${7:-}  # Comma-separated list of node IDs to exclude
+    local cli_blacklist_farms="${8:-}"
+    local cli_whitelist_farms="${9:-}"
+
+    log_info "Selecting $count nodes: ${cpu} CPU, ${mem_mb}MB RAM, ${disk_gb}GB disk (IPv4: $require_public_ipv4)"
+    
+    # Load configuration
+    load_node_filter_config
+    
+    # If public IPv4 required, filter to farms with available IPs
+    if [ "$require_public_ipv4" = "true" ]; then
+        REQUIRE_PUBLIC_IPV4="true"
+        load_node_filter_config  # Reload to apply IPv4 farm filter
+    fi
+
+    # Convert to bytes for API
+    local mru=$((mem_mb * 1024 * 1024))
+    local sru=$((disk_gb * 1024 * 1024 * 1024))
+
+    # Query GridProxy
+    local api_url="${GRIDPROXY_URL}/nodes?status=up&free_mru=${mru}&free_sru=${sru}&size=7000"
+    local response=$(curl -s "$api_url")
+
+    if [ $? -ne 0 ] || [ -z "$response" ]; then
+        log_error "Failed to query GridProxy API"
+        return 1
+    fi
+
+    # Build exclusion list JSON array
+    local exclude_json="[]"
+    if [ -n "$exclude_nodes" ]; then
+        exclude_json=$(echo "$exclude_nodes" | tr ',' '\n' | jq -R 'tonumber' | jq -s '.')
+    fi
+
+    # Apply filters and exclude already-selected nodes
+    local filtered_nodes=$(apply_node_filters "$response" "" "" "$cli_blacklist_farms" "$cli_whitelist_farms" "" "" "")
+    
+    # Filter out excluded nodes and select top N by uptime
+    local selected=$(echo "$filtered_nodes" | jq -r --argjson exclude "$exclude_json" --argjson count "$count" '
+        [.[] | select(.nodeId as $id | $exclude | index($id) | not)] |
+        sort_by(.uptime) | reverse |
+        .[:$count] |
+        [.[].nodeId] |
+        join(",")
+    ')
+
+    local selected_count=$(echo "$selected" | tr ',' '\n' | grep -c '^[0-9]' || echo 0)
+    
+    if [ "$selected_count" -lt "$count" ]; then
+        log_warning "Only found $selected_count of $count requested nodes"
+        if [ "$selected_count" -eq 0 ]; then
+            log_error "No nodes available matching requirements"
+            return 1
+        fi
+    fi
+
+    log_success "Selected nodes: $selected"
+    echo "$selected"
+}
+
 # Export functions for use in other scripts
 export -f fetch_farm_cache
 export -f get_farm_name_by_id
@@ -602,3 +671,4 @@ export -f verify_node_exists
 export -f query_gridproxy
 export -f show_available_nodes
 export -f get_node_from_list
+export -f select_multiple_nodes

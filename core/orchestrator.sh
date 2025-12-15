@@ -367,15 +367,117 @@ deploy_app() {
             log_warning "Gateway pattern: Using single node for gateway. Multi-node selection coming in v0.11.0"
             ;;
         k3s)
-            # K3s pattern (for now, use single node for management)
-            export TF_VAR_management_node=$DEPLOY_NODE
-            export TF_VAR_management_cpu=$DEPLOY_CPU
-            export TF_VAR_management_mem=$DEPLOY_MEM
-            export TF_VAR_management_disk=$DEPLOY_DISK
-            if [ -n "$DEPLOY_DISK_TYPE" ]; then
-                export TF_VAR_management_disk_type=$DEPLOY_DISK_TYPE
+            # K3s pattern - Multi-node auto-selection
+            # Read cluster configuration from app's tfgrid-compose.yaml
+            local app_manifest="$APP_MANIFEST"
+            
+            # Node counts from manifest or environment or defaults
+            local K3S_CONTROL_COUNT=${K3S_CONTROL_COUNT:-$(yaml_get "$app_manifest" "nodes.masters.count" 2>/dev/null)}
+            local K3S_WORKER_COUNT=${K3S_WORKER_COUNT:-$(yaml_get "$app_manifest" "nodes.workers.count" 2>/dev/null)}
+            local K3S_INGRESS_COUNT=${K3S_INGRESS_COUNT:-$(yaml_get "$app_manifest" "nodes.ingress.count" 2>/dev/null)}
+            K3S_CONTROL_COUNT=${K3S_CONTROL_COUNT:-3}
+            K3S_WORKER_COUNT=${K3S_WORKER_COUNT:-3}
+            K3S_INGRESS_COUNT=${K3S_INGRESS_COUNT:-0}
+            
+            # Resource specs from manifest or environment or defaults
+            local K3S_MGMT_CPU=${K3S_MGMT_CPU:-1}
+            local K3S_MGMT_MEM=${K3S_MGMT_MEM:-2048}
+            local K3S_MGMT_DISK=${K3S_MGMT_DISK:-25}
+            local K3S_CONTROL_CPU=${K3S_CONTROL_CPU:-$(yaml_get "$app_manifest" "resources.master.cpu" 2>/dev/null)}
+            local K3S_CONTROL_MEM=${K3S_CONTROL_MEM:-$(yaml_get "$app_manifest" "resources.master.memory" 2>/dev/null)}
+            local K3S_CONTROL_DISK=${K3S_CONTROL_DISK:-$(yaml_get "$app_manifest" "resources.master.disk" 2>/dev/null)}
+            local K3S_WORKER_CPU=${K3S_WORKER_CPU:-$(yaml_get "$app_manifest" "resources.worker.cpu" 2>/dev/null)}
+            local K3S_WORKER_MEM=${K3S_WORKER_MEM:-$(yaml_get "$app_manifest" "resources.worker.memory" 2>/dev/null)}
+            local K3S_WORKER_DISK=${K3S_WORKER_DISK:-$(yaml_get "$app_manifest" "resources.worker.disk" 2>/dev/null)}
+            local K3S_INGRESS_CPU=${K3S_INGRESS_CPU:-$(yaml_get "$app_manifest" "resources.ingress.cpu" 2>/dev/null)}
+            local K3S_INGRESS_MEM=${K3S_INGRESS_MEM:-$(yaml_get "$app_manifest" "resources.ingress.memory" 2>/dev/null)}
+            local K3S_INGRESS_DISK=${K3S_INGRESS_DISK:-$(yaml_get "$app_manifest" "resources.ingress.disk" 2>/dev/null)}
+            # Apply defaults if not set
+            K3S_CONTROL_CPU=${K3S_CONTROL_CPU:-4}
+            K3S_CONTROL_MEM=${K3S_CONTROL_MEM:-8192}
+            K3S_CONTROL_DISK=${K3S_CONTROL_DISK:-50}
+            K3S_WORKER_CPU=${K3S_WORKER_CPU:-4}
+            K3S_WORKER_MEM=${K3S_WORKER_MEM:-8192}
+            K3S_WORKER_DISK=${K3S_WORKER_DISK:-100}
+            K3S_INGRESS_CPU=${K3S_INGRESS_CPU:-2}
+            K3S_INGRESS_MEM=${K3S_INGRESS_MEM:-4096}
+            K3S_INGRESS_DISK=${K3S_INGRESS_DISK:-25}
+            
+            log_step "K3s cluster node selection"
+            local total_nodes=$((1 + K3S_CONTROL_COUNT + K3S_WORKER_COUNT + K3S_INGRESS_COUNT))
+            log_info "Cluster: 1 mgmt + $K3S_CONTROL_COUNT control + $K3S_WORKER_COUNT worker + $K3S_INGRESS_COUNT ingress = $total_nodes nodes"
+            echo ""
+            
+            local all_selected=""
+            
+            # 1. Select management node
+            log_info "Selecting management node..."
+            local mgmt_node=$(select_best_node "$K3S_MGMT_CPU" "$K3S_MGMT_MEM" "$K3S_MGMT_DISK" "$DEPLOY_NETWORK" \
+                "$CUSTOM_BLACKLIST_NODES" "$CUSTOM_BLACKLIST_FARMS" "$CUSTOM_WHITELIST_FARMS" "" "" "")
+            mgmt_node=$(echo "$mgmt_node" | tr -d '[:space:]')
+            if [ -z "$mgmt_node" ] || [ "$mgmt_node" = "null" ]; then
+                log_error "Failed to select management node"
+                return 1
             fi
-            log_warning "K3s pattern: Using single node for management. Multi-node selection coming in v0.11.0"
+            all_selected="$mgmt_node"
+            export TF_VAR_management_node=$mgmt_node
+            export TF_VAR_management_cpu=$K3S_MGMT_CPU
+            export TF_VAR_management_mem=$K3S_MGMT_MEM
+            export TF_VAR_management_disk=$K3S_MGMT_DISK
+            
+            # 2. Select control plane nodes
+            log_info "Selecting $K3S_CONTROL_COUNT control plane nodes..."
+            local control_nodes=$(select_multiple_nodes "$K3S_CONTROL_COUNT" "$K3S_CONTROL_CPU" "$K3S_CONTROL_MEM" "$K3S_CONTROL_DISK" \
+                "$DEPLOY_NETWORK" "false" "$all_selected" "$CUSTOM_BLACKLIST_FARMS" "$CUSTOM_WHITELIST_FARMS")
+            if [ -z "$control_nodes" ]; then
+                log_error "Failed to select control plane nodes"
+                return 1
+            fi
+            all_selected="$all_selected,$control_nodes"
+            # Convert comma-separated to Terraform list format [1,2,3]
+            local control_tf="[$(echo "$control_nodes" | tr ',' ',')]"
+            export TF_VAR_control_nodes="$control_tf"
+            export TF_VAR_control_cpu=$K3S_CONTROL_CPU
+            export TF_VAR_control_mem=$K3S_CONTROL_MEM
+            export TF_VAR_control_disk=$K3S_CONTROL_DISK
+            
+            # 3. Select worker nodes
+            log_info "Selecting $K3S_WORKER_COUNT worker nodes..."
+            local worker_nodes=$(select_multiple_nodes "$K3S_WORKER_COUNT" "$K3S_WORKER_CPU" "$K3S_WORKER_MEM" "$K3S_WORKER_DISK" \
+                "$DEPLOY_NETWORK" "false" "$all_selected" "$CUSTOM_BLACKLIST_FARMS" "$CUSTOM_WHITELIST_FARMS")
+            if [ -z "$worker_nodes" ]; then
+                log_error "Failed to select worker nodes"
+                return 1
+            fi
+            all_selected="$all_selected,$worker_nodes"
+            local worker_tf="[$(echo "$worker_nodes" | tr ',' ',')]"
+            export TF_VAR_worker_nodes="$worker_tf"
+            export TF_VAR_worker_cpu=$K3S_WORKER_CPU
+            export TF_VAR_worker_mem=$K3S_WORKER_MEM
+            export TF_VAR_worker_disk=$K3S_WORKER_DISK
+            
+            # 4. Select ingress nodes (if configured)
+            if [ "$K3S_INGRESS_COUNT" -gt 0 ]; then
+                log_info "Selecting $K3S_INGRESS_COUNT ingress nodes (with public IPv4)..."
+                local ingress_nodes=$(select_multiple_nodes "$K3S_INGRESS_COUNT" "$K3S_INGRESS_CPU" "$K3S_INGRESS_MEM" "$K3S_INGRESS_DISK" \
+                    "$DEPLOY_NETWORK" "true" "$all_selected" "$CUSTOM_BLACKLIST_FARMS" "$CUSTOM_WHITELIST_FARMS")
+                if [ -z "$ingress_nodes" ]; then
+                    log_error "Failed to select ingress nodes (need public IPv4)"
+                    return 1
+                fi
+                local ingress_tf="[$(echo "$ingress_nodes" | tr ',' ',')]"
+                export TF_VAR_ingress_nodes="$ingress_tf"
+                export TF_VAR_ingress_cpu=$K3S_INGRESS_CPU
+                export TF_VAR_ingress_mem=$K3S_INGRESS_MEM
+                export TF_VAR_ingress_disk=$K3S_INGRESS_DISK
+                export TF_VAR_worker_public_ipv4=false
+            else
+                export TF_VAR_ingress_nodes="[]"
+                export TF_VAR_worker_public_ipv4=true
+            fi
+            
+            log_success "K3s cluster nodes selected successfully"
+            echo ""
             ;;
         *)
             # Unknown pattern - export generic variables
