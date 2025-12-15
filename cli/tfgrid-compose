@@ -2573,6 +2573,38 @@ EOF
         exit $?
         ;;
 
+    state)
+        # State directory management
+        SUBCOMMAND="${1:-}"
+        shift || true
+
+        case "$SUBCOMMAND" in
+            clean|cleanup)
+                log_info "TFGrid Compose v$VERSION - State Directory Cleanup"
+                echo ""
+                state_clean "$@"
+                ;;
+            list|ls)
+                log_info "TFGrid Compose v$VERSION - State Directories"
+                echo ""
+                state_list
+                ;;
+            ""|help|-h|--help)
+                echo "Usage: tfgrid-compose state <subcommand>"
+                echo ""
+                echo "Subcommands:"
+                echo "  list      List all state directories"
+                echo "  clean     Remove orphaned state directories (no active contracts)"
+                ;;
+            *)
+                log_error "Unknown state subcommand: $SUBCOMMAND"
+                echo ""
+                echo "Usage: tfgrid-compose state [list|clean]"
+                ;;
+        esac
+        exit $?
+        ;;
+
     deployments)
         # Deployment registry maintenance tools
         SUBCOMMAND="${1:-}"

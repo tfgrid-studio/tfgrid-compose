@@ -312,6 +312,7 @@ cmd_contracts() {
       #   tfgrid-compose contracts delete <id1> <id2> --yes
       #   tfgrid-compose contracts delete --all
       #   tfgrid-compose contracts delete --all --yes
+      #   tfgrid-compose contracts delete --container <container-id>
       
       if [ "${1:-}" = "--all" ]; then
         shift || true
@@ -321,6 +322,25 @@ cmd_contracts() {
           contracts_cancel_all
         fi
         exit 0
+      fi
+      
+      # Handle --container flag for deleting by container/deployment ID
+      if [ "${1:-}" = "--container" ] || [ "${1:-}" = "-c" ]; then
+        shift || true
+        local CONTAINER_ID="${1:-}"
+        shift || true
+        local SKIP_CONFIRM=false
+        [ "${1:-}" = "--yes" ] && SKIP_CONFIRM=true
+        
+        if [ -z "$CONTAINER_ID" ]; then
+          log_error "Container ID required"
+          echo ""
+          echo "Usage: tfgrid-compose contracts delete --container <container-id> [--yes]"
+          exit 1
+        fi
+        
+        contracts_delete_by_container "$CONTAINER_ID" "$SKIP_CONFIRM"
+        exit $?
       fi
       
       local CONTRACT_IDS=()
@@ -334,6 +354,10 @@ cmd_contracts() {
             ;;
           --all)
             log_error "Cannot use --all with specific contract IDs"
+            exit 1
+            ;;
+          --container|-c)
+            log_error "Cannot use --container with specific contract IDs"
             exit 1
             ;;
           *)
@@ -394,10 +418,47 @@ cmd_contracts() {
       
       exit $failed
       ;;
+    orphans)
+      # Find and optionally delete orphaned contracts
+      # Usage: t contracts orphans [--delete] [--yes]
+      local DO_DELETE=false
+      local SKIP_CONFIRM=false
+      
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --delete) DO_DELETE=true; shift ;;
+          --yes) SKIP_CONFIRM=true; shift ;;
+          *) log_error "Unknown option: $1"; exit 1 ;;
+        esac
+      done
+      
+      contracts_orphans "$DO_DELETE" "$SKIP_CONFIRM"
+      ;;
+    clean)
+      # Interactive contract cleanup
+      # Usage: t contracts clean [--interactive]
+      local INTERACTIVE=false
+      
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --interactive|-i) INTERACTIVE=true; shift ;;
+          *) log_error "Unknown option: $1"; exit 1 ;;
+        esac
+      done
+      
+      if [ "$INTERACTIVE" = "true" ]; then
+        contracts_clean_interactive
+      else
+        echo "Usage: tfgrid-compose contracts clean --interactive"
+        echo ""
+        echo "Interactive mode shows all deployments and lets you select which to delete."
+        exit 1
+      fi
+      ;;
     *)
       log_error "Unknown contracts subcommand: $SUBCOMMAND"
       echo ""
-      echo "Available subcommands: list, show, delete"
+      echo "Available subcommands: list, show, delete, orphans, clean"
       exit 1
       ;;
   esac
