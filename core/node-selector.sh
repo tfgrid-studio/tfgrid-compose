@@ -396,7 +396,9 @@ select_best_node() {
 
     # Convert to bytes for API
     local mru=$((mem_mb * 1024 * 1024))
-    local sru=$((disk_gb * 1024 * 1024 * 1024))
+    # Add 25GB buffer for rootfs overhead and SSD pool fragmentation
+    local disk_with_buffer=$((disk_gb + 25))
+    local sru=$((disk_with_buffer * 1024 * 1024 * 1024))
 
     # Query GridProxy with comprehensive size to capture all available nodes
     local api_url="${GRIDPROXY_URL}/nodes?status=up&free_mru=${mru}&free_sru=${sru}&size=7000"
@@ -523,7 +525,9 @@ query_gridproxy() {
     local cli_min_uptime="${9:-}"
 
     local mru=$((mem_mb * 1024 * 1024))
-    local sru=$((disk_gb * 1024 * 1024 * 1024))
+    # Add 25GB buffer for rootfs overhead and SSD pool fragmentation
+    local disk_with_buffer=$((disk_gb + 25))
+    local sru=$((disk_with_buffer * 1024 * 1024 * 1024))
 
     local response=$(curl -s "${GRIDPROXY_URL}/nodes?status=up&free_mru=${mru}&free_sru=${sru}&size=7000")
 
@@ -614,7 +618,9 @@ select_multiple_nodes() {
 
     # Convert to bytes for API
     local mru=$((mem_mb * 1024 * 1024))
-    local sru=$((disk_gb * 1024 * 1024 * 1024))
+    # Add 25GB buffer for rootfs overhead and SSD pool fragmentation
+    local disk_with_buffer=$((disk_gb + 25))
+    local sru=$((disk_with_buffer * 1024 * 1024 * 1024))
 
     # Query GridProxy
     local api_url="${GRIDPROXY_URL}/nodes?status=up&free_mru=${mru}&free_sru=${sru}&size=7000"
