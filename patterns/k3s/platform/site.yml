@@ -27,6 +27,22 @@
     - role: worker
       tags: [worker]
 
+- name: Join K3s Ingress Nodes (if configured)
+  hosts: k3s_ingress
+  become: yes
+  roles:
+    - role: ingress
+      tags: [ingress]
+  when: has_ingress_nodes | default(false) | bool
+
+- name: Configure Keepalived for Ingress HA (if configured)
+  hosts: k3s_ingress
+  become: yes
+  roles:
+    - role: keepalived
+      tags: [keepalived]
+  when: has_ingress_nodes | default(false) | bool
+
 - name: Setup local kubeconfig for K3s cluster
   hosts: k3s_management
   become: no
@@ -35,3 +51,118 @@
       tags: [kubeconfig]
   vars:
     primary_control_node: "{{ hostvars['node1']['inventory_hostname'] }}"
+
+- name: Deploy Nginx Ingress to dedicated ingress nodes (if configured)
+  hosts: k3s_management
+  become: no
+  tasks:
+    - name: Create Nginx Ingress DaemonSet for ingress nodes
+      copy:
+        content: |
+          apiVersion: apps/v1
+          kind: DaemonSet
+          metadata:
+            name: nginx-ingress-controller
+            namespace: ingress-nginx
+            labels:
+              app.kubernetes.io/name: ingress-nginx
+              app.kubernetes.io/component: controller
+          spec:
+            selector:
+              matchLabels:
+                app.kubernetes.io/name: ingress-nginx
+                app.kubernetes.io/component: controller
+            template:
+              metadata:
+                labels:
+                  app.kubernetes.io/name: ingress-nginx
+                  app.kubernetes.io/component: controller
+              spec:
+                nodeSelector:
+                  node-role.kubernetes.io/ingress: "true"
+                tolerations:
+                  - key: "dedicated"
+                    operator: "Equal"
+                    value: "ingress"
+                    effect: "NoSchedule"
+                hostNetwork: true
+                dnsPolicy: ClusterFirstWithHostNet
+                serviceAccountName: ingress-nginx
+                containers:
+                  - name: controller
+                    image: registry.k8s.io/ingress-nginx/controller:v1.8.1
+                    args:
+                      - /nginx-ingress-controller
+                      - --publish-service=$(POD_NAMESPACE)/ingress-nginx-controller
+                      - --election-id=ingress-controller-leader
+                      - --controller-class=k8s.io/ingress-nginx
+                      - --ingress-class=nginx
+                      - --configmap=$(POD_NAMESPACE)/ingress-nginx-controller
+                    env:
+                      - name: POD_NAME
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.name
+                      - name: POD_NAMESPACE
+                        valueFrom:
+                          fieldRef:
+                            fieldPath: metadata.namespace
+                    ports:
+                      - name: http
+                        containerPort: 80
+                        hostPort: 80
+                      - name: https
+                        containerPort: 443
+                        hostPort: 443
+                    livenessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 10254
+                      initialDelaySeconds: 10
+                      periodSeconds: 10
+                    readinessProbe:
+                      httpGet:
+                        path: /healthz
+                        port: 10254
+                      initialDelaySeconds: 10
+                      periodSeconds: 10
+        dest: /tmp/nginx-ingress-daemonset.yaml
+      when: has_ingress_nodes | default(false) | bool
+
+    - name: Apply Nginx Ingress base manifests
+      shell: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/baremetal/deploy.yaml
+      when: has_ingress_nodes | default(false) | bool
+      ignore_errors: yes
+
+    - name: Wait for ingress-nginx namespace
+      shell: kubectl get namespace ingress-nginx
+      register: ns_check
+      retries: 10
+      delay: 5
+      until: ns_check.rc == 0
+      when: has_ingress_nodes | default(false) | bool
+      ignore_errors: yes
+
+    - name: Delete default Nginx Ingress Deployment (we use DaemonSet instead)
+      shell: kubectl delete deployment ingress-nginx-controller -n ingress-nginx --ignore-not-found=true
+      when: has_ingress_nodes | default(false) | bool
+      ignore_errors: yes
+
+    - name: Apply Nginx Ingress DaemonSet for ingress nodes
+      shell: kubectl apply -f /tmp/nginx-ingress-daemonset.yaml
+      when: has_ingress_nodes | default(false) | bool
+      ignore_errors: yes
+
+    - name: Display ingress node public IPs for DNS configuration
+      debug:
+        msg: |
+          ============================================
+          INGRESS NODES DEPLOYED SUCCESSFULLY
+          ============================================
+          Configure your DNS A records to point to these IPs:
+          {% for host in groups['k3s_ingress'] %}
+          - {{ hostvars[host]['public_ip'] | default('N/A') }}
+          {% endfor %}
+          ============================================
+      when: has_ingress_nodes | default(false) | bool
+  tags: [ingress-nginx]

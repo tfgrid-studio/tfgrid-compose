@@ -1,0 +1,103 @@
+---
+# Keepalived role - provides VRRP failover for ingress nodes
+# This ensures high availability for the ingress tier
+
+- name: Install keepalived
+  apt:
+    name: keepalived
+    state: present
+    update_cache: yes
+  register: keepalived_install
+  retries: 3
+  delay: 5
+  until: keepalived_install is succeeded
+
+- name: Get network interface name
+  shell: ip route | grep default | awk '{print $5}' | head -1
+  register: default_interface
+  changed_when: false
+
+- name: Set interface fact
+  set_fact:
+    vrrp_interface: "{{ default_interface.stdout }}"
+
+- name: Determine VRRP priority based on inventory position
+  set_fact:
+    vrrp_priority: "{{ 100 - (groups['k3s_ingress'].index(inventory_hostname) | int) }}"
+
+- name: Determine VRRP state (first node is MASTER)
+  set_fact:
+    vrrp_state: "{{ 'MASTER' if groups['k3s_ingress'].index(inventory_hostname) == 0 else 'BACKUP' }}"
+
+- name: Display VRRP configuration
+  debug:
+    msg: |
+      Keepalived configuration for {{ inventory_hostname }}:
+      - Interface: {{ vrrp_interface }}
+      - State: {{ vrrp_state }}
+      - Priority: {{ vrrp_priority }}
+      - Public IP: {{ public_ip | default('not set') }}
+
+- name: Create keepalived configuration directory
+  file:
+    path: /etc/keepalived
+    state: directory
+    mode: '0755'
+
+- name: Deploy keepalived configuration
+  template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    mode: '0644'
+  notify: restart keepalived
+
+- name: Create health check script for Nginx Ingress
+  copy:
+    content: |
+      #!/bin/bash
+      # Check if nginx-ingress controller is responding
+      # This script is used by keepalived to determine if this node should be active
+      
+      # Check if k3s-agent is running
+      if ! systemctl is-active --quiet k3s-agent; then
+          exit 1
+      fi
+      
+      # Check if we can reach the Kubernetes API
+      if ! curl -sk --max-time 5 https://{{ primary_control_ip }}:6443/healthz > /dev/null 2>&1; then
+          exit 1
+      fi
+      
+      # Check if nginx-ingress is responding locally
+      if curl -s --max-time 5 -o /dev/null -w "%{http_code}" http://127.0.0.1:80/healthz 2>/dev/null | grep -q "200\|404"; then
+          exit 0
+      fi
+      
+      # If nginx isn't responding yet, still consider healthy if k3s-agent is up
+      # This allows for initial setup time
+      exit 0
+    dest: /etc/keepalived/check_ingress.sh
+    mode: '0755'
+
+- name: Enable and start keepalived
+  systemd:
+    name: keepalived
+    state: started
+    enabled: yes
+  register: keepalived_service
+
+- name: Verify keepalived is running
+  shell: systemctl status keepalived
+  register: keepalived_status
+  changed_when: false
+  ignore_errors: yes
+
+- name: Display keepalived status
+  debug:
+    msg: "Keepalived status on {{ inventory_hostname }}: {{ 'running' if keepalived_status.rc == 0 else 'not running' }}"
+
+handlers:
+  - name: restart keepalived
+    systemd:
+      name: keepalived
+      state: restarted

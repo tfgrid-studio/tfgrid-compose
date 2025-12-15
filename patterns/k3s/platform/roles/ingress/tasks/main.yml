@@ -1,0 +1,152 @@
+---
+# Ingress node role - joins K3s cluster as agent with ingress taints
+# These nodes are dedicated to running Nginx Ingress Controller
+
+- name: Check for agent uninstall script
+  stat:
+    path: /usr/local/bin/k3s-agent-uninstall.sh
+  register: agent_uninstall_script
+
+- name: Check if K3s is already installed
+  stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary_check
+
+- name: Clean up existing K3s installation
+  block:
+    - name: Stop K3s agent service if running
+      systemd:
+        name: k3s-agent
+        state: stopped
+      ignore_errors: yes
+
+    - name: Run K3s agent uninstall script if present
+      shell: /usr/local/bin/k3s-agent-uninstall.sh
+      when: agent_uninstall_script.stat.exists
+      ignore_errors: yes
+
+    - name: Force remove k3s binary if uninstall script didn't work
+      file:
+        path: /usr/local/bin/k3s
+        state: absent
+
+    - name: Clean up K3s data directories
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/rancher/k3s/agent
+        - /etc/rancher/k3s
+      ignore_errors: yes
+
+    - name: Wait for uninstall to complete
+      pause:
+        seconds: 5
+      when: agent_uninstall_script.stat.exists
+  when: force_clean_install | default(false) | bool or k3s_binary_check.stat.exists | bool
+
+- name: Check if K3s is already installed (post cleanup)
+  stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+
+- name: Install K3s agent on ingress node with taints
+  block:
+    - name: Download K3s installation script
+      get_url:
+        url: https://get.k3s.io
+        dest: /tmp/k3s-install.sh
+        mode: '0755'
+        force: true
+      register: k3s_download
+      retries: 3
+      delay: 5
+      until: k3s_download is succeeded
+
+    - name: Manually fetch token from primary control node
+      delegate_to: "{{ primary_control_node }}"
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: k3s_token_slurp
+      become: true
+
+    - name: Set token fact
+      set_fact:
+        k3s_token: "{{ k3s_token_slurp['content'] | b64decode | trim }}"
+
+    - name: Pre-download K3s binary
+      get_url:
+        url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version }}/k3s"
+        dest: /tmp/k3s-binary
+        mode: '0755'
+        force: true
+      register: k3s_binary_download
+      retries: 3
+      delay: 5
+      until: k3s_binary_download is succeeded
+      ignore_errors: true
+
+    - name: Create K3s install directory
+      file:
+        path: /var/lib/rancher/k3s/agent
+        state: directory
+        mode: '0755'
+
+    - name: Run K3s agent installation with ingress taints and labels
+      shell: >
+        INSTALL_K3S_VERSION={{ k3s_version }}
+        K3S_URL=https://{{ primary_control_ip }}:6443
+        K3S_TOKEN={{ k3s_token }}
+        INSTALL_K3S_EXEC="--node-name={{ inventory_hostname }}
+        --node-ip={{ ansible_host }}
+        --node-taint dedicated=ingress:NoSchedule
+        --node-label node-role.kubernetes.io/ingress=true
+        --node-label kubernetes.io/role=ingress
+        --snapshotter=native"
+        /tmp/k3s-install.sh
+      register: k3s_install_result
+      async: 1200
+      poll: 15
+
+    - name: Wait for K3s agent service to start
+      systemd:
+        name: k3s-agent
+        state: started
+        enabled: yes
+      register: k3s_agent_service
+      retries: 5
+      delay: 10
+      until: k3s_agent_service is succeeded
+      ignore_errors: yes
+
+    - name: Check if K3s agent service is running
+      shell: systemctl status k3s-agent
+      register: k3s_agent_status
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Display K3s agent service status
+      debug:
+        msg: "K3s ingress agent service status on {{ inventory_hostname }}: {{ k3s_agent_status.rc == 0 }}"
+
+    - name: Verify node joined with correct labels
+      shell: |
+        kubectl get node {{ inventory_hostname }} -o jsonpath='{.metadata.labels}' 2>/dev/null || echo "Node not found yet"
+      delegate_to: "{{ primary_control_node }}"
+      register: node_labels
+      retries: 10
+      delay: 15
+      until: "'node-role.kubernetes.io/ingress' in node_labels.stdout"
+      ignore_errors: yes
+
+    - name: Display node labels
+      debug:
+        msg: "Ingress node {{ inventory_hostname }} labels: {{ node_labels.stdout }}"
+      when: node_labels is defined
+
+    - name: Set ingress node verified fact
+      set_fact:
+        ingress_verified: true
+  when: (k3s_binary is not defined) or
+        (k3s_binary.stat is not defined) or
+        (not k3s_binary.stat.exists)

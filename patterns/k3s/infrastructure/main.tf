@@ -19,12 +19,31 @@ variable "SSH_KEY" {
 }
 variable "control_nodes" { type = list(number) } # e.g. [6905, 6906, 6907]
 variable "worker_nodes" { type = list(number) }  # e.g. [6910, 6911, 6912]
+variable "ingress_nodes" {
+  type        = list(number)
+  default     = []  # Optional: dedicated ingress nodes with public IPs
+  description = "Node IDs for dedicated ingress nodes (optional, enables HA ingress with Keepalived)"
+}
 variable "control_cpu" { type = number }
 variable "control_mem" { type = number }
 variable "control_disk" { type = number }
 variable "worker_cpu" { type = number }
 variable "worker_mem" { type = number }
 variable "worker_disk" { type = number }
+
+# Ingress node variables (optional - only used if ingress_nodes is populated)
+variable "ingress_cpu" {
+  type    = number
+  default = 2
+}
+variable "ingress_mem" {
+  type    = number
+  default = 4096 # 4GB RAM
+}
+variable "ingress_disk" {
+  type    = number
+  default = 25 # 25GB SSD
+}
 
 variable "network_name" {
   type        = string
@@ -74,16 +93,19 @@ provider "grid" {
 # Generate unique mycelium keys/seeds for all nodes
 locals {
   cluster_nodes = concat(var.control_nodes, var.worker_nodes)
-  all_nodes     = concat([var.management_node], local.cluster_nodes)
+  ingress_nodes = var.ingress_nodes
+  all_cluster_nodes = concat(local.cluster_nodes, local.ingress_nodes)
+  all_nodes     = concat([var.management_node], local.all_cluster_nodes)
+  has_ingress_nodes = length(var.ingress_nodes) > 0
 }
 
 resource "random_bytes" "k3s_mycelium_key" {
-  for_each = toset([for n in local.cluster_nodes : tostring(n)]) # Convert numbers to strings
+  for_each = toset([for n in local.all_cluster_nodes : tostring(n)]) # Convert numbers to strings
   length   = 32
 }
 
 resource "random_bytes" "k3s_ip_seed" {
-  for_each = toset([for n in local.cluster_nodes : tostring(n)]) # Convert numbers to strings
+  for_each = toset([for n in local.all_cluster_nodes : tostring(n)]) # Convert numbers to strings
   length   = 6
 }
 
@@ -104,7 +126,7 @@ resource "grid_network" "k3s_network" {
   add_wg_access = var.network_mode != "mycelium-only"
   mycelium_keys = merge(
     {
-      for node in local.cluster_nodes : tostring(node) => random_bytes.k3s_mycelium_key[tostring(node)].hex
+      for node in local.all_cluster_nodes : tostring(node) => random_bytes.k3s_mycelium_key[tostring(node)].hex
     },
     {
       tostring(var.management_node) = random_bytes.mgmt_mycelium_key.hex
@@ -152,6 +174,48 @@ resource "grid_deployment" "k3s_nodes" {
       mount_point = "/data"
     }
     rootfs_size = 20480
+  }
+}
+
+# Dedicated ingress node deployment (optional - only created if ingress_nodes is populated)
+resource "grid_deployment" "ingress_nodes" {
+  for_each = {
+    for idx, node in local.ingress_nodes :
+    "ingress_${idx}" => {
+      node_id = node
+    }
+  }
+
+  node         = each.value.node_id
+  network_name = grid_network.k3s_network.name
+
+  disks {
+    name = "disk_${each.key}"
+    size = var.ingress_disk
+  }
+
+  vms {
+    name             = "vm_${each.key}"
+    flist            = "https://hub.grid.tf/tf-official-vms/ubuntu-24.04-full.flist"
+    cpu              = var.ingress_cpu
+    memory           = var.ingress_mem
+    entrypoint       = "/sbin/zinit init"
+    publicip         = true  # Ingress nodes always get public IPs
+    mycelium_ip_seed = random_bytes.k3s_ip_seed[tostring(each.value.node_id)].hex
+
+    env_vars = {
+      SSH_KEY = var.SSH_KEY != null ? var.SSH_KEY : (
+        fileexists(pathexpand("~/.ssh/id_ed25519.pub")) ?
+        file(pathexpand("~/.ssh/id_ed25519.pub")) :
+        file(pathexpand("~/.ssh/id_rsa.pub"))
+      )
+    }
+
+    mounts {
+      name        = "disk_${each.key}"
+      mount_point = "/data"
+    }
+    rootfs_size = 10240
   }
 }
 
@@ -212,6 +276,36 @@ output "worker_public_ips" {
   }
 }
 
+# Ingress node outputs
+output "ingress_wireguard_ips" {
+  value = {
+    for key, dep in grid_deployment.ingress_nodes :
+    key => dep.vms[0].ip
+  }
+  description = "WireGuard IPs of ingress nodes"
+}
+
+output "ingress_mycelium_ips" {
+  value = {
+    for key, dep in grid_deployment.ingress_nodes :
+    key => dep.vms[0].mycelium_ip
+  }
+  description = "Mycelium IPs of ingress nodes"
+}
+
+output "ingress_public_ips" {
+  value = {
+    for key, dep in grid_deployment.ingress_nodes :
+    key => dep.vms[0].computedip
+  }
+  description = "Public IPv4 addresses of ingress nodes (for DNS A records)"
+}
+
+output "has_ingress_nodes" {
+  value       = local.has_ingress_nodes
+  description = "Whether dedicated ingress nodes are configured"
+}
+
 output "wg_config" {
   value = grid_network.k3s_network.access_wg_config
 }
@@ -250,15 +344,26 @@ output "node_ids" {
 }
 
 output "secondary_ips" {
-  value = [
-    for key, dep in grid_deployment.k3s_nodes : {
-      name = "cluster_node_${key}"
-      ip   = dep.vms[0].ip
-      type = "wireguard"
-      role = contains(var.control_nodes, dep.node) ? "control" : "worker"
-    }
-  ]
-  description = "Additional IPs for cluster nodes (control plane + workers)"
+  value = concat(
+    [
+      for key, dep in grid_deployment.k3s_nodes : {
+        name = "cluster_node_${key}"
+        ip   = dep.vms[0].ip
+        type = "wireguard"
+        role = contains(var.control_nodes, dep.node) ? "control" : "worker"
+      }
+    ],
+    [
+      for key, dep in grid_deployment.ingress_nodes : {
+        name = "ingress_node_${key}"
+        ip   = dep.vms[0].ip
+        type = "wireguard"
+        role = "ingress"
+        public_ip = dep.vms[0].computedip
+      }
+    ]
+  )
+  description = "Additional IPs for cluster nodes (control plane + workers + ingress)"
 }
 
 output "connection_info" {

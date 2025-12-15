@@ -79,6 +79,12 @@ management_mycelium_ip=$(echo "$terraform_output" | jq -r '.values.outputs.manag
 wireguard_ips=$(echo "$terraform_output" | jq -r '.values.outputs.wireguard_ips.value // {}')
 mycelium_ips=$(echo "$terraform_output" | jq -r '.values.outputs.mycelium_ips.value // {}')
 
+# Extract ingress node information (optional)
+ingress_wireguard_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_wireguard_ips.value // {}')
+ingress_mycelium_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_mycelium_ips.value // {}')
+ingress_public_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_public_ips.value // {}')
+has_ingress_nodes=$(echo "$terraform_output" | jq -r '.values.outputs.has_ingress_nodes.value // false')
+
 # Choose which IPs to use for Ansible connectivity
 case "${MAIN_NETWORK:-wireguard}" in
     "wireguard")
@@ -128,14 +134,33 @@ else
     worker_count=2  # Default to 2 if parsing fails
 fi
 
-log_info "Detected configuration: 1 management + $control_count control + $worker_count worker nodes"
+# Parse ingress node count (optional)
+ingress_nodes_content=$(grep -oP 'ingress_nodes\s*=\s*\[\K[^\]]+' "$CREDENTIALS_FILE" 2>/dev/null || echo "")
+if [ -n "$ingress_nodes_content" ] && [ "$ingress_nodes_content" != "" ]; then
+    # Remove spaces and count numbers separated by commas
+    ingress_count=$(echo "$ingress_nodes_content" | tr -d ' ' | tr ',' '\n' | grep -c '^[0-9]\+$' || echo 0)
+else
+    ingress_count=0  # Default to 0 (no dedicated ingress nodes)
+fi
+
+if [ "$ingress_count" -gt 0 ]; then
+    log_info "Detected configuration: 1 management + $control_count control + $worker_count worker + $ingress_count ingress nodes"
+else
+    log_info "Detected configuration: 1 management + $control_count control + $worker_count worker nodes"
+fi
 
 # Clear existing file and generate new inventory
+if [ "$ingress_count" -gt 0 ]; then
+    config_summary="1 management + ${control_count} control + ${worker_count} worker + ${ingress_count} ingress nodes"
+else
+    config_summary="1 management + ${control_count} control + ${worker_count} worker nodes"
+fi
+
 cat > "$OUTPUT_FILE" << EOF
 # TFGrid K3s Cluster Ansible Inventory
 # Generated on $(date)
 # Network: ${MAIN_NETWORK:-wireguard}
-# Configuration: 1 management + ${control_count} control + ${worker_count} worker nodes
+# Configuration: ${config_summary}
 
 # Management Nodes
 [k3s_management]
@@ -174,8 +199,58 @@ while read -r key ip; do
     worker_idx=$((worker_idx + 1))
 done
 
+# Add ingress nodes section (if any)
+if [ "$ingress_count" -gt 0 ]; then
+    cat >> "$OUTPUT_FILE" << EOF
+
+# K3s Ingress Nodes (dedicated, with public IPs)
+[k3s_ingress]
+EOF
+
+    # Choose which IPs to use for ingress nodes
+    case "${MAIN_NETWORK:-wireguard}" in
+        "wireguard")
+            ingress_node_ips="$ingress_wireguard_ips"
+            ;;
+        "mycelium")
+            ingress_node_ips="$ingress_mycelium_ips"
+            ;;
+    esac
+
+    # Add ingress nodes
+    ingress_idx=0
+    echo "$ingress_node_ips" | jq -r 'to_entries | sort_by(.key) | .[] | .key + " " + .value' 2>/dev/null | \
+    while read -r key ip; do
+        if [ -n "$ip" ]; then
+            ingress_num=$((ingress_idx + 1))
+            # Get public IP for this ingress node
+            public_ip=$(echo "$ingress_public_ips" | jq -r ".\"$key\" // empty")
+            echo "ingress${ingress_num} ansible_host=${ip} ansible_user=root public_ip=${public_ip} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" >> "$OUTPUT_FILE"
+            ingress_idx=$((ingress_idx + 1))
+        fi
+    done
+fi
+
 # Add cluster group
-cat >> "$OUTPUT_FILE" << EOF
+if [ "$ingress_count" -gt 0 ]; then
+    cat >> "$OUTPUT_FILE" << EOF
+
+# All K3s Nodes
+[k3s_cluster:children]
+k3s_management
+k3s_control
+k3s_worker
+k3s_ingress
+
+# Global Variables
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3
+k3s_version=v1.32.3+k3s1
+primary_control_node=node1
+has_ingress_nodes=true
+EOF
+else
+    cat >> "$OUTPUT_FILE" << EOF
 
 # All K3s Nodes
 [k3s_cluster:children]
@@ -188,7 +263,9 @@ k3s_worker
 ansible_python_interpreter=/usr/bin/python3
 k3s_version=v1.32.3+k3s1
 primary_control_node=node1
+has_ingress_nodes=false
 EOF
+fi
 
 # Extract first control plane node's IP for use as the primary control node
 first_control_ip=$(echo "$node_ips" | jq -r 'to_entries | sort_by(.key) | .[0].value // empty')
@@ -201,3 +278,6 @@ log_info "Inventory contains:"
 echo "  - 1 management node"
 echo "  - ${control_count} control plane node(s)"
 echo "  - ${worker_count} worker node(s)"
+if [ "$ingress_count" -gt 0 ]; then
+    echo "  - ${ingress_count} ingress node(s) (dedicated, with public IPs)"
+fi

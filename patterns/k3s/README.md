@@ -11,6 +11,7 @@
 The K3s pattern deploys a **complete Kubernetes cluster** with:
 - **N Control Plane Nodes** (K3s masters)
 - **M Worker Nodes** (K3s agents)
+- **P Ingress Nodes** (optional, dedicated with public IPs + Keepalived)
 - **1 Management Node** (kubectl, helm, k9s pre-installed)
 - **MetalLB** load balancer
 - **Nginx Ingress Controller**
@@ -19,6 +20,8 @@ The K3s pattern deploys a **complete Kubernetes cluster** with:
 ---
 
 ## Architecture
+
+### Standard Architecture (without dedicated ingress)
 
 ```
 [Management Node] (10.1.2.2)
@@ -38,6 +41,59 @@ K3s Cluster (WireGuard: 10.1.x.x)
    ├── Worker 2 - 10.1.7.2
    └── Worker 3 - 10.1.8.2
 ```
+
+### Full HA Architecture (with dedicated ingress nodes)
+
+```
+                    ┌─────────────┐
+                    │   Internet  │
+                    └──────┬──────┘
+                           │
+              DNS A records (2 IPs)
+                           │
+           ┌───────────────┴───────────────┐
+           ▼                               ▼
+    ┌─────────────┐                 ┌─────────────┐
+    │  Ingress 1  │◄───VRRP/VIP───►│  Ingress 2  │
+    │  (public)   │   Keepalived   │  (public)   │
+    │  Nginx+K3s  │                │  Nginx+K3s  │
+    └──────┬──────┘                └──────┬──────┘
+           │       WireGuard mesh         │
+           └───────────────┬──────────────┘
+                           │
+    ┌──────────────────────┼──────────────────────┐
+    │                      │                      │
+    ▼                      ▼                      ▼
+┌────────┐           ┌────────┐           ┌────────┐
+│Worker 1│           │Worker 2│           │Worker 3│
+│(private)│          │(private)│          │(private)│
+│App Pods│           │App Pods│           │App Pods│
+└────────┘           └────────┘           └────────┘
+    │                      │                      │
+    └──────────────────────┼──────────────────────┘
+                           │
+    ┌──────────────────────┼──────────────────────┐
+    │                      │                      │
+    ▼                      ▼                      ▼
+┌────────┐           ┌────────┐           ┌────────┐
+│Master 1│◄─────────►│Master 2│◄─────────►│Master 3│
+│  etcd  │   etcd    │  etcd  │   cluster │  etcd  │
+│(private)│          │(private)│          │(private)│
+└────────┘           └────────┘           └────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │ Management  │
+                    │   Node      │
+                    │kubectl/helm │
+                    └─────────────┘
+```
+
+**Benefits of dedicated ingress nodes:**
+- **Isolation**: Ingress traffic doesn't compete with application pods
+- **Security**: Only ingress nodes have public IPs
+- **HA Failover**: Keepalived provides automatic failover (~3s)
+- **Scalability**: Scale ingress independently from workers
 
 ---
 
@@ -63,6 +119,26 @@ control_cpu = 4
 control_mem = 8192   # 8GB RAM
 worker_cpu = 8
 worker_mem = 16384   # 16GB RAM
+```
+
+**Full HA configuration (with dedicated ingress):**
+```hcl
+tfgrid_network = "main"
+management_node = 1000
+control_nodes = [2000, 2001, 2002]  # 3 masters for HA etcd
+worker_nodes = [3000, 3001, 3002]   # 3 workers for app pods
+ingress_nodes = [4000, 4001]        # 2 dedicated ingress nodes
+
+# Node specifications
+control_cpu = 4
+control_mem = 8192    # 8GB RAM
+worker_cpu = 8
+worker_mem = 16384    # 16GB RAM
+ingress_cpu = 2
+ingress_mem = 4096    # 4GB RAM
+
+# Workers don't need public IPs when using dedicated ingress
+worker_public_ipv4 = false
 ```
 
 ### 2. Deploy
