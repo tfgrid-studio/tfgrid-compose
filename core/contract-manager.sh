@@ -333,11 +333,12 @@ contracts_orphans() {
         return 0
     fi
     
-    # Get contracts from active deployments (via t ps)
+    # Get contracts from active deployments
     local state_dir=$(get_state_dir)
+    local config_dir="${TFGRID_CONFIG_DIR:-$HOME/.config/tfgrid-compose}"
     local active_contracts=()
     
-    # Check each state directory for terraform state with contracts
+    # Method 1: Check each state directory for terraform state with contracts
     for dir in "$state_dir"/*/; do
         [ -d "$dir" ] || continue
         local tf_state="$dir/terraform/terraform.tfstate"
@@ -349,6 +350,15 @@ contracts_orphans() {
             [ -n "$id" ] && active_contracts+=("$id")
         done <<< "$state_contracts"
     done
+    
+    # Method 2: Also check deployments.yaml for tracked contracts
+    local deployments_file="$config_dir/deployments.yaml"
+    if [ -f "$deployments_file" ]; then
+        local yaml_contracts=$(grep "contract_id:" "$deployments_file" 2>/dev/null | sed 's/.*contract_id:[[:space:]]*"\?\([0-9]*\)"\?.*/\1/' | grep -E '^[0-9]+$')
+        while IFS= read -r id; do
+            [ -n "$id" ] && active_contracts+=("$id")
+        done <<< "$yaml_contracts"
+    fi
     
     # Find orphaned contracts (in grid but not in any state)
     local orphaned=()
