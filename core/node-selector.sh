@@ -640,9 +640,14 @@ select_multiple_nodes() {
     # If public IPv4 required, filter to farms with free public IPs
     if [ "$require_public_ipv4" = "true" ]; then
         log_info "Filtering nodes on farms with available public IPs..."
-        # Query farms with free public IPs
+        # Query farms with free public IPs (API uses snake_case: farm_id)
         local farms_response=$(curl -s "${GRIDPROXY_URL}/farms?free_ips=1&size=1000")
+        # Extract farm IDs from response
         local farms_with_ips=$(echo "$farms_response" | jq '[.[].farmId]')
+        if [ "$farms_with_ips" = "[]" ] || [ -z "$farms_with_ips" ]; then
+            log_error "No farms with available public IPs found on the grid"
+            return 1
+        fi
         filtered_nodes=$(echo "$filtered_nodes" | jq --argjson farms "$farms_with_ips" '[.[] | select(.farmId as $fid | $farms | index($fid))]')
         local ipv4_count=$(echo "$filtered_nodes" | jq 'length')
         log_info "Found $ipv4_count nodes on farms with available public IPs"
@@ -657,7 +662,12 @@ select_multiple_nodes() {
         join(",")
     ')
 
-    local selected_count=$(echo "$selected" | tr ',' '\n' | grep -c '^[0-9]' || echo 0)
+    local selected_count=$(echo "$selected" | tr ',' '\n' | grep -c '^[0-9]' 2>/dev/null || echo 0)
+    selected_count=$(echo "$selected_count" | tr -d '[:space:]')
+    
+    if [ -z "$selected_count" ] || [ "$selected_count" = "0" ]; then
+        selected_count=0
+    fi
     
     if [ "$selected_count" -lt "$count" ]; then
         log_warning "Only found $selected_count of $count requested nodes"
