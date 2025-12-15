@@ -369,7 +369,7 @@ output "secondary_ips" {
 output "connection_info" {
   value = {
     method     = "kubectl"
-    endpoint   = "https://${grid_deployment.k3s_nodes[0].vms[0].ip}:6443"
+    endpoint   = "https://${grid_deployment.k3s_nodes["node_0"].vms[0].ip}:6443"
     management = grid_deployment.management_node.vms[0].ip
   }
   description = "K3s cluster connection information"
