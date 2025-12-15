@@ -95,9 +95,3 @@
 - name: Display keepalived status
   debug:
     msg: "Keepalived status on {{ inventory_hostname }}: {{ 'running' if keepalived_status.rc == 0 else 'not running' }}"
-
-handlers:
-  - name: restart keepalived
-    systemd:
-      name: keepalived
-      state: restarted
