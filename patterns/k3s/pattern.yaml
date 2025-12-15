@@ -23,13 +23,13 @@ requires:
   deployment_manifest:
     - kubernetes/deployment.yaml
     - kubernetes/service.yaml
-    - kubernetes/ingress.yaml (optional)
+    - "kubernetes/ingress.yaml (optional)"
   
   # Cluster configuration
   cluster_config:
-    workers: optional (default: 3)
-    ingress: optional (default: traefik)
-    storage: optional (default: local-path)
+    workers: "optional (default: 3)"
+    ingress: "optional (default: traefik)"
+    storage: "optional (default: local-path)"
 
 # Resource defaults
 defaults:
