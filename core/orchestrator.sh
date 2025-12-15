@@ -4,6 +4,175 @@
 # Load dependencies
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
+
+# Generate K3s multi-node inventory from terraform state
+generate_k3s_inventory() {
+    local state_dir="$1"
+    local output_dir="$2"
+    local tf_dir="$state_dir/terraform"
+    local output_file="$output_dir/inventory.ini"
+    
+    # Get terraform outputs
+    local terraform_output
+    terraform_output=$(tofu -chdir="$tf_dir" show -json 2>/dev/null)
+    
+    if [ -z "$terraform_output" ]; then
+        log_error "Failed to get terraform outputs"
+        return 1
+    fi
+    
+    # Extract node information
+    local management_wireguard_ip=$(echo "$terraform_output" | jq -r '.values.outputs.management_node_wireguard_ip.value // empty')
+    local management_mycelium_ip=$(echo "$terraform_output" | jq -r '.values.outputs.management_mycelium_ip.value // empty')
+    local wireguard_ips=$(echo "$terraform_output" | jq -r '.values.outputs.wireguard_ips.value // {}')
+    local mycelium_ips=$(echo "$terraform_output" | jq -r '.values.outputs.mycelium_ips.value // {}')
+    
+    # Extract ingress node information
+    local ingress_wireguard_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_wireguard_ips.value // {}')
+    local ingress_mycelium_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_mycelium_ips.value // {}')
+    local ingress_public_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_public_ips.value // {}')
+    local has_ingress_nodes=$(echo "$terraform_output" | jq -r '.values.outputs.has_ingress_nodes.value // false')
+    
+    # Get network preference from .env or default to wireguard
+    local main_network="${MAIN_NETWORK:-wireguard}"
+    local management_ip node_ips ingress_node_ips
+    
+    case "$main_network" in
+        "mycelium")
+            management_ip="$management_mycelium_ip"
+            node_ips="$mycelium_ips"
+            ingress_node_ips="$ingress_mycelium_ips"
+            log_info "Using Mycelium IPs for K3s inventory"
+            ;;
+        *)
+            management_ip="$management_wireguard_ip"
+            node_ips="$wireguard_ips"
+            ingress_node_ips="$ingress_wireguard_ips"
+            log_info "Using WireGuard IPs for K3s inventory"
+            ;;
+    esac
+    
+    if [ -z "$management_ip" ]; then
+        log_error "Failed to extract management node IP"
+        return 1
+    fi
+    
+    # Count nodes from terraform output
+    local control_count=$(echo "$node_ips" | jq -r 'keys | length')
+    local ingress_count=$(echo "$ingress_node_ips" | jq -r 'keys | length' 2>/dev/null || echo "0")
+    
+    # Get control/worker split from .env
+    local k3s_control_nodes="${K3S_CONTROL_NODES:-3}"
+    local k3s_worker_nodes="${K3S_WORKER_NODES:-3}"
+    
+    # Generate inventory file
+    cat > "$output_file" << EOF
+# TFGrid K3s Cluster Ansible Inventory
+# Generated on $(date)
+# Network: ${main_network}
+
+# Management Node
+[k3s_management]
+mgmt_host ansible_host=${management_ip} ansible_user=root ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+# K3s Control Plane Nodes
+[k3s_control]
+EOF
+
+    # Add control plane nodes
+    local idx=0
+    echo "$node_ips" | jq -r 'to_entries | sort_by(.key) | .[] | .key + " " + .value' | \
+    while read -r key ip; do
+        if [ $idx -lt $k3s_control_nodes ]; then
+            local node_num=$((idx + 1))
+            echo "node${node_num} ansible_host=${ip} ansible_user=root ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" >> "$output_file"
+        fi
+        idx=$((idx + 1))
+    done
+
+    # Add worker nodes section
+    cat >> "$output_file" << EOF
+
+# K3s Worker Nodes
+[k3s_worker]
+EOF
+
+    # Add worker nodes
+    idx=0
+    echo "$node_ips" | jq -r 'to_entries | sort_by(.key) | .[] | .key + " " + .value' | \
+    while read -r key ip; do
+        if [ $idx -ge $k3s_control_nodes ]; then
+            local node_num=$((idx + 1))
+            echo "node${node_num} ansible_host=${ip} ansible_user=root ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" >> "$output_file"
+        fi
+        idx=$((idx + 1))
+    done
+
+    # Add ingress nodes if present
+    if [ "$has_ingress_nodes" = "true" ] && [ "$ingress_count" -gt 0 ]; then
+        cat >> "$output_file" << EOF
+
+# K3s Ingress Nodes (dedicated, with public IPs)
+[k3s_ingress]
+EOF
+        local ingress_idx=0
+        echo "$ingress_node_ips" | jq -r 'to_entries | sort_by(.key) | .[] | .key + " " + .value' 2>/dev/null | \
+        while read -r key ip; do
+            if [ -n "$ip" ]; then
+                local ingress_num=$((ingress_idx + 1))
+                local public_ip=$(echo "$ingress_public_ips" | jq -r ".\"$key\" // empty")
+                echo "ingress${ingress_num} ansible_host=${ip} ansible_user=root public_ip=${public_ip} ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'" >> "$output_file"
+                ingress_idx=$((ingress_idx + 1))
+            fi
+        done
+    fi
+
+    # Add cluster groups and variables
+    if [ "$has_ingress_nodes" = "true" ] && [ "$ingress_count" -gt 0 ]; then
+        cat >> "$output_file" << EOF
+
+# All K3s Nodes
+[k3s_cluster:children]
+k3s_management
+k3s_control
+k3s_worker
+k3s_ingress
+
+# Global Variables
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3
+k3s_version=v1.32.3+k3s1
+primary_control_node=node1
+has_ingress_nodes=true
+EOF
+    else
+        cat >> "$output_file" << EOF
+
+# All K3s Nodes
+[k3s_cluster:children]
+k3s_management
+k3s_control
+k3s_worker
+
+# Global Variables
+[all:vars]
+ansible_python_interpreter=/usr/bin/python3
+k3s_version=v1.32.3+k3s1
+primary_control_node=node1
+has_ingress_nodes=false
+EOF
+    fi
+
+    # Add primary control IP
+    local first_control_ip=$(echo "$node_ips" | jq -r 'to_entries | sort_by(.key) | .[0].value // empty')
+    if [ -n "$first_control_ip" ]; then
+        echo "primary_control_ip=${first_control_ip}" >> "$output_file"
+    fi
+
+    log_success "K3s inventory generated with $(echo "$node_ips" | jq 'keys | length') cluster nodes"
+    return 0
+}
+
 source "$SCRIPT_DIR/deployment-status.sh"
 source "$SCRIPT_DIR/deployment-id.sh"
 source "$SCRIPT_DIR/pattern-loader.sh"
@@ -618,9 +787,34 @@ EOF
     fi
     
     # Step 3: Generate Ansible inventory
-    if ! bash "$DEPLOYER_ROOT/core/tasks/inventory.sh"; then
-        log_error "Failed to generate Ansible inventory"
-        return 1
+    # K3s pattern has its own multi-node inventory generator
+    if [ "$PATTERN_NAME" = "k3s" ] && [ -f "$PATTERN_DIR/scripts/generate-inventory.sh" ]; then
+        log_step "Generating K3s multi-node inventory..."
+        
+        # The K3s inventory generator needs to run from the pattern directory
+        # and reads terraform state from infrastructure/
+        local k3s_infra_dir="$STATE_DIR/terraform"
+        local k3s_platform_dir="$STATE_DIR/ansible"
+        
+        # Create platform directory if needed
+        mkdir -p "$k3s_platform_dir"
+        
+        # Copy the generate-inventory script and run it with proper paths
+        # We need to generate inventory that points to the terraform state in our state dir
+        if ! generate_k3s_inventory "$STATE_DIR" "$k3s_platform_dir"; then
+            log_error "Failed to generate K3s inventory"
+            return 1
+        fi
+        
+        # Copy inventory to state dir root for ansible.sh
+        if [ -f "$k3s_platform_dir/inventory.ini" ]; then
+            cp "$k3s_platform_dir/inventory.ini" "$STATE_DIR/inventory.ini"
+        fi
+    else
+        if ! bash "$DEPLOYER_ROOT/core/tasks/inventory.sh"; then
+            log_error "Failed to generate Ansible inventory"
+            return 1
+        fi
     fi
     
     # Step 4: Run Ansible
