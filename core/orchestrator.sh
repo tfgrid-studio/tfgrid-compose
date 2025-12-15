@@ -602,6 +602,10 @@ deploy_app() {
             export TF_VAR_management_mem=$K3S_MGMT_MEM
             export TF_VAR_management_disk=$K3S_MGMT_DISK
             
+            # Set unique network name using deployment ID to avoid conflicts
+            local network_suffix="${DEPLOYMENT_ID:0:8}"
+            export TF_VAR_network_name="k3s_net_${network_suffix}"
+            
             # 2. Select control plane nodes
             log_info "Selecting $K3S_CONTROL_COUNT control plane nodes..."
             local control_nodes=$(select_multiple_nodes "$K3S_CONTROL_COUNT" "$K3S_CONTROL_CPU" "$K3S_CONTROL_MEM" "$K3S_CONTROL_DISK" \
