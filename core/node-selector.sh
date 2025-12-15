@@ -616,8 +616,11 @@ select_multiple_nodes() {
     local mru=$((mem_mb * 1024 * 1024))
     local sru=$((disk_gb * 1024 * 1024 * 1024))
 
-    # Query GridProxy
+    # Query GridProxy - add rentable filter for public IPv4 nodes
     local api_url="${GRIDPROXY_URL}/nodes?status=up&free_mru=${mru}&free_sru=${sru}&size=7000"
+    if [ "$require_public_ipv4" = "true" ]; then
+        api_url="${api_url}&rentable=true"
+    fi
     local response=$(curl -s "$api_url")
 
     if [ $? -ne 0 ] || [ -z "$response" ]; then
@@ -633,6 +636,17 @@ select_multiple_nodes() {
 
     # Apply filters and exclude already-selected nodes
     local filtered_nodes=$(apply_node_filters "$response" "" "" "$cli_blacklist_farms" "$cli_whitelist_farms" "" "" "")
+    
+    # If public IPv4 required, filter to farms with free public IPs
+    if [ "$require_public_ipv4" = "true" ]; then
+        log_info "Filtering nodes on farms with available public IPs..."
+        # Query farms with free public IPs
+        local farms_response=$(curl -s "${GRIDPROXY_URL}/farms?free_ips=1&size=1000")
+        local farms_with_ips=$(echo "$farms_response" | jq '[.[].farmId]')
+        filtered_nodes=$(echo "$filtered_nodes" | jq --argjson farms "$farms_with_ips" '[.[] | select(.farmId as $fid | $farms | index($fid))]')
+        local ipv4_count=$(echo "$filtered_nodes" | jq 'length')
+        log_info "Found $ipv4_count nodes on farms with available public IPs"
+    fi
     
     # Filter out excluded nodes and select top N by uptime
     local selected=$(echo "$filtered_nodes" | jq -r --argjson exclude "$exclude_json" --argjson count "$count" '
