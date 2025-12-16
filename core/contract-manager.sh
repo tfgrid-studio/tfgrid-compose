@@ -567,12 +567,12 @@ contracts_clean_interactive() {
     done
     echo ""
     
-    echo "Enter deployments to delete (e.g., 1,2 or 1-3 or 'all'):"
+    echo "Enter deployments to delete (e.g., 1,2 or 1-3 or 'all'), or 'exit' to quit:"
     echo -n "> "
     read -r selection
     
-    if [ -z "$selection" ]; then
-        log_info "No selection made"
+    if [ -z "$selection" ] || [ "$selection" = "exit" ] || [ "$selection" = "quit" ] || [ "$selection" = "q" ]; then
+        log_info "Exiting"
         return 0
     fi
     
