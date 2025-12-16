@@ -221,13 +221,25 @@ cleanup_on_error() {
     if [ -n "${DEPLOYMENT_ID:-}" ] && [ "${DEPLOYMENT_ID:-}" != "false" ]; then
         unregister_deployment "$DEPLOYMENT_ID" || true
     fi
-    
+
+    # For k3s pattern, destroy infrastructure on failure since partial deployments are unusable
+    if [ "${PATTERN_NAME:-}" = "k3s" ] && [ -d "$STATE_DIR/terraform" ]; then
+        log_warning "K3s deployment failed - destroying partial infrastructure to prevent resource waste"
+
+        # Attempt to destroy infrastructure (ignore errors since we're already in error handling)
+        if destroy_k3s_infrastructure "$STATE_DIR"; then
+            log_info "Successfully cleaned up partial k3s deployment"
+        else
+            log_warning "Failed to clean up partial k3s deployment - manual cleanup may be required"
+        fi
+    fi
+
     # Don't clean if user wants to debug
     if [ "${TFGRID_DEBUG:-}" = "1" ]; then
         log_info "Debug mode: Keeping state for inspection"
         return 0
     fi
-    
+
     # Clean stale state to allow retry (state directory is keyed by deployment ID)
     clean_stale_state "$deployment_identifier"
     log_info "State cleaned. You can retry deployment."
@@ -1665,6 +1677,85 @@ display_deployment_urls() {
     esac
 }
 
+# Destroy k3s infrastructure on deployment failure
+destroy_k3s_infrastructure() {
+    local state_dir="$1"
+
+    if [ ! -d "$state_dir/terraform" ]; then
+        log_warning "No terraform directory found for cleanup"
+        return 1
+    fi
+
+    # Load deployment variables from state for Terraform destroy
+    if [ -f "$state_dir/state.yaml" ]; then
+        log_info "Loading deployment configuration for cleanup..."
+        local deploy_network=$(yaml_get "$state_dir/state.yaml" "deploy_network")
+        export TF_VAR_tfgrid_network="${deploy_network:-main}"
+
+        # Load k3s-specific variables from terraform outputs if available
+        if [ -f "$state_dir/terraform/terraform.tfstate" ]; then
+            local management_node=$(jq -r '.resources[]? | select(.type == "grid_deployment" and .name == "management_node") | .instances[0].attributes.node // empty' "$state_dir/terraform/terraform.tfstate" 2>/dev/null || echo "")
+            if [ -n "$management_node" ]; then
+                export TF_VAR_management_node="$management_node"
+            fi
+
+            # Extract control nodes array
+            local control_nodes=$(jq -r '.resources[]? | select(.type == "grid_deployment" and .name == "k3s_nodes") | .instances[] | select(.attributes.node as $node | [920,2009,2019] | index($node)) | .attributes.node' "$state_dir/terraform/terraform.tfstate" 2>/dev/null | tr '\n' ',' | sed 's/,$//' || echo "")
+            if [ -n "$control_nodes" ]; then
+                local control_tf="[$(echo "$control_nodes" | tr ',' ',')]"
+                export TF_VAR_control_nodes="$control_tf"
+            fi
+
+            # Extract worker nodes array
+            local worker_nodes=$(jq -r '.resources[]? | select(.type == "grid_deployment" and .name == "k3s_nodes") | .instances[] | select(.attributes.node as $node | [2007,2018,921] | index($node)) | .attributes.node' "$state_dir/terraform/terraform.tfstate" 2>/dev/null | tr '\n' ',' | sed 's/,$//' || echo "")
+            if [ -n "$worker_nodes" ]; then
+                local worker_tf="[$(echo "$worker_nodes" | tr ',' ',')]"
+                export TF_VAR_worker_nodes="$worker_tf"
+            fi
+
+            # Extract ingress nodes array
+            local ingress_nodes=$(jq -r '.resources[]? | select(.type == "grid_deployment" and .name == "ingress_nodes") | .instances[] | .attributes.node' "$state_dir/terraform/terraform.tfstate" 2>/dev/null | tr '\n' ',' | sed 's/,$//' || echo "")
+            if [ -n "$ingress_nodes" ]; then
+                local ingress_tf="[$(echo "$ingress_nodes" | tr ',' ',')]"
+                export TF_VAR_ingress_nodes="$ingress_tf"
+            fi
+        fi
+    fi
+
+    # Run Terraform destroy
+    log_info "Destroying k3s infrastructure..."
+
+    # Detect OpenTofu or Terraform (prefer OpenTofu as it's open source)
+    if command -v tofu &> /dev/null; then
+        TF_CMD="tofu"
+    elif command -v terraform &> /dev/null; then
+        TF_CMD="terraform"
+    else
+        log_error "Neither OpenTofu nor Terraform found for cleanup"
+        return 1
+    fi
+
+    local orig_dir="$(pwd)"
+    cd "$state_dir/terraform" || return 1
+
+    # Update lock file to match current configuration
+    log_info "Updating lock file for destroy..."
+    if ! $TF_CMD init -upgrade -input=false 2>&1 | tee "$state_dir/terraform-init-upgrade-cleanup.log"; then
+        log_warning "Init -upgrade failed during cleanup, but continuing with destroy..."
+    fi
+
+    # Destroy using state file (no variables needed, uses existing state)
+    if $TF_CMD destroy -auto-approve -input=false 2>&1 | tee "$state_dir/terraform-destroy-cleanup.log"; then
+        log_success "K3s infrastructure destroyed successfully"
+        cd "$orig_dir"
+        return 0
+    else
+        log_error "Failed to destroy k3s infrastructure. Check: $state_dir/terraform-destroy-cleanup.log"
+        cd "$orig_dir"
+        return 1
+    fi
+}
+
 # Export functions
 export -f cleanup_on_error
 export -f deploy_app
@@ -1673,4 +1764,5 @@ export -f deploy_app_source
 export -f run_app_hooks
 export -f verify_deployment
 export -f destroy_deployment
+export -f destroy_k3s_infrastructure
 export -f display_deployment_urls
