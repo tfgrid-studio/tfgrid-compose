@@ -881,6 +881,9 @@ case "$COMMAND" in
             fi
             log_info "Using recommended pattern: $PATTERN_NAME"
         fi
+
+        # Export pattern name for error handling
+        export PATTERN_NAME
         
         # Load pattern
         if ! load_pattern "$PATTERN_NAME"; then
