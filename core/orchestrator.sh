@@ -655,17 +655,23 @@ deploy_app() {
             # 4. Select ingress nodes (if configured)
             if [ "$K3S_INGRESS_COUNT" -gt 0 ]; then
                 log_info "Selecting $K3S_INGRESS_COUNT ingress nodes (with public IPv4)..."
-                local ingress_nodes=$(select_multiple_nodes "$K3S_INGRESS_COUNT" "$K3S_INGRESS_CPU" "$K3S_INGRESS_MEM" "$K3S_INGRESS_DISK" \
+
+                # Ingress nodes need more conservative disk requirements due to SSD fragmentation
+                # Add extra 50GB buffer specifically for ingress nodes to account for allocation issues
+                local ingress_disk_buffered=$((K3S_INGRESS_DISK + 50))
+
+                local ingress_nodes=$(select_multiple_nodes "$K3S_INGRESS_COUNT" "$K3S_INGRESS_CPU" "$K3S_INGRESS_MEM" "$ingress_disk_buffered" \
                     "$DEPLOY_NETWORK" "true" "$all_selected" "$CUSTOM_BLACKLIST_FARMS" "$CUSTOM_WHITELIST_FARMS")
                 if [ -z "$ingress_nodes" ]; then
-                    log_error "Failed to select ingress nodes (need public IPv4)"
+                    log_error "Failed to select ingress nodes (need public IPv4 with sufficient SSD storage)"
+                    log_info "Ingress nodes require more SSD storage due to allocation constraints"
                     return 1
                 fi
                 local ingress_tf="[$(echo "$ingress_nodes" | tr ',' ',')]"
                 export TF_VAR_ingress_nodes="$ingress_tf"
                 export TF_VAR_ingress_cpu=$K3S_INGRESS_CPU
                 export TF_VAR_ingress_mem=$K3S_INGRESS_MEM
-                export TF_VAR_ingress_disk=$K3S_INGRESS_DISK
+                export TF_VAR_ingress_disk=$K3S_INGRESS_DISK  # Use actual disk size for Terraform, not buffered
                 export TF_VAR_worker_public_ipv4=false
             else
                 export TF_VAR_ingress_nodes="[]"
