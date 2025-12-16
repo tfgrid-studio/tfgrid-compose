@@ -751,6 +751,7 @@ EOF
     export STATE_DIR
     if ! bash "$DEPLOYER_ROOT/core/tasks/terraform.sh"; then
         log_error "Terraform deployment failed"
+        cleanup_on_error "$DEPLOYMENT_ID" "Terraform deployment failed"
         return 1
     fi
 
