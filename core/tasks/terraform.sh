@@ -48,7 +48,10 @@ fi
 echo ""
 log_info "Applying infrastructure changes..."
 echo ""
-if ! $TF_CMD apply -input=false tfplan 2>&1 | tee "$STATE_DIR/terraform-apply.log"; then
+$TF_CMD apply -input=false tfplan 2>&1 | tee "$STATE_DIR/terraform-apply.log"
+tf_apply_exit_code=${PIPESTATUS[0]}
+
+if [ "$tf_apply_exit_code" -ne 0 ]; then
     log_error "Terraform apply failed. Check: $STATE_DIR/terraform-apply.log"
     cd "$orig_dir"
     exit 1
