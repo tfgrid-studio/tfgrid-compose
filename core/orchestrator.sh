@@ -223,6 +223,7 @@ cleanup_on_error() {
     fi
 
     # For k3s pattern, destroy infrastructure on failure since partial deployments are unusable
+    log_info "DEBUG: cleanup_on_error called with PATTERN_NAME='${PATTERN_NAME:-}' and STATE_DIR='${STATE_DIR:-}'"
     if [ "${PATTERN_NAME:-}" = "k3s" ] && [ -d "$STATE_DIR/terraform" ]; then
         log_warning "K3s deployment failed - destroying partial infrastructure to prevent resource waste"
 
@@ -232,6 +233,8 @@ cleanup_on_error() {
         else
             log_warning "Failed to clean up partial k3s deployment - manual cleanup may be required"
         fi
+    else
+        log_info "DEBUG: K3s cleanup skipped - PATTERN_NAME='${PATTERN_NAME:-}', STATE_DIR exists: $([ -d "$STATE_DIR/terraform" ] && echo 'yes' || echo 'no')"
     fi
 
     # Don't clean if user wants to debug
