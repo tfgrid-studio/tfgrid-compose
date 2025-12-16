@@ -127,7 +127,7 @@ install:
 	@echo ""
 	@echo "🔧 Setting up PATH..."
 	@if [ -n "$$FISH_VERSION" ] || [ -f "$$HOME/.config/fish/config.fish" ]; then \
-		if ! grep -q "$$HOME/.local/bin" "$$HOME/.config/fish/config.fish" 2>/dev/null; then \
+		if ! grep -q "# Added by tfgrid-compose" "$$HOME/.config/fish/config.fish" 2>/dev/null; then \
 			mkdir -p "$$HOME/.config/fish"; \
 			echo "" >> "$$HOME/.config/fish/config.fish"; \
 			echo "# Added by tfgrid-compose" >> "$$HOME/.config/fish/config.fish"; \
@@ -137,7 +137,7 @@ install:
 			echo "ℹ  PATH already configured in Fish"; \
 		fi; \
 	elif [ -f "$$HOME/.zshrc" ]; then \
-		if ! grep -q "$$HOME/.local/bin" "$$HOME/.zshrc"; then \
+		if ! grep -q "# Added by tfgrid-compose" "$$HOME/.zshrc"; then \
 			echo "" >> "$$HOME/.zshrc"; \
 			echo "# Added by tfgrid-compose" >> "$$HOME/.zshrc"; \
 			echo 'export PATH="$$HOME/.local/bin:$$PATH"' >> "$$HOME/.zshrc"; \
@@ -146,7 +146,7 @@ install:
 			echo "ℹ  PATH already configured in Zsh"; \
 		fi; \
 	elif [ -f "$$HOME/.bashrc" ]; then \
-		if ! grep -q "$$HOME/.local/bin" "$$HOME/.bashrc"; then \
+		if ! grep -q "# Added by tfgrid-compose" "$$HOME/.bashrc"; then \
 			echo "" >> "$$HOME/.bashrc"; \
 			echo "# Added by tfgrid-compose" >> "$$HOME/.bashrc"; \
 			echo 'export PATH="$$HOME/.local/bin:$$PATH"' >> "$$HOME/.bashrc"; \
