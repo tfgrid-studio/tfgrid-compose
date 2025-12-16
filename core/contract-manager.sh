@@ -509,8 +509,49 @@ contracts_clean_interactive() {
         return 0
     fi
     
-    # Display deployments
-    echo "Found $idx deployments with state:"
+    # Auto-cleanup stale state directories (no contracts on grid)
+    local stale_dirs=()
+    local active_deployments=()
+    local active_contracts=()
+    local active_names=()
+    local active_stale=()
+    
+    for i in "${!deployments[@]}"; do
+        if [ -z "${deployment_contracts[$i]}" ]; then
+            stale_dirs+=("${deployments[$i]}")
+        else
+            active_deployments+=("${deployments[$i]}")
+            active_contracts+=("${deployment_contracts[$i]}")
+            active_names+=("${deployment_names[$i]}")
+            active_stale+=("${deployment_stale_contracts[$i]}")
+        fi
+    done
+    
+    # Auto-remove stale directories
+    if [ ${#stale_dirs[@]} -gt 0 ]; then
+        log_info "Found ${#stale_dirs[@]} stale state directories (no contracts on grid)"
+        for dir in "${stale_dirs[@]}"; do
+            rm -rf "$state_dir/$dir"
+            echo "  Removed stale: ${dir:0:16}.."
+        done
+        log_success "Stale state directories cleaned up"
+        echo ""
+    fi
+    
+    # Update arrays to only active deployments
+    deployments=("${active_deployments[@]}")
+    deployment_contracts=("${active_contracts[@]}")
+    deployment_names=("${active_names[@]}")
+    deployment_stale_contracts=("${active_stale[@]}")
+    idx=${#deployments[@]}
+    
+    if [ $idx -eq 0 ]; then
+        log_info "No active deployments remaining"
+        return 0
+    fi
+    
+    # Display active deployments
+    echo "Found $idx active deployments with contracts:"
     echo ""
     printf "  #   %-18s %-25s %-12s %s\n" "CONTAINER ID" "APP NAME" "STATUS" "CONTRACTS"
     printf "  ─── ────────────────── ───────────────────────── ──────────── ────────────────────\n"
@@ -519,10 +560,7 @@ contracts_clean_interactive() {
         local num=$((i + 1))
         local status="active"
         local contracts_display="${deployment_contracts[$i]}"
-        if [ -z "$contracts_display" ]; then
-            status="stale"
-            contracts_display="(none on grid)"
-        elif [ "${deployment_stale_contracts[$i]}" -gt 0 ]; then
+        if [ "${deployment_stale_contracts[$i]}" -gt 0 ]; then
             status="partial"
         fi
         printf "  %-3d %-18s %-25s %-12s %s\n" "$num" "${deployments[$i]:0:16}.." "${deployment_names[$i]:0:23}" "$status" "$contracts_display"
