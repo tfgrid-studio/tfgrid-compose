@@ -65,8 +65,8 @@
 - name: Detect IP family and set network configuration
   set_fact:
     ip_family: "{{ 'ipv6' if ':' in ansible_host else 'ipv4' }}"
-    cluster_cidr: "{{ '--cluster-cidr=\"10.42.0.0/16,2001:cafe:42:0::/56\"' if ':' in ansible_host else '' }}"
-    service_cidr: "{{ '--service-cidr=\"10.43.0.0/16,2001:cafe:43:0::/112\"' if ':' in ansible_host else '' }}"
+    cluster_cidr: "{{ '--cluster-cidr=2001:cafe:42::/56' if ':' in ansible_host else '' }}"
+    service_cidr: "{{ '--service-cidr=2001:cafe:43::/112' if ':' in ansible_host else '' }}"
     metallb_mask: "{{ '/128' if ':' in ansible_host else '/32' }}"
 
 # Primary control node installation
