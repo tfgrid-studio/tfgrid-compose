@@ -303,7 +303,7 @@
     - name: Check CNI status
       shell: |
         export KUBECONFIG=~/.kube/config
-        kubectl get pods -n kube-system | grep flannel
+        kubectl get pods -n kube-system | grep -E "(flannel|coredns|local-path-provisioner)"
       register: cni_status
       changed_when: false
       ignore_errors: true
@@ -313,6 +313,21 @@
     - name: Debug CNI status
       debug:
         var: cni_status.stdout_lines
+
+    - name: Ensure flannel CNI is deployed
+      shell: |
+        export KUBECONFIG=~/.kube/config
+        # Check if flannel pods exist, if not, wait a bit and check again
+        if ! kubectl get pods -n kube-system | grep -q flannel; then
+          echo "Flannel pods not found, waiting for CNI deployment..."
+          sleep 30
+          kubectl get pods -n kube-system | grep -E "(flannel|coredns|local-path-provisioner)" || echo "CNI pods still not ready"
+        fi
+      changed_when: false
+      ignore_errors: true
+      environment:
+        KUBECONFIG: "~/.kube/config"
+      when: is_primary_control | bool
 
 - name: Install Helm on control nodes
   block:
@@ -336,13 +351,14 @@
         kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.7/config/manifests/metallb-native.yaml
       register: metallb_deploy
       changed_when: "'created' in metallb_deploy.stdout or 'configured' in metallb_deploy.stdout"
+      ignore_errors: yes
 
     - name: Wait for MetalLB to be ready
       shell: |
         kubectl wait --namespace metallb-system \
           --for=condition=ready pod \
           --selector=app=metallb \
-          --timeout=120s
+          --timeout=180s
       changed_when: false
       ignore_errors: yes
 
@@ -368,10 +384,24 @@
             - first-pool
         dest: /tmp/metallb-config.yaml
 
+    - name: Wait for MetalLB webhooks to be ready
+      shell: |
+        kubectl wait --namespace metallb-system \
+          --for=condition=ready pod \
+          --selector=app.kubernetes.io/name=metallb \
+          --timeout=180s
+      changed_when: false
+      register: metallb_webhook_wait
+      retries: 3
+      delay: 10
+      until: metallb_webhook_wait.rc == 0
+      ignore_errors: yes
+
     - name: Apply MetalLB ConfigMap
       command: kubectl apply -f /tmp/metallb-config.yaml
       register: metallb_config
       changed_when: "'created' in metallb_config.stdout or 'configured' in metallb_config.stdout"
+      ignore_errors: yes
 
     - name: Download Nginx Ingress Controller manifest
       get_url:

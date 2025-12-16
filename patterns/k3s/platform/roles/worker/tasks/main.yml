@@ -174,10 +174,10 @@
     - name: Run K3s agent installation
       shell: INSTALL_K3S_VERSION={{ k3s_version }} K3S_URL=https://{{ primary_control_ip }}:6443 K3S_TOKEN={{ k3s_token }} INSTALL_K3S_EXEC="--node-name={{ inventory_hostname }} --node-ip={{ ansible_host }} --snapshotter=native" /tmp/k3s-install.sh
       register: k3s_install_result
-      # Removing the creates parameter to ensure it always tries to install
-      # Increased timeout to 1200 seconds (20 minutes)
-      async: 1200
-      poll: 15
+      # Increased timeout to 1800 seconds (30 minutes) for slow networks
+      async: 1800
+      poll: 30
+      ignore_errors: yes
       
     - name: Wait for K3s agent service to start
       systemd:

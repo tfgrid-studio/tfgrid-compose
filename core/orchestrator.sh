@@ -204,6 +204,100 @@ get_vm_ip_from_state() {
     return 1
 }
 
+# Assess current deployment state for resume capability
+assess_resume_state() {
+    local deployment_id="$1"
+    local state_dir="$2"
+
+    log_info "🔍 Assessing deployment state for resume..."
+
+    # Initialize resume state tracking
+    RESUME_TERRAFORM_DONE=false
+    RESUME_WIREGUARD_DONE=false
+    RESUME_SSH_READY=false
+    RESUME_INVENTORY_DONE=false
+    RESUME_ANSIBLE_DONE=false
+    RESUME_APP_HOOKS_DONE=false
+    RESUME_VERIFICATION_DONE=false
+
+    # Check if terraform state exists and infrastructure was created
+    if [ -f "$state_dir/terraform/terraform.tfstate" ]; then
+        # Check if VMs are actually deployed by looking for grid_deployment resources
+        local vm_count=$(jq -r '.resources[]? | select(.type == "grid_deployment") | .instances[]?.attributes.id' "$state_dir/terraform/terraform.tfstate" 2>/dev/null | wc -l)
+        if [ "$vm_count" -gt 0 ]; then
+            log_success "✅ Infrastructure deployed: $vm_count VMs created"
+            RESUME_TERRAFORM_DONE=true
+        else
+            log_info "ℹ️  Infrastructure not yet deployed"
+        fi
+    fi
+
+    # Check if WireGuard configuration exists
+    if [ -f "$state_dir/terraform/wg.conf" ]; then
+        log_success "✅ WireGuard configured"
+        RESUME_WIREGUARD_DONE=true
+    fi
+
+    # Check if SSH is ready by trying to connect to management node
+    if [ "$RESUME_TERRAFORM_DONE" = "true" ]; then
+        local mgmt_ip=$(get_deployment_ip "$deployment_id" 2>/dev/null)
+        if [ -n "$mgmt_ip" ]; then
+            # Try SSH connection (short timeout)
+            if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 -o LogLevel=ERROR root@$mgmt_ip "echo 'SSH ready'" >/dev/null 2>&1; then
+                log_success "✅ SSH access ready"
+                RESUME_SSH_READY=true
+            else
+                log_info "ℹ️  SSH not yet ready"
+            fi
+        fi
+    fi
+
+    # Check if Ansible inventory exists
+    if [ -f "$state_dir/inventory.ini" ]; then
+        log_success "✅ Ansible inventory generated"
+        RESUME_INVENTORY_DONE=true
+    fi
+
+    # Check if Ansible has been run by looking for ansible logs
+    if [ -d "$state_dir/ansible" ] && [ -n "$(find "$state_dir/ansible" -name "*.log" 2>/dev/null | head -1)" ]; then
+        log_success "✅ Ansible configuration started"
+        RESUME_ANSIBLE_DONE=true
+    fi
+
+    # Check if app hooks have been run
+    if [ -d "$state_dir" ] && [ -n "$(find "$state_dir" -name "hook-*.log" 2>/dev/null | head -1)" ]; then
+        log_success "✅ App deployment hooks started"
+        RESUME_APP_HOOKS_DONE=true
+    fi
+
+    # Check if deployment was marked as successful
+    local deployment_status=$(get_deployment_status "$deployment_id" 2>/dev/null || echo "unknown")
+    if [ "$deployment_status" = "active" ]; then
+        log_success "✅ Deployment marked as active"
+        RESUME_VERIFICATION_DONE=true
+    fi
+
+    # Export the resume state for use in deployment
+    export RESUME_TERRAFORM_DONE
+    export RESUME_WIREGUARD_DONE
+    export RESUME_SSH_READY
+    export RESUME_INVENTORY_DONE
+    export RESUME_ANSIBLE_DONE
+    export RESUME_APP_HOOKS_DONE
+    export RESUME_VERIFICATION_DONE
+
+    log_info ""
+    log_info "📋 Resume Assessment Complete:"
+    log_info "  • Terraform: $([ "$RESUME_TERRAFORM_DONE" = "true" ] && echo '✅ Done' || echo '⏳ Pending')"
+    log_info "  • WireGuard: $([ "$RESUME_WIREGUARD_DONE" = "true" ] && echo '✅ Done' || echo '⏳ Pending')"
+    log_info "  • SSH Ready: $([ "$RESUME_SSH_READY" = "true" ] && echo '✅ Done' || echo '⏳ Pending')"
+    log_info "  • Inventory: $([ "$RESUME_INVENTORY_DONE" = "true" ] && echo '✅ Done' || echo '⏳ Pending')"
+    log_info "  • Ansible: $([ "$RESUME_ANSIBLE_DONE" = "true" ] && echo '✅ Done' || echo '⏳ Pending')"
+    log_info "  • App Hooks: $([ "$RESUME_APP_HOOKS_DONE" = "true" ] && echo '✅ Done' || echo '⏳ Pending')"
+    log_info "  • Verification: $([ "$RESUME_VERIFICATION_DONE" = "true" ] && echo '✅ Done' || echo '⏳ Pending')"
+    log_info ""
+}
+
 # Cleanup on deployment error
 cleanup_on_error() {
     local app_name="$1"
@@ -264,6 +358,13 @@ deploy_app() {
     
     # Setup error trap
     trap 'cleanup_on_error "$DEPLOYMENT_ID" "$ERROR_MESSAGE"' ERR
+
+    # Check for resume mode
+    if [ "${RESUME_DEPLOYMENT:-false}" = "true" ]; then
+        assess_resume_state "$DEPLOYMENT_ID" "$STATE_DIR"
+        log_info "🔄 Resume mode enabled - skipping completed steps"
+        echo ""
+    fi
     
     # Source .env from app directory if it exists
     if [ -f "$APP_DIR/.env" ]; then
@@ -746,19 +847,27 @@ EOF
     log_success "Metadata saved"
     echo ""
     
-    # Step 1: Generate Terraform configuration
-    if ! generate_terraform_config; then
-        log_error "Failed to generate Terraform configuration"
-        return 1
+    # Step 1: Generate Terraform configuration (skip if resuming and terraform done)
+    if [ "${RESUME_TERRAFORM_DONE:-false}" = "false" ]; then
+        if ! generate_terraform_config; then
+            log_error "Failed to generate Terraform configuration"
+            return 1
+        fi
+    else
+        log_info "⏭️  Skipping Terraform configuration (already done)"
     fi
-    
-    # Step 2: Run Terraform
-    # Ensure STATE_DIR is exported for subprocess
-    export STATE_DIR
-    if ! bash "$DEPLOYER_ROOT/core/tasks/terraform.sh"; then
-        log_error "Terraform deployment failed"
-        cleanup_on_error "$DEPLOYMENT_ID" "Terraform deployment failed"
-        return 1
+
+    # Step 2: Run Terraform (skip if resuming and terraform done)
+    if [ "${RESUME_TERRAFORM_DONE:-false}" = "false" ]; then
+        # Ensure STATE_DIR is exported for subprocess
+        export STATE_DIR
+        if ! bash "$DEPLOYER_ROOT/core/tasks/terraform.sh"; then
+            log_error "Terraform deployment failed"
+            cleanup_on_error "$DEPLOYMENT_ID" "Terraform deployment failed"
+            return 1
+        fi
+    else
+        log_info "⏭️  Skipping Terraform deployment (infrastructure already created)"
     fi
 
     # Step 2.4: Capture real IP addresses from terraform outputs (logging only; state.yaml is populated by terraform task)

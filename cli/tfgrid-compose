@@ -601,6 +601,10 @@ case "$COMMAND" in
                     NO_REFRESH=true
                     shift
                     ;;
+                --resume)
+                    export RESUME_DEPLOYMENT=true
+                    shift
+                    ;;
                 --node)
                             CUSTOM_NODE="$2"
                             shift 2
