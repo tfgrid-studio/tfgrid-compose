@@ -1686,40 +1686,95 @@ destroy_k3s_infrastructure() {
         return 1
     fi
 
-    # Load deployment variables from state for Terraform destroy
+    log_info "Loading deployment configuration for cleanup..."
+
+    # Load basic configuration from state.yaml
     if [ -f "$state_dir/state.yaml" ]; then
-        log_info "Loading deployment configuration for cleanup..."
         local deploy_network=$(yaml_get "$state_dir/state.yaml" "deploy_network")
         export TF_VAR_tfgrid_network="${deploy_network:-main}"
+    fi
 
-        # Load k3s-specific variables from terraform outputs if available
-        if [ -f "$state_dir/terraform/terraform.tfstate" ]; then
-            local management_node=$(jq -r '.resources[]? | select(.type == "grid_deployment" and .name == "management_node") | .instances[0].attributes.node // empty' "$state_dir/terraform/terraform.tfstate" 2>/dev/null || echo "")
-            if [ -n "$management_node" ]; then
-                export TF_VAR_management_node="$management_node"
-            fi
+    # For k3s cleanup, we need to set up the variables that were used during deployment
+    # Since the terraform state might be incomplete due to failure, we'll use fallback logic
 
-            # Extract control nodes array
-            local control_nodes=$(jq -r '.resources[]? | select(.type == "grid_deployment" and .name == "k3s_nodes") | .instances[] | select(.attributes.node as $node | [920,2009,2019] | index($node)) | .attributes.node' "$state_dir/terraform/terraform.tfstate" 2>/dev/null | tr '\n' ',' | sed 's/,$//' || echo "")
-            if [ -n "$control_nodes" ]; then
-                local control_tf="[$(echo "$control_nodes" | tr ',' ',')]"
-                export TF_VAR_control_nodes="$control_tf"
-            fi
+    # Set default network name pattern (matches the deployment pattern)
+    if [ -z "${TF_VAR_network_name:-}" ]; then
+        local deployment_id=$(basename "$state_dir")
+        local network_suffix="${deployment_id:0:8}"
+        export TF_VAR_network_name="k3s_net_${network_suffix}"
+    fi
 
-            # Extract worker nodes array
-            local worker_nodes=$(jq -r '.resources[]? | select(.type == "grid_deployment" and .name == "k3s_nodes") | .instances[] | select(.attributes.node as $node | [2007,2018,921] | index($node)) | .attributes.node' "$state_dir/terraform/terraform.tfstate" 2>/dev/null | tr '\n' ',' | sed 's/,$//' || echo "")
-            if [ -n "$worker_nodes" ]; then
-                local worker_tf="[$(echo "$worker_nodes" | tr ',' ',')]"
-                export TF_VAR_worker_nodes="$worker_tf"
-            fi
+    # Try to extract node information from terraform state if it exists
+    if [ -f "$state_dir/terraform/terraform.tfstate" ]; then
+        log_info "Extracting node information from terraform state..."
 
-            # Extract ingress nodes array
-            local ingress_nodes=$(jq -r '.resources[]? | select(.type == "grid_deployment" and .name == "ingress_nodes") | .instances[] | .attributes.node' "$state_dir/terraform/terraform.tfstate" 2>/dev/null | tr '\n' ',' | sed 's/,$//' || echo "")
-            if [ -n "$ingress_nodes" ]; then
-                local ingress_tf="[$(echo "$ingress_nodes" | tr ',' ',')]"
-                export TF_VAR_ingress_nodes="$ingress_tf"
-            fi
+        # Extract all grid_deployment resources and their node IDs
+        local all_nodes=""
+        all_nodes=$(jq -r '.resources[]? | select(.type == "grid_deployment") | .instances[]?.attributes.node // empty' "$state_dir/terraform/terraform.tfstate" 2>/dev/null | grep -v '^$' | sort -u || echo "")
+
+        if [ -n "$all_nodes" ]; then
+            log_info "Found deployed nodes in state: $all_nodes"
+
+            # Try to reconstruct the node arrays based on the deployment configuration
+            # We need to know which nodes were intended for which roles
+
+            # For now, since we know the deployment pattern, let's try a simpler approach:
+            # Just destroy everything that was created
+            log_info "Will destroy all found grid deployments"
+        else
+            log_warning "No node information found in terraform state, using alternative approach"
         fi
+    fi
+
+    # Alternative approach: if we can't extract from state, try to reconstruct from the variables
+    # that would have been set during deployment
+
+    # For k3s, we know the structure. If terraform state extraction fails, we'll try to
+    # destroy based on the variables that were likely set during deployment
+
+    # Check if we have any TF_VAR_ variables set for k3s nodes
+    local has_node_vars=false
+
+    if [ -n "${TF_VAR_management_node:-}" ]; then
+        log_info "Found management node variable: ${TF_VAR_management_node}"
+        has_node_vars=true
+    fi
+
+    if [ -n "${TF_VAR_control_nodes:-}" ]; then
+        log_info "Found control nodes variable: ${TF_VAR_control_nodes}"
+        has_node_vars=true
+    fi
+
+    if [ -n "${TF_VAR_worker_nodes:-}" ]; then
+        log_info "Found worker nodes variable: ${TF_VAR_worker_nodes}"
+        has_node_vars=true
+    fi
+
+    if [ -n "${TF_VAR_ingress_nodes:-}" ]; then
+        log_info "Found ingress nodes variable: ${TF_VAR_ingress_nodes}"
+        has_node_vars=true
+    fi
+
+    if [ "$has_node_vars" = "false" ]; then
+        log_warning "No node variables found, attempting generic destroy"
+        # Set some reasonable defaults for destroy to work
+        export TF_VAR_management_node=""
+        export TF_VAR_control_nodes="[]"
+        export TF_VAR_worker_nodes="[]"
+        export TF_VAR_ingress_nodes="[]"
+        export TF_VAR_management_cpu=1
+        export TF_VAR_management_mem=2048
+        export TF_VAR_management_disk=25
+        export TF_VAR_control_cpu=4
+        export TF_VAR_control_mem=8192
+        export TF_VAR_control_disk=50
+        export TF_VAR_worker_cpu=4
+        export TF_VAR_worker_mem=8192
+        export TF_VAR_worker_disk=100
+        export TF_VAR_ingress_cpu=2
+        export TF_VAR_ingress_mem=4096
+        export TF_VAR_ingress_disk=25
+        export TF_VAR_worker_public_ipv4=false
     fi
 
     # Run Terraform destroy
@@ -1744,7 +1799,9 @@ destroy_k3s_infrastructure() {
         log_warning "Init -upgrade failed during cleanup, but continuing with destroy..."
     fi
 
-    # Destroy using state file (no variables needed, uses existing state)
+    # For destroy, we can try to destroy without specific variables first
+    # Terraform destroy will use the state file to know what to destroy
+    log_info "Attempting terraform destroy with existing state..."
     if $TF_CMD destroy -auto-approve -input=false 2>&1 | tee "$state_dir/terraform-destroy-cleanup.log"; then
         log_success "K3s infrastructure destroyed successfully"
         cd "$orig_dir"
