@@ -492,13 +492,32 @@ case "$COMMAND" in
     up)
         # Deploy command
         log_command "Deploy Application"
-        
+
         # Validate prerequisites
         if ! validate_prerequisites; then
             exit 1
         fi
         echo ""
-        
+
+        # Parse flags before getting app argument
+        RESUME_DEPLOYMENT=false
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --resume)
+                    export RESUME_DEPLOYMENT=true
+                    shift
+                    ;;
+                --*)
+                    # Stop parsing at first non-recognized flag
+                    break
+                    ;;
+                *)
+                    # First non-flag argument is the app
+                    break
+                    ;;
+            esac
+        done
+
         # Get app argument
         APP_INPUT="$1"
         if [ -z "$APP_INPUT" ]; then
@@ -602,7 +621,7 @@ case "$COMMAND" in
                     shift
                     ;;
                 --resume)
-                    export RESUME_DEPLOYMENT=true
+                    RESUME_DEPLOYMENT=true
                     shift
                     ;;
                 --node)
