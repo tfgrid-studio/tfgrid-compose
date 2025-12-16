@@ -84,8 +84,19 @@ contracts_delete() {
     fi
     
     # Call tfcmd to delete contract using mnemonic
-    if ! echo "$TFGRID_MNEMONIC" | tfcmd cancel contracts "$contract_id"; then
+    local output
+    output=$(echo "$TFGRID_MNEMONIC" | tfcmd cancel contracts "$contract_id" 2>&1)
+    local exit_code=$?
+    
+    # Check if contract already doesn't exist (treat as success)
+    if echo "$output" | grep -q "ContractNotExists"; then
+        log_warning "Contract $contract_id already deleted (not found on grid)"
+        return 0
+    fi
+    
+    if [ $exit_code -ne 0 ]; then
         log_error "Failed to delete contract $contract_id via tfcmd"
+        echo "$output" >&2
         return 1
     fi
     
@@ -434,15 +445,23 @@ contracts_clean_interactive() {
         return 1
     fi
     
-    # Get all contracts from grid and parse them
-    local contracts_raw
-    contracts_raw=$(echo "$TFGRID_MNEMONIC" | tfcmd get contracts 2>/dev/null)
+    # Get all contracts that actually exist on the grid
+    log_info "Fetching contracts from grid..."
+    local grid_contracts_raw
+    grid_contracts_raw=$(echo "$TFGRID_MNEMONIC" | tfcmd get contracts 2>/dev/null | grep -E '^\s*[0-9]+' | awk '{print $1}')
+    
+    # Build a lookup set of existing contracts
+    declare -A grid_contracts_set
+    while IFS= read -r cid; do
+        [ -n "$cid" ] && grid_contracts_set["$cid"]=1
+    done <<< "$grid_contracts_raw"
     
     # Group contracts by network name/deployment
     local state_dir=$(get_state_dir)
     local deployments=()
     local deployment_contracts=()
     local deployment_names=()
+    local deployment_stale_contracts=()
     local idx=0
     
     # First, collect known deployments from state directories
@@ -455,16 +474,31 @@ contracts_clean_interactive() {
         local app_name="(unknown)"
         [ -f "$state_yaml" ] && app_name=$(grep "^app_name:" "$state_yaml" | sed 's/^app_name:[[:space:]]*//')
         
-        local contracts=""
+        # Get contracts from local state
+        local local_contracts=""
+        local active_contracts=""
+        local stale_count=0
         if [ -f "$tf_state" ]; then
-            contracts=$(get_container_contracts "$container_id" | tr '\n' ',' | sed 's/,$//')
+            local_contracts=$(get_container_contracts "$container_id" | tr '\n' ',' | sed 's/,$//')
+            # Filter to only contracts that exist on grid
+            IFS=',' read -ra contract_arr <<< "$local_contracts"
+            for c in "${contract_arr[@]}"; do
+                if [ -n "${grid_contracts_set[$c]:-}" ]; then
+                    [ -n "$active_contracts" ] && active_contracts="$active_contracts,"
+                    active_contracts="$active_contracts$c"
+                else
+                    stale_count=$((stale_count + 1))
+                fi
+            done
         fi
         
-        if [ -n "$contracts" ]; then
+        # Include deployment if it has local state (even if no active contracts - for cleanup)
+        if [ -n "$local_contracts" ]; then
             idx=$((idx + 1))
             deployments+=("$container_id")
-            deployment_contracts+=("$contracts")
+            deployment_contracts+=("$active_contracts")
             deployment_names+=("$app_name")
+            deployment_stale_contracts+=("$stale_count")
         fi
     done
     
@@ -476,14 +510,22 @@ contracts_clean_interactive() {
     fi
     
     # Display deployments
-    echo "Found $idx deployments with contracts:"
+    echo "Found $idx deployments with state:"
     echo ""
-    printf "  #   %-18s %-25s %s\n" "CONTAINER ID" "APP NAME" "CONTRACTS"
-    printf "  ─── ────────────────── ───────────────────────── ────────────────────\n"
+    printf "  #   %-18s %-25s %-12s %s\n" "CONTAINER ID" "APP NAME" "STATUS" "CONTRACTS"
+    printf "  ─── ────────────────── ───────────────────────── ──────────── ────────────────────\n"
     
     for i in "${!deployments[@]}"; do
         local num=$((i + 1))
-        printf "  %-3d %-18s %-25s %s\n" "$num" "${deployments[$i]:0:16}.." "${deployment_names[$i]:0:23}" "${deployment_contracts[$i]}"
+        local status="active"
+        local contracts_display="${deployment_contracts[$i]}"
+        if [ -z "$contracts_display" ]; then
+            status="stale"
+            contracts_display="(none on grid)"
+        elif [ "${deployment_stale_contracts[$i]}" -gt 0 ]; then
+            status="partial"
+        fi
+        printf "  %-3d %-18s %-25s %-12s %s\n" "$num" "${deployments[$i]:0:16}.." "${deployment_names[$i]:0:23}" "$status" "$contracts_display"
     done
     echo ""
     
@@ -524,51 +566,59 @@ contracts_clean_interactive() {
         return 1
     fi
     
-    # Collect all contracts to delete
+    # Collect all contracts to delete (only active ones on grid)
     local all_contracts_to_delete=()
     echo ""
-    echo "Will delete contracts from:"
+    echo "Will process:"
     for i in "${to_delete[@]}"; do
-        echo "  - ${deployment_names[$i]} (${deployments[$i]:0:16}..)"
-        IFS=',' read -ra contracts <<< "${deployment_contracts[$i]}"
-        for c in "${contracts[@]}"; do
-            all_contracts_to_delete+=("$c")
-        done
+        local active_count=0
+        if [ -n "${deployment_contracts[$i]}" ]; then
+            IFS=',' read -ra contracts <<< "${deployment_contracts[$i]}"
+            for c in "${contracts[@]}"; do
+                [ -n "$c" ] && all_contracts_to_delete+=("$c") && active_count=$((active_count + 1))
+            done
+        fi
+        echo "  - ${deployment_names[$i]} (${deployments[$i]:0:16}..) - $active_count active contracts"
     done
     echo ""
-    echo "Total contracts: ${#all_contracts_to_delete[@]}"
+    
+    if [ ${#all_contracts_to_delete[@]} -gt 0 ]; then
+        echo "Total contracts to delete: ${#all_contracts_to_delete[@]}"
+    else
+        echo "No active contracts to delete (only stale state to clean up)"
+    fi
     echo ""
     
-    echo -n "Confirm deletion? (yes/no): "
+    echo -n "Confirm? (yes/no): "
     read -r confirm
     if [ "$confirm" != "yes" ]; then
         log_info "Cancelled"
         return 0
     fi
     
-    # Delete contracts
+    # Delete contracts (only if there are any)
     local failed=0
-    for id in "${all_contracts_to_delete[@]}"; do
-        if ! contracts_delete "$id"; then
-            failed=1
-        fi
-    done
-    
-    # Clean up state directories
-    if [ $failed -eq 0 ]; then
-        echo ""
-        echo -n "Remove state directories for deleted deployments? (yes/no): "
-        read -r rm_confirm
-        if [ "$rm_confirm" = "yes" ]; then
-            for i in "${to_delete[@]}"; do
-                rm -rf "$state_dir/${deployments[$i]}"
-                echo "  Removed: ${deployments[$i]}"
-            done
-            log_success "State directories cleaned up"
-        fi
+    if [ ${#all_contracts_to_delete[@]} -gt 0 ]; then
+        for id in "${all_contracts_to_delete[@]}"; do
+            if ! contracts_delete "$id"; then
+                failed=1
+            fi
+        done
     fi
     
-    return $failed
+    # Always offer to clean up state directories (contracts may already be gone from grid)
+    echo ""
+    echo -n "Remove state directories for these deployments? (yes/no): "
+    read -r rm_confirm
+    if [ "$rm_confirm" = "yes" ]; then
+        for i in "${to_delete[@]}"; do
+            rm -rf "$state_dir/${deployments[$i]}"
+            echo "  Removed: ${deployments[$i]}"
+        done
+        log_success "State directories cleaned up"
+    fi
+    
+    return 0
 }
 
 # List all state directories
