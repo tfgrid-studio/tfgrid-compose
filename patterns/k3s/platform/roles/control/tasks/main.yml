@@ -364,7 +364,11 @@
           --selector=app=metallb \
           --timeout=180s
       changed_when: false
-      ignore_errors: yes
+      register: metallb_wait
+      retries: 3
+      delay: 10
+      until: metallb_wait.rc == 0
+      failed_when: metallb_wait.rc != 0
 
     - name: Create MetalLB ConfigMap for IP address pool
       copy:
@@ -406,6 +410,13 @@
       register: metallb_config
       changed_when: "'created' in metallb_config.stdout or 'configured' in metallb_config.stdout"
       failed_when: metallb_config.rc != 0
+
+    - name: Verify MetalLB is functioning
+      shell: |
+        kubectl get pods -n metallb-system -o jsonpath='{.items[*].status.phase}' | grep -v Running | wc -l
+      register: metallb_verify
+      failed_when: metallb_verify.stdout | int > 0
+      changed_when: false
 
     - name: Download Nginx Ingress Controller manifest
       get_url:

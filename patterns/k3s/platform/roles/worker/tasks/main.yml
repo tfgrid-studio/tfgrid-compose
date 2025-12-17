@@ -178,7 +178,10 @@
       async: 1800
       poll: 30
       failed_when: k3s_install_result.rc != 0
-      
+      retries: 2
+      delay: 10
+      until: k3s_install_result.rc == 0
+
     - name: Wait for K3s agent service to start
       systemd:
         name: k3s-agent
@@ -188,19 +191,31 @@
       retries: 5
       delay: 10
       until: k3s_agent_service is succeeded
-      ignore_errors: yes
-      
-    - name: Check if K3s agent service is actually running
-      shell: systemctl status k3s-agent
+      failed_when: k3s_agent_service is failed
+
+    - name: Verify K3s agent service is running
+      shell: systemctl is-active k3s-agent
       register: k3s_agent_status
-      ignore_errors: yes
+      failed_when: k3s_agent_status.rc != 0
       changed_when: false
-      
-    - name: Display K3s agent service status
+
+    - name: Wait for worker node to be ready in cluster
+      shell: |
+        export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+        kubectl wait --for=condition=Ready node/{{ inventory_hostname }} --timeout=300s
+      register: worker_ready_check
+      retries: 6
+      delay: 30
+      until: worker_ready_check.rc == 0
+      failed_when: worker_ready_check.rc != 0
+      delegate_to: "{{ primary_control_node }}"
+      changed_when: false
+
+    - name: Display worker node status
       debug:
-        msg: "K3s agent service status on {{ inventory_hostname }}: {{ k3s_agent_status.rc == 0 }}"
-      
-    - name: Consider worker verification successful
+        msg: "Worker node {{ inventory_hostname }} successfully joined cluster"
+
+    - name: Mark worker verification successful
       set_fact:
         worker_verified: true
   when: (k3s_binary is not defined) or 

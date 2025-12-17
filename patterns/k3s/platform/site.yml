@@ -4,20 +4,33 @@
   become: yes
   roles:
     - role: management
-      tags: [management]
+      tags: [management, always]
 
-- name: Configure Common
+- name: Configure Common Prerequisites
   hosts: all:!k3s_management
   become: yes
   roles:
     - role: common
-      tags: [common]
+      tags: [common, always]
 
 - name: Configure K3s Control Plane
   hosts: k3s_control
   become: yes
   roles:
     - role: control
+      tags: [control]
+  pre_tasks:
+    - name: Check if control plane is already configured
+      stat:
+        path: /etc/rancher/k3s/k3s.yaml
+      register: control_config_check
+      tags: [control]
+  post_tasks:
+    - name: Mark control plane configuration complete
+      copy:
+        content: "{{ ansible_date_time.iso8601 }}"
+        dest: /var/lib/tfgrid-compose/state/control_complete
+      delegate_to: "{{ primary_control_node }}"
       tags: [control]
 
 - name: Join K3s Worker Nodes
@@ -26,6 +39,18 @@
   roles:
     - role: worker
       tags: [worker]
+  pre_tasks:
+    - name: Check if worker is already joined
+      stat:
+        path: /var/lib/rancher/k3s/agent/kubelet.kubeconfig
+      register: worker_join_check
+      tags: [worker]
+  post_tasks:
+    - name: Mark worker join complete
+      copy:
+        content: "{{ ansible_date_time.iso8601 }}"
+        dest: /var/lib/tfgrid-compose/state/worker_{{ inventory_hostname }}_complete
+      tags: [worker]
 
 - name: Join K3s Ingress Nodes (if configured)
   hosts: k3s_ingress
@@ -33,6 +58,7 @@
   roles:
     - role: ingress
       tags: [ingress]
+  when: has_ingress_nodes | default(false) | bool
 
 - name: Configure Keepalived for Ingress HA (if configured)
   hosts: k3s_ingress
@@ -40,6 +66,7 @@
   roles:
     - role: keepalived
       tags: [keepalived]
+  when: has_ingress_nodes | default(false) | bool
 
 - name: Setup local kubeconfig for K3s cluster
   hosts: k3s_management
