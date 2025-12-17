@@ -2665,6 +2665,126 @@ EOF
         exit $?
         ;;
 
+    retry)
+        # Retry ansible playbooks for K3s deployments
+        log_command "Retry Ansible Playbooks"
+
+        # Get deployment context
+        if ! get_deployment_context ""; then
+            exit 1
+        fi
+
+        if ! load_app_for_deployment "$DEPLOYMENT_ID"; then
+            exit 1
+        fi
+
+        # Check if this is a K3s deployment (has k3s pattern)
+        PATTERN_NAME=$(get_recommended_pattern)
+        if [ "$PATTERN_NAME" != "k3s" ]; then
+            log_error "Retry is only supported for K3s deployments"
+            log_info "Current pattern: $PATTERN_NAME"
+            exit 1
+        fi
+
+        # Get retry component from args
+        RETRY_COMPONENT="${1:-all}"
+        shift || true
+
+        # Validate component
+        case "$RETRY_COMPONENT" in
+            control|worker|common|ingress|all)
+                ;;
+            *)
+                log_error "Invalid retry component: $RETRY_COMPONENT"
+                echo ""
+                echo "Valid components:"
+                echo "  control    Retry control plane configuration"
+                echo "  worker     Retry worker node configuration"
+                echo "  common     Retry common prerequisites"
+                echo "  ingress    Retry ingress node configuration"
+                echo "  all        Retry all components"
+                echo ""
+                echo "Usage: tfgrid-compose retry [component]"
+                exit 1
+                ;;
+        esac
+
+        log_info "Retrying K3s component: $RETRY_COMPONENT"
+        log_info "Deployment: $DEPLOYMENT_ID ($APP_NAME)"
+
+        # Execute retry script
+        RETRY_SCRIPT="$DEPLOYER_ROOT/patterns/k3s/scripts/retry-playbook.sh"
+
+        if [ ! -f "$RETRY_SCRIPT" ]; then
+            log_error "Retry script not found: $RETRY_SCRIPT"
+            exit 1
+        fi
+
+        # Change to pattern directory and run retry
+        cd "$DEPLOYER_ROOT/patterns/k3s" && bash "$RETRY_SCRIPT" "$RETRY_COMPONENT"
+        exit $?
+        ;;
+
+    validate)
+        # Validate cluster health for K3s deployments
+        log_command "Validate Cluster Health"
+
+        # Get deployment context
+        if ! get_deployment_context ""; then
+            exit 1
+        fi
+
+        if ! load_app_for_deployment "$DEPLOYMENT_ID"; then
+            exit 1
+        fi
+
+        # Check if this is a K3s deployment
+        PATTERN_NAME=$(get_recommended_pattern)
+        if [ "$PATTERN_NAME" != "k3s" ]; then
+            log_error "Validation is only supported for K3s deployments"
+            log_info "Current pattern: $PATTERN_NAME"
+            exit 1
+        fi
+
+        log_info "Validating K3s cluster health"
+        log_info "Deployment: $DEPLOYMENT_ID ($APP_NAME)"
+
+        # Check if app has healthcheck script
+        HEALTHCHECK_SCRIPT=""
+        if [ -f "$APP_DIR/deployment/healthcheck.sh" ]; then
+            HEALTHCHECK_SCRIPT="$APP_DIR/deployment/healthcheck.sh"
+        fi
+
+        # Get deployment IP for health check
+        vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
+        if [ -z "$vm_ip" ]; then
+            log_error "No IP found in state for $APP_NAME"
+            exit 1
+        fi
+
+        if [ -n "$HEALTHCHECK_SCRIPT" ]; then
+            log_info "Running project-specific health check..."
+            ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                root@$vm_ip "bash -s" < "$HEALTHCHECK_SCRIPT"
+        else
+            log_info "Running basic cluster validation..."
+            # Basic validation - check if we can connect and run basic commands
+            ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                root@$vm_ip "kubectl get nodes --no-headers | wc -l" 2>/dev/null || echo "0"
+            NODE_COUNT=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                root@$vm_ip "kubectl get nodes --no-headers | wc -l" 2>/dev/null || echo "0")
+
+            if [ "$NODE_COUNT" -gt 0 ]; then
+                log_success "Cluster validation passed: $NODE_COUNT nodes ready"
+            else
+                log_error "Cluster validation failed: unable to connect or no nodes found"
+                exit 1
+            fi
+        fi
+
+        exit $?
+        ;;
+
     deployments)
         # Deployment registry maintenance tools
         SUBCOMMAND="${1:-}"
