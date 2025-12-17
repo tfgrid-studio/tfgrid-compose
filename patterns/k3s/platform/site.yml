@@ -58,7 +58,6 @@
   roles:
     - role: ingress
       tags: [ingress]
-  when: "'k3s_ingress' in groups and groups['k3s_ingress'] | length > 0"
 
 - name: Configure Keepalived for Ingress HA (if configured)
   hosts: k3s_ingress
@@ -66,7 +65,6 @@
   roles:
     - role: keepalived
       tags: [keepalived]
-  when: has_ingress_nodes | default(false) | bool
 
 - name: Setup local kubeconfig for K3s cluster
   hosts: k3s_management
