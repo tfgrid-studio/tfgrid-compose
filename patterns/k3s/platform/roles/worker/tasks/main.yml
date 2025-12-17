@@ -177,7 +177,7 @@
       # Increased timeout to 1800 seconds (30 minutes) for slow networks
       async: 1800
       poll: 30
-      ignore_errors: yes
+      failed_when: k3s_install_result.rc != 0
       
     - name: Wait for K3s agent service to start
       systemd:

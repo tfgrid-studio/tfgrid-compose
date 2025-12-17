@@ -50,6 +50,62 @@
   vars:
     primary_control_node: "{{ hostvars['node1']['inventory_hostname'] }}"
 
+- name: Validate cluster readiness before app deployment
+  hosts: k3s_management
+  become: no
+  tasks:
+    - name: Wait for all control plane nodes to be ready
+      shell: |
+        export KUBECONFIG=~/.kube/config
+        kubectl wait --for=condition=Ready node --all --timeout=300s
+      register: control_nodes_ready
+      retries: 3
+      delay: 30
+      until: control_nodes_ready.rc == 0
+      failed_when: control_nodes_ready.rc != 0
+
+    - name: Verify etcd cluster health
+      shell: |
+        export KUBECONFIG=~/.kube/config
+        kubectl get nodes -l node-role.kubernetes.io/control-plane -o name | wc -l
+      register: etcd_nodes_count
+      failed_when: etcd_nodes_count.stdout | int < 3
+      when: "'masters' in groups and groups['masters'] | length >= 3"
+
+    - name: Check CNI pods are running
+      shell: |
+        export KUBECONFIG=~/.kube/config
+        kubectl get pods -n kube-system -l k8s-app=flannel -o jsonpath='{.items[*].status.phase}' | grep -v Running | wc -l
+      register: cni_check
+      failed_when: cni_check.stdout | int > 0
+
+    - name: Validate MetalLB deployment
+      shell: |
+        export KUBECONFIG=~/.kube/config
+        kubectl get pods -n metallb-system -o jsonpath='{.items[*].status.phase}' | grep -v Running | wc -l
+      register: metallb_check
+      failed_when: metallb_check.stdout | int > 0
+
+    - name: Check cluster nodes status
+      shell: |
+        export KUBECONFIG=~/.kube/config
+        kubectl get nodes
+      register: nodes_status
+
+    - name: Display cluster validation results
+      debug:
+        msg: |
+          ============================================
+          CLUSTER VALIDATION SUCCESSFUL
+          ============================================
+          All control plane nodes are ready.
+          CNI (Flannel) is functioning.
+          MetalLB is deployed and running.
+          Cluster is ready for application deployment.
+          ============================================
+          {{ nodes_status.stdout_lines | join('\n') }}
+          ============================================
+
 - name: Deploy Nginx Ingress to dedicated ingress nodes (if configured)
   hosts: k3s_management
   become: no

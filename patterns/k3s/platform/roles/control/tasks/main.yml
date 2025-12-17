@@ -65,9 +65,10 @@
 - name: Detect IP family and set network configuration
   set_fact:
     ip_family: "{{ 'ipv6' if ':' in ansible_host else 'ipv4' }}"
-    cluster_cidr: "{{ '--cluster-cidr=2001:cafe:42::/56' if ':' in ansible_host else '' }}"
-    service_cidr: "{{ '--service-cidr=2001:cafe:43::/112' if ':' in ansible_host else '' }}"
+    cluster_cidr: "{{ '--cluster-cidr=2001:cafe:42::/56' if ':' in ansible_host else '--cluster-cidr=10.42.0.0/16' }}"
+    service_cidr: "{{ '--service-cidr=2001:cafe:43::/112' if ':' in ansible_host else '--service-cidr=10.43.0.0/16' }}"
     metallb_mask: "{{ '/128' if ':' in ansible_host else '/32' }}"
+    metallb_pool_range: "{{ '192.168.100.100-192.168.100.200' if ':' not in ansible_host else ansible_host ~ metallb_mask }}"
 
 # Primary control node installation
 - name: Install K3s on primary control node
@@ -207,7 +208,7 @@
       environment:
         INSTALL_K3S_VERSION: "{{ k3s_version }}"
       register: k3s_secondary_install
-      ignore_errors: yes
+      failed_when: k3s_secondary_install.rc != 0 and 'k3s is already running' not in k3s_secondary_install.stderr | default('')
       retries: 3
       delay: 30
       until: k3s_secondary_install.rc == 0 or 'k3s is already running' in k3s_secondary_install.stderr | default('')
@@ -351,7 +352,7 @@
         kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.7/config/manifests/metallb-native.yaml
       register: metallb_deploy
       changed_when: "'created' in metallb_deploy.stdout or 'configured' in metallb_deploy.stdout"
-      ignore_errors: yes
+      failed_when: metallb_deploy.rc != 0
 
     - name: Wait for MetalLB to be ready
       shell: |
@@ -372,7 +373,7 @@
             namespace: metallb-system
           spec:
             addresses:
-            - {{ ansible_host }}{{ metallb_mask }}
+            - {{ metallb_pool_range }}
           ---
           apiVersion: metallb.io/v1beta1
           kind: L2Advertisement
@@ -395,13 +396,13 @@
       retries: 3
       delay: 10
       until: metallb_webhook_wait.rc == 0
-      ignore_errors: yes
+      failed_when: metallb_webhook_wait.rc != 0
 
     - name: Apply MetalLB ConfigMap
       command: kubectl apply -f /tmp/metallb-config.yaml
       register: metallb_config
       changed_when: "'created' in metallb_config.stdout or 'configured' in metallb_config.stdout"
-      ignore_errors: yes
+      failed_when: metallb_config.rc != 0
 
     - name: Download Nginx Ingress Controller manifest
       get_url:
@@ -435,5 +436,9 @@
           --selector=app.kubernetes.io/component=controller \
           --timeout=120s
       changed_when: false
-      ignore_errors: yes
+      failed_when: false
+      register: nginx_wait
+      retries: 3
+      delay: 10
+      until: nginx_wait.rc == 0
   when: is_primary_control | bool
