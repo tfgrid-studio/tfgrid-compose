@@ -58,7 +58,7 @@
   roles:
     - role: ingress
       tags: [ingress]
-  when: has_ingress_nodes | default(false) | bool
+  when: "'k3s_ingress' in groups and groups['k3s_ingress'] | length > 0"
 
 - name: Configure Keepalived for Ingress HA (if configured)
   hosts: k3s_ingress
