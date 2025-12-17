@@ -68,7 +68,10 @@
     cluster_cidr: "{{ '--cluster-cidr=2001:cafe:42::/56' if ':' in ansible_host else '--cluster-cidr=10.42.0.0/16' }}"
     service_cidr: "{{ '--service-cidr=2001:cafe:43::/112' if ':' in ansible_host else '--service-cidr=10.43.0.0/16' }}"
     metallb_mask: "{{ '/128' if ':' in ansible_host else '/32' }}"
-    metallb_pool_range: "{{ '192.168.100.100-192.168.100.200' if ':' not in ansible_host else ansible_host ~ metallb_mask }}"
+
+- name: Set MetalLB IP pool range
+  set_fact:
+    metallb_pool_range: "{{ '192.168.100.100-192.168.100.200' if ip_family == 'ipv4' else ansible_host + metallb_mask }}"
 
 # Primary control node installation
 - name: Install K3s on primary control node
