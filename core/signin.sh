@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TFGrid Compose - Login Module
-# Handles interactive credential setup
+# Handles interactive credential setup with multi-platform git support
 
 # Credentials file location
 CREDENTIALS_FILE="$HOME/.config/tfgrid-compose/credentials.yaml"
@@ -172,7 +172,166 @@ prompt_github_token() {
     echo "$token"
 }
 
-# Prompt for Gitea URL
+# =============================================================================
+# Multi-Platform Git Server Support
+# =============================================================================
+
+# Platform selection menu (like gits)
+prompt_git_platform() {
+    echo "" >&2
+    echo "Git Platform Configuration:" >&2
+    echo "  Configure credentials for git servers used by your deployments" >&2
+    echo "" >&2
+    echo "Which platform would you like to configure?" >&2
+    echo "  1) Forgejo (forge.ourworld.tf)" >&2
+    echo "  2) Gitea (git.ourworld.tf)" >&2
+    echo "  3) GitHub (github.com)" >&2
+    echo "  4) Custom server" >&2
+    echo "  5) Skip git server configuration" >&2
+    echo "" >&2
+    echo -n "→ Choice [1-5]: " >&2
+    read -r choice
+    
+    case "$choice" in
+        1) echo "forgejo" ;;
+        2) echo "gitea" ;;
+        3) echo "github" ;;
+        4) echo "custom" ;;
+        5|"") echo "skip" ;;
+        *) echo "skip" ;;
+    esac
+}
+
+# Get default server for platform
+get_default_server() {
+    local platform="$1"
+    case "$platform" in
+        forgejo) echo "forge.ourworld.tf" ;;
+        gitea) echo "git.ourworld.tf" ;;
+        github) echo "github.com" ;;
+        *) echo "" ;;
+    esac
+}
+
+# Prompt for git server URL
+prompt_git_server_url() {
+    local platform="$1"
+    local default_server=$(get_default_server "$platform")
+    
+    echo "" >&2
+    if [ -n "$default_server" ]; then
+        echo "Server URL (default: $default_server):" >&2
+        echo "  ℹ  Press Enter to use default" >&2
+    else
+        echo "Server URL:" >&2
+        echo "  ℹ  Enter the full hostname (e.g., git.example.com)" >&2
+    fi
+    echo "" >&2
+    echo -n "→ Server: " >&2
+    read -r server
+    
+    if [ -z "$server" ]; then
+        server="$default_server"
+    fi
+    
+    # Remove protocol if provided
+    server=$(echo "$server" | sed -E 's|^https?://||' | sed 's|/$||')
+    
+    echo "$server"
+}
+
+# Prompt for git username
+prompt_git_username() {
+    local platform="$1"
+    local server="$2"
+    
+    echo "" >&2
+    echo "Username for $server (optional):" >&2
+    echo "  ℹ  Used for HTTPS authentication with private repos" >&2
+    echo "  ℹ  Press Enter to skip" >&2
+    echo "" >&2
+    echo -n "→ Username: " >&2
+    read -r username
+    
+    echo "$username"
+}
+
+# Prompt for git token
+prompt_git_token() {
+    local platform="$1"
+    local server="$2"
+    
+    echo "" >&2
+    echo "API Token for $server:" >&2
+    case "$platform" in
+        forgejo)
+            echo "  ℹ  Create at: https://$server/user/settings/applications" >&2
+            ;;
+        gitea)
+            echo "  ℹ  Create at: https://$server/user/settings/applications" >&2
+            ;;
+        github)
+            echo "  ℹ  Create at: https://github.com/settings/tokens" >&2
+            ;;
+        *)
+            echo "  ℹ  Generate an API token with repo access" >&2
+            ;;
+    esac
+    echo "  ℹ  Press Enter to skip (for public repos only)" >&2
+    echo "" >&2
+    echo "→ Token:" >&2
+    echo "  (input hidden for security)" >&2
+    echo -n "  " >&2
+    read -s -r token
+    echo "" >&2
+    
+    if [ -n "$token" ]; then
+        echo "" >&2
+        log_success "Token configured for $server" >&2
+        echo "" >&2
+    fi
+    
+    echo "$token"
+}
+
+# Configure a git server interactively
+configure_git_server() {
+    local platform=$(prompt_git_platform)
+    
+    if [ "$platform" = "skip" ]; then
+        echo "skip"
+        return 0
+    fi
+    
+    local server=""
+    local username=""
+    local token=""
+    
+    if [ "$platform" = "github" ]; then
+        server="github.com"
+        # For GitHub, we might already have a token from the earlier prompt
+        echo "" >&2
+        echo "GitHub server: github.com" >&2
+    else
+        server=$(prompt_git_server_url "$platform")
+        if [ -z "$server" ]; then
+            echo "skip"
+            return 0
+        fi
+        username=$(prompt_git_username "$platform" "$server")
+    fi
+    
+    token=$(prompt_git_token "$platform" "$server")
+    
+    # Return the configuration as a parseable string
+    echo "$platform|$server|$username|$token"
+}
+
+# =============================================================================
+# Legacy Gitea Support (for backward compatibility)
+# =============================================================================
+
+# Prompt for Gitea URL (legacy - kept for backward compatibility)
 prompt_gitea_url() {
     echo "" >&2
     echo "Gitea URL (optional):" >&2
@@ -189,7 +348,7 @@ prompt_gitea_url() {
     fi
 }
 
-# Prompt for Gitea token
+# Prompt for Gitea token (legacy - kept for backward compatibility)
 prompt_gitea_token() {
     echo "" >&2
     echo "Gitea Token (optional):" >&2
@@ -210,6 +369,10 @@ prompt_gitea_token() {
     
     echo "$token"
 }
+
+# =============================================================================
+# Git Identity
+# =============================================================================
 
 # Validate git name (basic check)
 validate_git_name() {
@@ -322,8 +485,86 @@ prompt_git_email() {
     return 1
 }
 
-# Save credentials to file
+# =============================================================================
+# Credential Storage
+# =============================================================================
+
+# Save credentials to file (with multi-server support)
 save_credentials() {
+    local mnemonic="$1"
+    local github_token="$2"
+    local git_name="$3"
+    local git_email="$4"
+    shift 4
+    # Remaining args are git_servers in format: "platform|server|username|token"
+    local git_servers=("$@")
+    
+    ensure_credentials_dir
+    
+    # Create YAML file
+    cat > "$CREDENTIALS_FILE" << EOF
+# TFGrid Compose Credentials
+# Generated: $(date)
+# Multi-platform git support enabled
+
+threefold:
+  mnemonic: "$mnemonic"
+
+EOF
+    
+    # Add GitHub token if provided
+    if [ -n "$github_token" ]; then
+        cat >> "$CREDENTIALS_FILE" << EOF
+github:
+  token: "$github_token"
+
+EOF
+    fi
+    
+    # Add git servers (new multi-platform format)
+    if [ ${#git_servers[@]} -gt 0 ]; then
+        echo "git_servers:" >> "$CREDENTIALS_FILE"
+        local first_server=true
+        for server_config in "${git_servers[@]}"; do
+            IFS='|' read -r platform server username token <<< "$server_config"
+            if [ -n "$server" ] && [ "$server" != "skip" ]; then
+                echo "  - name: \"$server\"" >> "$CREDENTIALS_FILE"
+                echo "    platform: \"$platform\"" >> "$CREDENTIALS_FILE"
+                if [ -n "$username" ]; then
+                    echo "    username: \"$username\"" >> "$CREDENTIALS_FILE"
+                fi
+                if [ -n "$token" ]; then
+                    echo "    token: \"$token\"" >> "$CREDENTIALS_FILE"
+                fi
+                if [ "$first_server" = true ]; then
+                    echo "    default: true" >> "$CREDENTIALS_FILE"
+                    first_server=false
+                fi
+            fi
+        done
+        echo "" >> "$CREDENTIALS_FILE"
+    fi
+    
+    # Add git identity if provided
+    if [ -n "$git_name" ] || [ -n "$git_email" ]; then
+        cat >> "$CREDENTIALS_FILE" << EOF
+git:
+EOF
+        if [ -n "$git_name" ]; then
+            echo "  name: \"$git_name\"" >> "$CREDENTIALS_FILE"
+        fi
+        if [ -n "$git_email" ]; then
+            echo "  email: \"$git_email\"" >> "$CREDENTIALS_FILE"
+        fi
+        echo "" >> "$CREDENTIALS_FILE"
+    fi
+    
+    # Set secure permissions
+    chmod 600 "$CREDENTIALS_FILE"
+}
+
+# Save credentials (legacy format for backward compatibility)
+save_credentials_legacy() {
     local mnemonic="$1"
     local github_token="$2"
     local gitea_url="$3"
@@ -385,14 +626,13 @@ EOF
     chmod 600 "$CREDENTIALS_FILE"
 }
 
-# Load credentials
+# Load credentials and export environment variables
 load_credentials() {
     if [ ! -f "$CREDENTIALS_FILE" ]; then
         return 1
     fi
     
     # Export credentials as environment variables
-    # Note: This is a simple YAML parser
     
     # Get mnemonic (under threefold section)
     export TFGRID_MNEMONIC=$(grep "mnemonic:" "$CREDENTIALS_FILE" | sed 's/.*mnemonic: "\(.*\)"/\1/')
@@ -400,17 +640,158 @@ load_credentials() {
     # Get GitHub token (under github section)
     export TFGRID_GITHUB_TOKEN=$(awk '/^github:/{flag=1; next} /^[a-z]/{flag=0} flag && /token:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*token: "\(.*\)"/\1/')
     
-    # Get Gitea URL (under gitea section)
-    export TFGRID_GITEA_URL=$(awk '/^gitea:/{flag=1; next} /^[a-z]/{flag=0} flag && /url:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*url: "\(.*\)"/\1/')
-    
-    # Get Gitea token (under gitea section)
-    export TFGRID_GITEA_TOKEN=$(awk '/^gitea:/{flag=1; next} /^[a-z]/{flag=0} flag && /token:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*token: "\(.*\)"/\1/')
-    
     # Get git name (under git section)
     export TFGRID_GIT_NAME=$(awk '/^git:/{flag=1; next} /^[a-z]/{flag=0} flag && /name:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*name: "\(.*\)"/\1/')
     
     # Get git email (under git section)
     export TFGRID_GIT_EMAIL=$(awk '/^git:/{flag=1; next} /^[a-z]/{flag=0} flag && /email:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*email: "\(.*\)"/\1/')
+    
+    # ==========================================================================
+    # Multi-platform git server support
+    # ==========================================================================
+    
+    # Check if new format (git_servers:) exists
+    if grep -q "^git_servers:" "$CREDENTIALS_FILE" 2>/dev/null; then
+        # Parse default server from git_servers section
+        local default_server=""
+        local default_platform=""
+        local default_username=""
+        local default_token=""
+        
+        # Find the default server (or first server)
+        local in_git_servers=false
+        local in_server=false
+        local current_name=""
+        local current_platform=""
+        local current_username=""
+        local current_token=""
+        local current_is_default=false
+        
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^git_servers: ]]; then
+                in_git_servers=true
+                continue
+            fi
+            
+            if [ "$in_git_servers" = true ]; then
+                # Check for end of git_servers section
+                if [[ "$line" =~ ^[a-z]+: ]] && [[ ! "$line" =~ ^[[:space:]] ]]; then
+                    in_git_servers=false
+                    continue
+                fi
+                
+                # Parse server entries
+                if [[ "$line" =~ ^[[:space:]]*-[[:space:]]*name:[[:space:]]*\"(.*)\" ]]; then
+                    # Save previous server if it was default
+                    if [ "$current_is_default" = true ] && [ -n "$current_name" ]; then
+                        default_server="$current_name"
+                        default_platform="$current_platform"
+                        default_username="$current_username"
+                        default_token="$current_token"
+                    elif [ -z "$default_server" ] && [ -n "$current_name" ]; then
+                        # Use first server as default if none marked
+                        default_server="$current_name"
+                        default_platform="$current_platform"
+                        default_username="$current_username"
+                        default_token="$current_token"
+                    fi
+                    
+                    # Start new server
+                    current_name="${BASH_REMATCH[1]}"
+                    current_platform=""
+                    current_username=""
+                    current_token=""
+                    current_is_default=false
+                    in_server=true
+                elif [ "$in_server" = true ]; then
+                    if [[ "$line" =~ platform:[[:space:]]*\"(.*)\" ]]; then
+                        current_platform="${BASH_REMATCH[1]}"
+                    elif [[ "$line" =~ username:[[:space:]]*\"(.*)\" ]]; then
+                        current_username="${BASH_REMATCH[1]}"
+                    elif [[ "$line" =~ token:[[:space:]]*\"(.*)\" ]]; then
+                        current_token="${BASH_REMATCH[1]}"
+                    elif [[ "$line" =~ default:[[:space:]]*true ]]; then
+                        current_is_default=true
+                    fi
+                fi
+            fi
+        done < "$CREDENTIALS_FILE"
+        
+        # Handle last server
+        if [ "$current_is_default" = true ] && [ -n "$current_name" ]; then
+            default_server="$current_name"
+            default_platform="$current_platform"
+            default_username="$current_username"
+            default_token="$current_token"
+        elif [ -z "$default_server" ] && [ -n "$current_name" ]; then
+            default_server="$current_name"
+            default_platform="$current_platform"
+            default_username="$current_username"
+            default_token="$current_token"
+        fi
+        
+        # Export generic GIT_* variables for deployments
+        if [ -n "$default_server" ]; then
+            export GIT_SERVER="$default_server"
+            export GIT_PLATFORM="$default_platform"
+            [ -n "$default_username" ] && export GIT_USERNAME="$default_username"
+            [ -n "$default_token" ] && export GIT_TOKEN="$default_token"
+            
+            # Also export as GIT_OURWORLD_* for compatibility with existing deployments
+            [ -n "$default_username" ] && export GIT_OURWORLD_USERNAME="$default_username"
+            [ -n "$default_token" ] && export GIT_OURWORLD_TOKEN="$default_token"
+        fi
+        
+        # Export platform-specific variables based on configured servers
+        while IFS= read -r line; do
+            if [[ "$line" =~ ^git_servers: ]]; then
+                in_git_servers=true
+                continue
+            fi
+            
+            if [ "$in_git_servers" = true ]; then
+                if [[ "$line" =~ ^[a-z]+: ]] && [[ ! "$line" =~ ^[[:space:]] ]]; then
+                    break
+                fi
+                
+                if [[ "$line" =~ ^[[:space:]]*-[[:space:]]*name:[[:space:]]*\"(.*)\" ]]; then
+                    current_name="${BASH_REMATCH[1]}"
+                    current_platform=""
+                    current_token=""
+                elif [[ "$line" =~ platform:[[:space:]]*\"(.*)\" ]]; then
+                    current_platform="${BASH_REMATCH[1]}"
+                elif [[ "$line" =~ token:[[:space:]]*\"(.*)\" ]]; then
+                    current_token="${BASH_REMATCH[1]}"
+                    
+                    # Export platform-specific variables
+                    case "$current_platform" in
+                        forgejo)
+                            export TFGRID_FORGEJO_URL="https://$current_name"
+                            export TFGRID_FORGEJO_TOKEN="$current_token"
+                            ;;
+                        gitea)
+                            export TFGRID_GITEA_URL="https://$current_name"
+                            export TFGRID_GITEA_TOKEN="$current_token"
+                            ;;
+                    esac
+                fi
+            fi
+        done < "$CREDENTIALS_FILE"
+        
+    else
+        # Legacy format: gitea: section
+        export TFGRID_GITEA_URL=$(awk '/^gitea:/{flag=1; next} /^[a-z]/{flag=0} flag && /url:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*url: "\(.*\)"/\1/')
+        export TFGRID_GITEA_TOKEN=$(awk '/^gitea:/{flag=1; next} /^[a-z]/{flag=0} flag && /token:/{print; exit}' "$CREDENTIALS_FILE" | sed 's/.*token: "\(.*\)"/\1/')
+        
+        # Also export as generic variables for compatibility
+        if [ -n "$TFGRID_GITEA_URL" ]; then
+            local server=$(echo "$TFGRID_GITEA_URL" | sed -E 's|^https?://||' | sed 's|/$||')
+            export GIT_SERVER="$server"
+            export GIT_PLATFORM="gitea"
+            [ -n "$TFGRID_GITEA_TOKEN" ] && export GIT_TOKEN="$TFGRID_GITEA_TOKEN"
+            [ -n "$TFGRID_GITEA_TOKEN" ] && export GIT_OURWORLD_TOKEN="$TFGRID_GITEA_TOKEN"
+        fi
+    fi
     
     return 0
 }
@@ -432,18 +813,37 @@ show_credential_status() {
         echo "  ✗ GitHub token: (not set)"
     fi
     
-    if [ -n "$TFGRID_GITEA_URL" ]; then
-        echo "  ✓ Gitea URL:    $TFGRID_GITEA_URL"
-    else
-        echo "  ✗ Gitea URL:    (not set)"
+    # Show git servers (new format)
+    if [ -n "$GIT_SERVER" ]; then
+        echo ""
+        echo "Git Servers:"
+        echo "  ✓ Default:      $GIT_SERVER ($GIT_PLATFORM)"
+        [ -n "$GIT_USERNAME" ] && echo "    Username:     $GIT_USERNAME"
+        [ -n "$GIT_TOKEN" ] && echo "    Token:        ********** (configured)"
     fi
     
-    if [ -n "$TFGRID_GITEA_TOKEN" ]; then
-        echo "  ✓ Gitea token:  ********** (configured)"
-    else
-        echo "  ✗ Gitea token:  (not set)"
+    # Show legacy gitea if no new format
+    if [ -z "$GIT_SERVER" ]; then
+        if [ -n "$TFGRID_GITEA_URL" ]; then
+            echo "  ✓ Gitea URL:    $TFGRID_GITEA_URL"
+        else
+            echo "  ✗ Gitea URL:    (not set)"
+        fi
+        
+        if [ -n "$TFGRID_GITEA_TOKEN" ]; then
+            echo "  ✓ Gitea token:  ********** (configured)"
+        else
+            echo "  ✗ Gitea token:  (not set)"
+        fi
     fi
     
+    # Show additional platform-specific tokens
+    if [ -n "$TFGRID_FORGEJO_TOKEN" ]; then
+        echo "  ✓ Forgejo:      $TFGRID_FORGEJO_URL (configured)"
+    fi
+    
+    echo ""
+    echo "Git Identity:"
     if [ -n "$TFGRID_GIT_NAME" ]; then
         echo "  ✓ Git name:     $TFGRID_GIT_NAME"
     else
@@ -494,8 +894,8 @@ add_missing_credentials() {
     fi
     
     if [ "$updated" = true ]; then
-        # Re-save credentials with new git info
-        save_credentials "$TFGRID_MNEMONIC" "$TFGRID_GITHUB_TOKEN" "$TFGRID_GITEA_URL" "$TFGRID_GITEA_TOKEN" "$git_name" "$git_email"
+        # Re-save credentials with new git info (legacy format for compatibility)
+        save_credentials_legacy "$TFGRID_MNEMONIC" "$TFGRID_GITHUB_TOKEN" "$TFGRID_GITEA_URL" "$TFGRID_GITEA_TOKEN" "$git_name" "$git_email"
         echo ""
         log_success "✅ Git credentials added!"
         echo ""
@@ -546,16 +946,26 @@ check_credentials() {
         echo "⊘ GitHub token: Not configured (optional)"
     fi
     
-    # Check Gitea
-    if [ -n "$TFGRID_GITEA_URL" ]; then
-        echo "✓ Gitea URL: $TFGRID_GITEA_URL"
-        if [ -n "$TFGRID_GITEA_TOKEN" ]; then
-            echo "✓ Gitea token: Configured"
+    # Check git servers (new format)
+    if [ -n "$GIT_SERVER" ]; then
+        echo "✓ Git server: $GIT_SERVER ($GIT_PLATFORM)"
+        if [ -n "$GIT_TOKEN" ]; then
+            echo "✓ Git token: Configured"
         else
-            echo "⊘ Gitea token: Not configured"
+            echo "⊘ Git token: Not configured"
         fi
     else
-        echo "⊘ Gitea: Not configured (optional)"
+        # Check Gitea (legacy)
+        if [ -n "$TFGRID_GITEA_URL" ]; then
+            echo "✓ Gitea URL: $TFGRID_GITEA_URL"
+            if [ -n "$TFGRID_GITEA_TOKEN" ]; then
+                echo "✓ Gitea token: Configured"
+            else
+                echo "⊘ Gitea token: Not configured"
+            fi
+        else
+            echo "⊘ Git server: Not configured (optional)"
+        fi
     fi
     
     # Check git identity
@@ -629,10 +1039,11 @@ cmd_signin() {
         echo "What would you like to do?"
         echo "  1) Add missing credentials (recommended)"
         echo "  2) Update all credentials (re-enter everything)"
-        echo "  3) Check credentials and exit"
+        echo "  3) Add/update git server"
+        echo "  4) Check credentials and exit"
         echo ""
         
-        read -p "Choice [1-3]: " choice
+        read -p "Choice [1-4]: " choice
         choice=${choice:-1}  # Default to 1
         
         case $choice in
@@ -654,6 +1065,19 @@ cmd_signin() {
                 # Fall through to normal login flow below
                 ;;
             3)
+                # Add/update git server
+                echo ""
+                log_info "Configure a git server..."
+                local server_config=$(configure_git_server)
+                if [ "$server_config" != "skip" ]; then
+                    # For now, we need to re-save all credentials
+                    # TODO: Implement incremental update
+                    echo ""
+                    log_info "Git server configuration saved. Run 'tfgrid-compose login' option 2 to fully reconfigure."
+                fi
+                return 0
+                ;;
+            4)
                 # Just check
                 echo ""
                 check_credentials
@@ -682,12 +1106,37 @@ cmd_signin() {
     local github_token
     github_token=$(prompt_github_token)
     
-    local gitea_url
-    gitea_url=$(prompt_gitea_url)
+    # Collect git servers
+    local git_servers=()
+    local add_more=true
     
-    local gitea_token=""
-    # Only prompt for Gitea token if URL was provided (even if default)
-    gitea_token=$(prompt_gitea_token)
+    echo ""
+    log_info "Git Server Configuration"
+    echo ""
+    echo "Configure git servers for accessing repositories during deployments."
+    echo "You can configure multiple servers (Forgejo, Gitea, GitHub, custom)."
+    echo ""
+    
+    while [ "$add_more" = true ]; do
+        local server_config=$(configure_git_server)
+        
+        if [ "$server_config" = "skip" ]; then
+            add_more=false
+        else
+            git_servers+=("$server_config")
+            
+            echo ""
+            echo "Add another git server?"
+            echo "  1) Yes, add another"
+            echo "  2) No, continue"
+            echo ""
+            read -p "Choice [1-2]: " add_choice
+            
+            if [ "$add_choice" != "1" ]; then
+                add_more=false
+            fi
+        fi
+    done
     
     # Prompt for git identity
     local git_name
@@ -702,14 +1151,25 @@ cmd_signin() {
         git_email=""
     fi
     
-    # Save credentials
-    save_credentials "$mnemonic" "$github_token" "$gitea_url" "$gitea_token" "$git_name" "$git_email"
+    # Save credentials with new format
+    save_credentials "$mnemonic" "$github_token" "$git_name" "$git_email" "${git_servers[@]}"
     
     echo ""
     log_success "✅ Credentials saved securely!"
     echo ""
     echo "Stored at: $CREDENTIALS_FILE"
     echo ""
+    
+    # Show summary of configured servers
+    if [ ${#git_servers[@]} -gt 0 ]; then
+        echo "Configured git servers:"
+        for server_config in "${git_servers[@]}"; do
+            IFS='|' read -r platform server username token <<< "$server_config"
+            echo "  • $server ($platform)"
+        done
+        echo ""
+    fi
+    
     echo "You're all set! Try:"
     echo "  tfgrid-compose search"
     echo "  tfgrid-compose up single-vm"

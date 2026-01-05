@@ -200,12 +200,14 @@ cmd_gitconfig() {
                 echo "  tfgrid-compose gitconfig                    # Set default git config"
                 echo "  tfgrid-compose gitconfig --context=github   # Set GitHub-specific config"
                 echo "  tfgrid-compose gitconfig --context=gitea    # Set Gitea-specific config"
+                echo "  tfgrid-compose gitconfig --context=forgejo  # Set Forgejo-specific config"
                 echo "  tfgrid-compose gitconfig --context=tfgrid-ai-agent  # Set AI agent config"
                 echo "  tfgrid-compose gitconfig --show             # Show current config"
                 echo ""
                 echo "CONTEXTS:"
                 echo "  github          - For ~/code/github.com/ repos"
-                echo "  gitea           - For ~/code/tfgrid-gitea/ repos"
+                echo "  gitea           - For ~/code/git.ourworld.tf/ repos"
+                echo "  forgejo         - For ~/code/forge.ourworld.tf/ repos"
                 echo "  tfgrid-ai-agent - For ~/code/tfgrid-ai-agent-projects/ repos"
                 echo ""
                 echo "Git automatically uses the appropriate identity based on repository location."
@@ -241,7 +243,10 @@ cmd_gitconfig() {
             context_desc="GitHub repositories"
             ;;
         gitea)
-            context_desc="Gitea repositories"
+            context_desc="Gitea repositories (git.ourworld.tf)"
+            ;;
+        forgejo)
+            context_desc="Forgejo repositories (forge.ourworld.tf)"
             ;;
         tfgrid-ai-agent)
             context_desc="AI Agent projects"
@@ -295,6 +300,7 @@ cmd_gitconfig() {
     echo "You can set additional contexts:"
     echo "  tfgrid-compose gitconfig --context=github"
     echo "  tfgrid-compose gitconfig --context=gitea"
+    echo "  tfgrid-compose gitconfig --context=forgejo"
     echo "  tfgrid-compose gitconfig --context=tfgrid-ai-agent"
     echo ""
 }
