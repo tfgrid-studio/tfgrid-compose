@@ -1271,6 +1271,98 @@ case "$COMMAND" in
         exit 0
         ;;
 
+    reset)
+        # Reset - remove state/cache but preserve credentials by default
+        RESET_ALL=false
+        if [ "$1" = "--all" ] || [ "$1" = "-a" ]; then
+            RESET_ALL=true
+        fi
+
+        log_info "TFGrid Compose v$VERSION - Reset"
+        echo ""
+
+        CONFIG_DIR="$HOME/.config/tfgrid-compose"
+
+        if [ ! -d "$CONFIG_DIR" ]; then
+            log_info "No configuration directory found (already clean)"
+            exit 0
+        fi
+
+        if [ "$RESET_ALL" = "true" ]; then
+            echo "This will remove ALL tfgrid-compose data INCLUDING CREDENTIALS:"
+            echo ""
+            echo "  - All deployment state directories"
+            echo "  - Deployment registry"
+            echo "  - Network preferences"
+            echo "  - Cached apps"
+            echo "  - All local configuration"
+            echo ""
+            log_error "  - YOUR CREDENTIALS (mnemonic/network config)"
+            log_error "    You will need to run 't signin' again with your mnemonic!"
+            echo ""
+            echo "Location: $CONFIG_DIR"
+            echo ""
+            log_warning "This action cannot be undone!"
+            echo ""
+            read -p "Type 'reset all' to confirm: " -r
+
+            if [ "$REPLY" = "reset all" ]; then
+                rm -rf "$CONFIG_DIR"
+                log_success "Full reset complete. All tfgrid-compose data has been removed."
+                log_info "Run 't signin' to reconfigure with your mnemonic."
+            else
+                log_info "Cancelled"
+            fi
+        else
+            echo "This will remove tfgrid-compose state and cache:"
+            echo ""
+            echo "  - All deployment state directories"
+            echo "  - Deployment registry"
+            echo "  - Network preferences"
+            echo "  - Cached apps"
+            echo "  - App selection context"
+            echo ""
+            log_success "  Your credentials will be PRESERVED (no need to signin again)"
+            echo ""
+            echo "Location: $CONFIG_DIR"
+            echo ""
+            log_warning "This action cannot be undone!"
+            echo ""
+            read -p "Type 'reset' to confirm: " -r
+
+            if [ "$REPLY" = "reset" ]; then
+                # Preserve credentials
+                CREDS_BACKUP=""
+                ENV_BACKUP=""
+                if [ -f "$CONFIG_DIR/credentials.env" ]; then
+                    CREDS_BACKUP=$(cat "$CONFIG_DIR/credentials.env")
+                fi
+                if [ -f "$CONFIG_DIR/.env" ]; then
+                    ENV_BACKUP=$(cat "$CONFIG_DIR/.env")
+                fi
+
+                # Remove everything
+                rm -rf "$CONFIG_DIR"
+
+                # Restore credentials
+                mkdir -p "$CONFIG_DIR"
+                if [ -n "$CREDS_BACKUP" ]; then
+                    echo "$CREDS_BACKUP" > "$CONFIG_DIR/credentials.env"
+                    chmod 600 "$CONFIG_DIR/credentials.env"
+                fi
+                if [ -n "$ENV_BACKUP" ]; then
+                    echo "$ENV_BACKUP" > "$CONFIG_DIR/.env"
+                    chmod 600 "$CONFIG_DIR/.env"
+                fi
+
+                log_success "Reset complete. State and cache removed, credentials preserved."
+            else
+                log_info "Cancelled"
+            fi
+        fi
+        exit 0
+        ;;
+
     logs)
         # Logs command - context-based precedence
         # If app is selected and has 'logs' command, use app version

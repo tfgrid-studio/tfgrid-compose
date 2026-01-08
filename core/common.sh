@@ -480,6 +480,8 @@ show_help() {
     echo -e "      ${GREEN}--ipv4${NC}             Enable public IPv4 for single-vm pattern (can be overridden in manifest)"
     echo -e "  ${GREEN}down${NC} [app]            Destroy a deployment"
     echo -e "  ${GREEN}clean${NC}                 Clean up local state directory"
+    echo -e "  ${GREEN}reset${NC}                 Reset state/cache (preserves credentials)"
+    echo -e "  ${GREEN}reset --all${NC}           Full reset (removes EVERYTHING including credentials)"
     echo ""
     echo -e "${CYAN}Status Management:${NC}"
     echo -e "  ${GREEN}status${NC} <subcommand>   Deployment status management"
