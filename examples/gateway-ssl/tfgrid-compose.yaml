@@ -11,14 +11,15 @@ patterns:
 
 # Network configuration
 network:
-  # How Ansible connects to configure VMs
-  main: wireguard  # Options: public, wireguard, mycelium
-  
+  # Which networks to provision on the VMs
+  # Options: mycelium, wireguard, ipv4, ipv6 (comma-separated for multiple)
+  provision: mycelium,wireguard,ipv4
+
+  # Connection preference order for SSH/Ansible (tried in order)
+  prefer: wireguard,mycelium
+
   # How nodes communicate internally (gateway to backends)
-  inter_node: wireguard  # Options: wireguard, mycelium
-  
-  # How users access your application (redundancy option)
-  mode: both  # Options: wireguard-only, mycelium-only, both (dual network failover)
+  inter_node: wireguard
 
 # Gateway configuration
 gateway:
@@ -31,7 +32,7 @@ gateway:
 
 # Backend configuration
 backend:
-  count: 2  # Deploy 2 backend VMs for load balancing test
+  count: 2 # Deploy 2 backend VMs for load balancing test
   services:
     - name: web
       type: static
@@ -51,5 +52,5 @@ resources:
 
 # Node selection - Multi-node deployment for thorough testing
 nodes:
-  gateway: [1]   # Mainnet node 1 with public IPv4
-  backend: [8, 13]  # Nodes 8 and 13 for backend VMs (tests cross-node networking)
+  gateway: [1] # Mainnet node 1 with public IPv4
+  backend: [8, 13] # Nodes 8 and 13 for backend VMs (tests cross-node networking)

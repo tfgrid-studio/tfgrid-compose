@@ -1223,16 +1223,44 @@ generate_terraform_config() {
     local main_network=$(yaml_get "$APP_MANIFEST" "network.main")
     local inter_node_network=$(yaml_get "$APP_MANIFEST" "network.inter_node")
     local network_mode=$(yaml_get "$APP_MANIFEST" "network.mode")
+    local manifest_provision=$(yaml_get "$APP_MANIFEST" "network.provision")
+    local manifest_prefer=$(yaml_get "$APP_MANIFEST" "network.prefer")
+    local manifest_public_ipv4=$(yaml_get "$APP_MANIFEST" "network.public_ipv4")
 
-    # Get network provisioning from global preferences
+    # Get network provisioning - manifest overrides global preferences
     local provision_networks=""
-    if command -v get_global_provision >/dev/null 2>&1; then
+    if [ -n "$manifest_provision" ] && [ "$manifest_provision" != "null" ]; then
+        # Use manifest provision setting
+        provision_networks="$manifest_provision"
+        log_info "Using manifest network.provision: $provision_networks"
+    elif command -v get_global_provision >/dev/null 2>&1; then
+        # Fall back to global preferences
         provision_networks=$(get_global_provision)
     fi
 
-    # Default to mycelium,ipv4 if not set
+    # Default to mycelium if not set
     if [ -z "$provision_networks" ]; then
-        provision_networks="mycelium,ipv4"
+        provision_networks="mycelium"
+    fi
+
+    # Legacy support: if manifest has network.public_ipv4: true, add ipv4 to provision
+    if [ "$manifest_public_ipv4" = "true" ] && [[ "$provision_networks" != *"ipv4"* ]]; then
+        provision_networks="$provision_networks,ipv4"
+        log_info "Adding ipv4 from legacy network.public_ipv4: true"
+    fi
+
+    # Set prefer order - manifest overrides global preferences
+    local prefer_networks=""
+    if [ -n "$manifest_prefer" ] && [ "$manifest_prefer" != "null" ]; then
+        prefer_networks="$manifest_prefer"
+        log_info "Using manifest network.prefer: $prefer_networks"
+    elif command -v get_global_prefer >/dev/null 2>&1; then
+        prefer_networks=$(get_global_prefer)
+    fi
+
+    # Default prefer to same as provision if not set
+    if [ -z "$prefer_networks" ]; then
+        prefer_networks="$provision_networks"
     fi
 
     # Parse provision list into individual boolean TF_VARs
@@ -1269,10 +1297,11 @@ generate_terraform_config() {
     # Export for internal use
     export TF_VAR_tfgrid_network="${TF_VAR_tfgrid_network:-main}"
     export PROVISION_NETWORKS="$provision_networks"
+    export PREFER_NETWORKS="$prefer_networks"
     export MAIN_NETWORK="${main_network:-mycelium}"
     export INTER_NODE_NETWORK="${inter_node_network:-mycelium}"
 
-    log_info "Network: Provision=$provision_networks"
+    log_info "Network: Provision=$provision_networks, Prefer=$prefer_networks"
 
     # Copy pattern infrastructure to state directory
     cp -r "$PATTERN_INFRASTRUCTURE_DIR" "$STATE_DIR/terraform"

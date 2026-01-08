@@ -1,10 +1,6 @@
 ---
-# Global configuration
+# Global configuration for TFGrid AI Stack
 ansible_python_interpreter: /usr/bin/python3
-
-# Network configuration
-network_cidr: "10.1.0.0/16"
-wireguard_port: 51820
 
 # TFGrid deployment information (passed from state file via extra vars)
 tfgrid_app_name: "{{ app_name | default('unknown') }}"
@@ -17,9 +13,5 @@ tfgrid_mycelium_address: "{{ mycelium_address | default('') }}"
 tfgrid_vm_ip: "{{ ipv4_address | default(wireguard_address) | default(mycelium_address) | default(ansible_host) | default('') }}"
 tfgrid_mycelium_ip: "{{ mycelium_address | default('') }}"
 
-# Gateway type configuration
-gateway_type: "{{ lookup('env', 'GATEWAY_TYPE') | default('gateway_nat', true) }}"
-disable_port_forwarding: "{{ lookup('env', 'DISABLE_PORT_FORWARDING') | default('false', true) | lower }}"
-
-# Mycelium configuration
-mycelium_enabled: true
+# AI Stack specific configuration
+ai_stack_deployment_name: "{{ deployment_name | default('tfgrid-ai-stack') }}"

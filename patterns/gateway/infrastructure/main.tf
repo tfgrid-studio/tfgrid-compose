@@ -3,16 +3,16 @@ terraform {
     grid = {
       source  = "threefoldtech/grid"
     }
+    random = {
+      source = "hashicorp/random"
+    }
   }
 }
 
-variable "network_mode" {
-  type        = string
-  default     = "wireguard-only"
-  description = "Network exposure mode: wireguard-only, mycelium-only, both"
-}
+# ==============================================================================
+# VARIABLES
+# ==============================================================================
 
-# Variables
 variable "mnemonic" {
   type        = string
   sensitive   = true
@@ -24,6 +24,58 @@ variable "SSH_KEY" {
   default     = null
   description = "SSH public key content (if null, will use ~/.ssh/id_ed25519.pub)"
 }
+
+variable "tfgrid_network" {
+  type        = string
+  default     = "main"
+  description = "ThreeFold Grid network (main, test, dev)"
+}
+
+# ------------------------------------------------------------------------------
+# Network Provisioning Variables
+# At least one must be true
+# ------------------------------------------------------------------------------
+
+variable "provision_mycelium" {
+  type        = bool
+  default     = true
+  description = "Provision Mycelium overlay network (IPv6, encrypted, recommended)"
+}
+
+variable "provision_wireguard" {
+  type        = bool
+  default     = false
+  description = "Provision WireGuard VPN access (private network, encrypted)"
+}
+
+variable "provision_ipv4" {
+  type        = bool
+  default     = false
+  description = "Provision public IPv4 address for gateway"
+}
+
+variable "provision_ipv6" {
+  type        = bool
+  default     = false
+  description = "Provision public IPv6 address"
+}
+
+# Legacy variable for backward compatibility
+variable "network_mode" {
+  type        = string
+  default     = ""
+  description = "DEPRECATED: Use provision_* variables instead. Kept for backward compatibility."
+}
+
+variable "main_network" {
+  type        = string
+  default     = ""
+  description = "DEPRECATED: Use provision_* variables instead."
+}
+
+# ------------------------------------------------------------------------------
+# Node Configuration
+# ------------------------------------------------------------------------------
 
 variable "gateway_node" { type = number }
 variable "internal_nodes" { type = list(number) }
@@ -54,21 +106,35 @@ variable "internal_disk" {
   default = 25 # 25GB storage
 }
 
-variable "tfgrid_network" {
-  type        = string
-  default     = "main"
-  description = "ThreeFold Grid network (main, test, dev)"
+# ==============================================================================
+# LOCALS
+# ==============================================================================
+
+locals {
+  all_nodes = concat([var.gateway_node], var.internal_nodes)
+
+  # Handle legacy network_mode variable for backward compatibility
+  legacy_mycelium = (
+    var.network_mode == "mycelium-only" ||
+    var.network_mode == "both"
+  )
+  legacy_wireguard = (
+    var.network_mode == "wireguard-only" ||
+    var.network_mode == "both"
+  )
+
+  # Final provisioning decisions
+  use_legacy = var.network_mode != ""
+
+  enable_mycelium  = local.use_legacy ? local.legacy_mycelium : var.provision_mycelium
+  enable_wireguard = local.use_legacy ? local.legacy_wireguard : var.provision_wireguard
+  enable_ipv4      = var.provision_ipv4
+  enable_ipv6      = var.provision_ipv6
 }
 
-variable "main_network" {
-  type        = string
-  default     = "public"
-  description = "Main network for connectivity (public, wireguard, mycelium)"
-  validation {
-    condition     = contains(["public", "wireguard", "mycelium"], var.main_network)
-    error_message = "main_network must be public, wireguard, or mycelium"
-  }
-}
+# ==============================================================================
+# PROVIDER
+# ==============================================================================
 
 provider "grid" {
   mnemonic  = var.mnemonic
@@ -76,10 +142,9 @@ provider "grid" {
   relay_url = var.tfgrid_network == "main" ? "wss://relay.grid.tf" : "wss://relay.test.grid.tf"
 }
 
-# Generate unique mycelium keys/seeds for all nodes
-locals {
-  all_nodes = concat([var.gateway_node], var.internal_nodes)
-}
+# ==============================================================================
+# RANDOM RESOURCES
+# ==============================================================================
 
 resource "random_bytes" "mycelium_key" {
   for_each = toset([for n in local.all_nodes : tostring(n)])
@@ -95,18 +160,25 @@ resource "random_bytes" "internal_ip_seed" {
   length   = 6
 }
 
-# Mycelium-enabled network
+# ==============================================================================
+# NETWORK
+# ==============================================================================
+
 resource "grid_network" "gateway_network" {
   name          = "gateway_net"
   nodes         = local.all_nodes
   ip_range      = "10.1.0.0/16"
-  add_wg_access = var.network_mode != "mycelium-only"
-  mycelium_keys = {
+  add_wg_access = local.enable_wireguard
+
+  mycelium_keys = local.enable_mycelium ? {
     for node in local.all_nodes : tostring(node) => random_bytes.mycelium_key[tostring(node)].hex
-  }
+  } : {}
 }
 
-# Gateway VM with public IPv4
+# ==============================================================================
+# GATEWAY VM - with public IP
+# ==============================================================================
+
 resource "grid_deployment" "gateway" {
   node         = var.gateway_node
   network_name = grid_network.gateway_network.name
@@ -117,8 +189,9 @@ resource "grid_deployment" "gateway" {
     cpu              = var.gateway_cpu
     memory           = var.gateway_mem
     entrypoint       = "/sbin/zinit init"
-    publicip         = true
-    mycelium_ip_seed = random_bytes.gateway_ip_seed.hex
+    publicip         = local.enable_ipv4
+    publicip6        = local.enable_ipv6
+    mycelium_ip_seed = local.enable_mycelium ? random_bytes.gateway_ip_seed.hex : ""
 
     env_vars = {
       SSH_KEY = var.SSH_KEY != null ? var.SSH_KEY : (
@@ -131,7 +204,10 @@ resource "grid_deployment" "gateway" {
   }
 }
 
-# Internal VMs without public IPv4
+# ==============================================================================
+# INTERNAL VMs - without public IP
+# ==============================================================================
+
 resource "grid_deployment" "internal_vms" {
   for_each = toset([for n in var.internal_nodes : tostring(n)])
 
@@ -145,7 +221,7 @@ resource "grid_deployment" "internal_vms" {
     memory           = var.internal_mem
     entrypoint       = "/sbin/zinit init"
     publicip         = false
-    mycelium_ip_seed = random_bytes.internal_ip_seed[each.key].hex
+    mycelium_ip_seed = local.enable_mycelium ? random_bytes.internal_ip_seed[each.key].hex : ""
 
     env_vars = {
       SSH_KEY = var.SSH_KEY != null ? var.SSH_KEY : (
@@ -158,69 +234,73 @@ resource "grid_deployment" "internal_vms" {
   }
 }
 
-# Outputs
-output "gateway_public_ip" {
-  value       = grid_deployment.gateway.vms[0].computedip
-  description = "Public IPv4 address of the gateway VM"
+# ==============================================================================
+# OUTPUTS - All Available Network Addresses (Gateway)
+# ==============================================================================
+
+output "mycelium_ip" {
+  value       = local.enable_mycelium ? try(grid_deployment.gateway.vms[0].mycelium_ip, "") : ""
+  description = "Gateway Mycelium IPv6 address (if provisioned)"
 }
 
-output "gateway_wireguard_ip" {
-  value       = grid_deployment.gateway.vms[0].ip
-  description = "WireGuard IP of the gateway VM"
+output "wireguard_ip" {
+  value       = local.enable_wireguard ? try(grid_deployment.gateway.vms[0].ip, "") : ""
+  description = "Gateway WireGuard private IP address (if provisioned)"
 }
 
-output "internal_wireguard_ips" {
-  value = {
-    for key, dep in grid_deployment.internal_vms :
-    key => dep.vms[0].ip
-  }
-  description = "WireGuard IPs of internal VMs"
+output "ipv4_address" {
+  value       = local.enable_ipv4 ? try(grid_deployment.gateway.vms[0].computedip, "") : ""
+  description = "Gateway public IPv4 address (if provisioned)"
+}
+
+output "ipv6_address" {
+  value       = local.enable_ipv6 ? try(grid_deployment.gateway.vms[0].computedip6, "") : ""
+  description = "Gateway public IPv6 address (if provisioned)"
 }
 
 output "wg_config" {
-  value = grid_network.gateway_network.access_wg_config
+  value       = local.enable_wireguard ? grid_network.gateway_network.access_wg_config : ""
+  sensitive   = true
+  description = "WireGuard configuration file content (if provisioned)"
 }
 
-output "mycelium_ips" {
-  value = {
-    gateway = grid_deployment.gateway.vms[0].mycelium_ip
-    internal = {
-      for key, dep in grid_deployment.internal_vms :
-      key => dep.vms[0].mycelium_ip
-    }
-  }
+# ==============================================================================
+# OUTPUTS - Provisioning Status
+# ==============================================================================
+
+output "provisioned_networks" {
+  value = join(",", compact([
+    local.enable_mycelium ? "mycelium" : "",
+    local.enable_wireguard ? "wireguard" : "",
+    local.enable_ipv4 ? "ipv4" : "",
+    local.enable_ipv6 ? "ipv6" : ""
+  ]))
+  description = "Comma-separated list of provisioned networks"
 }
 
-output "gateway_mycelium_ip" {
-  value       = grid_deployment.gateway.vms[0].mycelium_ip
-  description = "Mycelium IP of the gateway VM"
-}
+# ==============================================================================
+# OUTPUTS - Internal VMs
+# ==============================================================================
 
 output "internal_mycelium_ips" {
-  value = {
+  value = local.enable_mycelium ? {
     for key, dep in grid_deployment.internal_vms :
     key => dep.vms[0].mycelium_ip
-  }
+  } : {}
   description = "Mycelium IPs of internal VMs"
 }
 
-output "tfgrid_network" {
-  value       = var.tfgrid_network
-  description = "ThreeFold Grid network (main, test, dev)"
+output "internal_wireguard_ips" {
+  value = local.enable_wireguard ? {
+    for key, dep in grid_deployment.internal_vms :
+    key => dep.vms[0].ip
+  } : {}
+  description = "WireGuard IPs of internal VMs"
 }
 
-# ===== PATTERN CONTRACT REQUIRED OUTPUTS =====
-# These outputs are required by tfgrid-compose orchestrator
-
-output "primary_ip" {
-  value       = grid_deployment.gateway.vms[0].computedip
-  description = "Primary IP address for SSH connection (gateway public IP)"
-}
-
-output "primary_ip_type" {
-  value       = var.main_network
-  description = "Type of primary IP (public, wireguard, mycelium)"
-}
+# ==============================================================================
+# OUTPUTS - Deployment Metadata
+# ==============================================================================
 
 output "deployment_name" {
   value       = "gateway_deployment"
@@ -232,6 +312,56 @@ output "node_ids" {
   description = "List of all node IDs used in deployment"
 }
 
+# ==============================================================================
+# LEGACY OUTPUTS - For backward compatibility
+# ==============================================================================
+
+output "gateway_public_ip" {
+  value       = try(grid_deployment.gateway.vms[0].computedip, "")
+  description = "DEPRECATED: Use ipv4_address instead."
+}
+
+output "gateway_wireguard_ip" {
+  value       = try(grid_deployment.gateway.vms[0].ip, "")
+  description = "DEPRECATED: Use wireguard_ip instead."
+}
+
+output "gateway_mycelium_ip" {
+  value       = try(grid_deployment.gateway.vms[0].mycelium_ip, "")
+  description = "DEPRECATED: Use mycelium_ip instead."
+}
+
+output "mycelium_ips" {
+  value = {
+    gateway = try(grid_deployment.gateway.vms[0].mycelium_ip, "")
+    internal = {
+      for key, dep in grid_deployment.internal_vms :
+      key => dep.vms[0].mycelium_ip
+    }
+  }
+  description = "DEPRECATED: Use mycelium_ip and internal_mycelium_ips instead."
+}
+
+output "primary_ip" {
+  value = (
+    local.enable_ipv4 ? try(grid_deployment.gateway.vms[0].computedip, "") :
+    local.enable_mycelium ? try(grid_deployment.gateway.vms[0].mycelium_ip, "") :
+    local.enable_wireguard ? try(grid_deployment.gateway.vms[0].ip, "") :
+    ""
+  )
+  description = "DEPRECATED: Use specific IP outputs instead."
+}
+
+output "primary_ip_type" {
+  value = (
+    local.enable_ipv4 ? "ipv4" :
+    local.enable_mycelium ? "mycelium" :
+    local.enable_wireguard ? "wireguard" :
+    ""
+  )
+  description = "DEPRECATED: Use provisioned_networks instead."
+}
+
 output "secondary_ips" {
   value = [
     for key, dep in grid_deployment.internal_vms : {
@@ -241,5 +371,5 @@ output "secondary_ips" {
       role = "backend"
     }
   ]
-  description = "Additional IPs for backend VMs"
+  description = "DEPRECATED: Use internal_wireguard_ips/internal_mycelium_ips instead."
 }

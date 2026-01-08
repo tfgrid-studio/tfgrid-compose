@@ -2,8 +2,12 @@
 # Gateway configuration
 gateway_type: "{{ lookup('env', 'GATEWAY_TYPE') | default('gateway_nat', true) }}"
 
-# Network configuration
-network_mode: "both"
+# Network configuration - new provision-based system
+# These are populated from tfgrid-compose via extra vars
+provision_mycelium: "{{ provision_mycelium | default(true) }}"
+provision_wireguard: "{{ provision_wireguard | default(false) }}"
+provision_ipv4: "{{ provision_ipv4 | default(false) }}"
+provision_ipv6: "{{ provision_ipv6 | default(false) }}"
 
 # Port forwarding (for NAT gateway)
 port_forwards: []

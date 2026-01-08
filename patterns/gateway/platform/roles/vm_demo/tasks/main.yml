@@ -12,7 +12,7 @@
     state: directory
     owner: www-data
     group: www-data
-    mode: '0755'
+    mode: "0755"
   become: true
 
 - name: Generate VM-specific status page
@@ -21,7 +21,7 @@
     dest: /var/www/vm-demo/index.html
     owner: www-data
     group: www-data
-    mode: '0644'
+    mode: "0644"
   become: true
 
 - name: Configure nginx for VM demo
@@ -30,7 +30,7 @@
     dest: /etc/nginx/sites-available/vm-demo
     owner: root
     group: root
-    mode: '0644'
+    mode: "0644"
   become: true
   notify: reload nginx
 
@@ -63,21 +63,33 @@
       ==============================
 
       VM ID: {{ vm_id | default(inventory_hostname) }}
-      WireGuard IP: {{ wireguard_ip | default('N/A') }}
-      Mycelium IP: {{ mycelium_address | default('N/A') }}
-      VM Port: {{ vm_port | default('8080') }}
       Hostname: {{ ansible_hostname }}
       Gateway Type: {{ gateway_type | default('gateway_nat') }}
-      Network Mode: {{ network_mode | default('wireguard-only') }}
+      VM Port: {{ vm_port | default('8080') }}
 
-      {% if network_mode == 'wireguard-only' %}
-      VM Status Page: http://{{ wireguard_ip | default('localhost') }}:{{ vm_port | default('8080') }}
-      {% elif network_mode == 'mycelium-only' %}
-      VM Status Page: http://[{{ mycelium_address | default('localhost') }}]:{{ vm_port | default('8080') }}
-      {% else %}
-      VM Status Pages:
-        - WireGuard: http://{{ wireguard_ip | default('localhost') }}:{{ vm_port | default('8080') }}
-        - Mycelium: http://[{{ mycelium_address | default('localhost') }}]:{{ vm_port | default('8080') }}
+      Network Addresses:
+      {% if mycelium_address | default('') %}
+        - Mycelium: {{ mycelium_address }}
+      {% endif %}
+      {% if wireguard_address | default('') %}
+        - WireGuard: {{ wireguard_address }}
+      {% endif %}
+      {% if ipv4_address | default('') %}
+        - IPv4: {{ ipv4_address }}
+      {% endif %}
+      {% if ipv6_address | default('') %}
+        - IPv6: {{ ipv6_address }}
+      {% endif %}
+
+      VM Status Page URLs:
+      {% if mycelium_address | default('') %}
+        - http://[{{ mycelium_address }}]:{{ vm_port | default('8080') }}
+      {% endif %}
+      {% if wireguard_address | default('') %}
+        - http://{{ wireguard_address }}:{{ vm_port | default('8080') }}
+      {% endif %}
+      {% if ipv4_address | default('') %}
+        - http://{{ ipv4_address }}:{{ vm_port | default('8080') }}
       {% endif %}
 
       Features:

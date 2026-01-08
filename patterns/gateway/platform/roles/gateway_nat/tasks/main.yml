@@ -28,23 +28,24 @@
     - name: Add dynamic port forwarding rules
       shell: |
         {% if disable_port_forwarding != 'true' %}
-        {% if network_mode in ['wireguard-only', 'both'] %}
+        {% if provision_wireguard | default(false) | bool %}
         {% for host in groups['internal'] %}
         {% set vm_id = hostvars[host]['vm_id'] | default(host) %}
-        {% set wireguard_ip = hostvars[host]['wireguard_ip'] %}
+        {% set wireguard_ip = hostvars[host]['wireguard_ip'] | default(hostvars[host]['wireguard_address'] | default('')) %}
         {% set port = hostvars[host]['vm_port'] | default(8080 + (vm_id | int)) %}
+        {% if wireguard_ip %}
         nft add rule inet gateway_nat prerouting iifname {{ external_interface }} tcp dport {{ port }} dnat ip to {{ wireguard_ip }}:{{ port }}
+        {% endif %}
         {% endfor %}
         {% endif %}
 
-        {% if network_mode in ['mycelium-only', 'both'] %}
+        {% if provision_mycelium | default(true) | bool %}
         {% for host in groups['internal'] %}
         {% set vm_id = hostvars[host]['vm_id'] | default(host) %}
-        {% set mycelium_var = 'internal_' + vm_id + '_mycelium_address' %}
-        {% set mycelium_address = hostvars['localhost'][mycelium_var] | default('') %}
+        {% set mycelium_ip = hostvars[host]['mycelium_ip'] | default(hostvars[host]['mycelium_address'] | default('')) %}
         {% set port = hostvars[host]['vm_port'] | default(8080 + (vm_id | int)) %}
-        {% if mycelium_address %}
-        nft add rule inet gateway_nat prerouting iifname {{ external_interface }} tcp dport {{ port }} dnat ip to {{ mycelium_address }}:{{ port }}
+        {% if mycelium_ip %}
+        nft add rule inet gateway_nat prerouting iifname {{ external_interface }} tcp dport {{ port }} dnat ip6 to [{{ mycelium_ip }}]:{{ port }}
         {% endif %}
         {% endfor %}
         {% endif %}
@@ -96,6 +97,7 @@
       shell: nft add rule inet firewall input udp dport 51820 accept
       become: true
       ignore_errors: yes
+      when: provision_wireguard | default(false) | bool
 
     - name: Detect internal interface
       shell: ip route | grep "10.1.0.0/16" | awk '{print $3}'
@@ -129,10 +131,6 @@
       become: true
       ignore_errors: yes
 
-    # Note: Keeping accept policy for now to prevent SSH lockouts
-    # The explicit allow rules above provide adequate security
-    # TODO: Implement drop policy with proper testing in the future
-
   become: true
 
 - name: Make nftables rules persistent
@@ -152,7 +150,7 @@
     content: |
       :msg, contains, "Dropped" /var/log/gateway/dropped.log
       & stop
-    mode: '0644'
+    mode: "0644"
   become: true
   notify: restart rsyslog
 
@@ -169,5 +167,5 @@
           notifempty
           create 644 root root
       }
-    mode: '0644'
+    mode: "0644"
   become: true

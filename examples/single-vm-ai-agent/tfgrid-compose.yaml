@@ -11,22 +11,20 @@ patterns:
 
 # Network configuration
 network:
-  # How Ansible connects to configure VMs
-  main: wireguard  # Options: public, wireguard, mycelium
-  
-  # Single VM doesn't need inter-node communication
-  inter_node: wireguard  # N/A for single VM
-  
-  # How users access your application
-  mode: wireguard-only  # Options: wireguard-only, mycelium-only, both
+  # Which networks to provision on the VM
+  # Options: mycelium, wireguard, ipv4, ipv6 (comma-separated for multiple)
+  provision: mycelium,wireguard
+
+  # Connection preference order for SSH/Ansible (tried in order)
+  prefer: wireguard,mycelium
 
 # Node selection
 nodes:
-  vm: 8  # Replace with your node ID
+  vm: 8 # Replace with your node ID
 
 # Resource allocation
 resources:
   vm:
     cpu: 4
-    memory: 8192  # 8GB
-    disk: 100     # 100GB
+    memory: 8192 # 8GB
+    disk: 100 # 100GB

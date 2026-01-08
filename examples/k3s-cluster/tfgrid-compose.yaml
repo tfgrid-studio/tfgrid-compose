@@ -11,36 +11,37 @@ patterns:
 
 # Network configuration
 network:
-  # How Ansible connects to configure VMs
-  main: wireguard  # Options: public, wireguard, mycelium
-  
+  # Which networks to provision on the VMs
+  # Options: mycelium, wireguard, ipv4, ipv6 (comma-separated for multiple)
+  provision: mycelium,wireguard
+
+  # Connection preference order for SSH/Ansible (tried in order)
+  prefer: wireguard,mycelium
+
   # How nodes communicate (K3s cluster communication)
-  inter_node: wireguard  # Options: wireguard, mycelium
-  
-  # How users access services
-  mode: both  # Options: wireguard-only, mycelium-only, both
+  inter_node: wireguard
 
 # Node selection
 nodes:
-  master: 1           # Master node ID
-  workers: [8, 13]   # Worker node IDs
+  master: 1 # Master node ID
+  workers: [8, 13] # Worker node IDs
 
 # Resource allocation
 resources:
   master:
     cpu: 2
-    memory: 4096  # 4GB
-    disk: 50      # 50GB
+    memory: 4096 # 4GB
+    disk: 50 # 50GB
   worker:
     cpu: 2
-    memory: 4096  # 4GB per worker
-    disk: 50      # 50GB per worker
+    memory: 4096 # 4GB per worker
+    disk: 50 # 50GB per worker
 
 # K3s configuration
 k3s:
   version: "v1.28.5+k3s1"
-  token_secret: "my-cluster-secret-token"  # Change this!
+  token_secret: "my-cluster-secret-token" # Change this!
   features:
-    - traefik       # Ingress controller
-    - servicelb     # Load balancer
+    - traefik # Ingress controller
+    - servicelb # Load balancer
     - metrics-server
