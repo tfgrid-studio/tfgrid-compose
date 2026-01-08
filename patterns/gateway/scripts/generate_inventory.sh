@@ -46,11 +46,11 @@ echo -e "${YELLOW}Fetching Terraform outputs...${NC}"
 
 GATEWAY_PUBLIC_IP=$(tofu output -json gateway_public_ip 2>/dev/null | jq -r . 2>/dev/null | sed 's|/.*||' || echo "")
 GATEWAY_WIREGUARD_IP=$(tofu output -json gateway_wireguard_ip 2>/dev/null | jq -r . 2>/dev/null | sed 's|/.*||' || echo "")
-GATEWAY_MYCELIUM_IP=$(tofu output -json gateway_mycelium_ip 2>/dev/null | jq -r . 2>/dev/null || echo "")
+GATEWAY_MYCELIUM_IP=$(tofu output -json gateway_mycelium_address 2>/dev/null | jq -r . 2>/dev/null || echo "")
 TFGRID_NETWORK=$(tofu output -json tfgrid_network 2>/dev/null | jq -r . 2>/dev/null || echo "test")
 
 INTERNAL_WIREGUARD_IPS=$(tofu output -json internal_wireguard_ips 2>/dev/null || echo "{}")
-INTERNAL_MYCELIUM_IPS=$(tofu output -json internal_mycelium_ips 2>/dev/null || echo "{}")
+INTERNAL_MYCELIUM_IPS=$(tofu output -json internal_mycelium_addresss 2>/dev/null || echo "{}")
 
 # Generate inventory file
 INVENTORY_FILE="$PLATFORM_DIR/inventory.ini"
@@ -70,7 +70,7 @@ ansible_user=root
 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
 
 [gateway]
-gateway ansible_host=${GATEWAY_ANSIBLE_HOST} wireguard_ip=${GATEWAY_WIREGUARD_IP} mycelium_ip=${GATEWAY_MYCELIUM_IP} internal_ip=${GATEWAY_WIREGUARD_IP}
+gateway ansible_host=${GATEWAY_ANSIBLE_HOST} wireguard_ip=${GATEWAY_WIREGUARD_IP} mycelium_address=${GATEWAY_MYCELIUM_IP} internal_ip=${GATEWAY_WIREGUARD_IP}
 
 [internal]
 EOF
@@ -80,21 +80,21 @@ echo "$INTERNAL_WIREGUARD_IPS" | jq -r 'to_entries | sort_by(.key | tonumber) | 
 while IFS= read -r line; do
     vm_id=$(echo "$line" | awk '{print $1}')
     wireguard_ip=$(echo "$line" | awk -F'=' '{print $2}' | awk '{print $1}')
-    mycelium_ip=$(echo "$INTERNAL_MYCELIUM_IPS" | jq -r ".\"$vm_id\"")
+    mycelium_address=$(echo "$INTERNAL_MYCELIUM_IPS" | jq -r ".\"$vm_id\"")
 
     # Set internal_ip based on INTER_NODE_NETWORK
     if [[ "$INTER_NODE_NETWORK" == "wireguard" ]]; then
         internal_ip=$wireguard_ip
     else
-        internal_ip=$mycelium_ip
+        internal_ip=$mycelium_address
     fi
 
     if [[ "$MAIN_NETWORK" == "mycelium" ]]; then
         # Use mycelium IP for ansible_host
-        echo "$vm_id ansible_host=$mycelium_ip wireguard_ip=$wireguard_ip mycelium_ip=$mycelium_ip internal_ip=$internal_ip vm_port=$(echo "$line" | awk -F'vm_port=' '{print $2}' | awk '{print $1}') vm_id=$vm_id" >> "$INVENTORY_FILE"
+        echo "$vm_id ansible_host=$mycelium_address wireguard_ip=$wireguard_ip mycelium_address=$mycelium_address internal_ip=$internal_ip vm_port=$(echo "$line" | awk -F'vm_port=' '{print $2}' | awk '{print $1}') vm_id=$vm_id" >> "$INVENTORY_FILE"
     else
         # Use wireguard IP for ansible_host (default, since public not applicable for internal)
-        echo "$vm_id ansible_host=$wireguard_ip wireguard_ip=$wireguard_ip mycelium_ip=$mycelium_ip internal_ip=$internal_ip vm_port=$(echo "$line" | awk -F'vm_port=' '{print $2}' | awk '{print $1}') vm_id=$vm_id" >> "$INVENTORY_FILE"
+        echo "$vm_id ansible_host=$wireguard_ip wireguard_ip=$wireguard_ip mycelium_address=$mycelium_address internal_ip=$internal_ip vm_port=$(echo "$line" | awk -F'vm_port=' '{print $2}' | awk '{print $1}') vm_id=$vm_id" >> "$INVENTORY_FILE"
     fi
 done
 

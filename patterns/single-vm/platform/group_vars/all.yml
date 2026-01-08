@@ -12,6 +12,6 @@ ai_agent_path: /opt/ai-agent
 # TFGrid deployment information (passed to VMs)
 # Note: These variables are populated from the state file via extra vars during deployment
 tfgrid_app_name: "{{ app_name | default('unknown') }}"
-tfgrid_vm_ip: "{{ vm_ip | default(ansible_host) | default('') }}"
-tfgrid_wireguard_ip: "{{ primary_ip | default(vm_ip) | default('') }}"
-tfgrid_mycelium_ip: "{{ mycelium_ip | default('') }}"
+tfgrid_ipv4_address: "{{ ipv4_address | default(ansible_host) | default('') }}"
+tfgrid_wireguard_ip: "{{ primary_ip | default(ipv4_address) | default('') }}"
+tfgrid_mycelium_address: "{{ mycelium_address | default('') }}"

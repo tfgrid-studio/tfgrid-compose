@@ -23,7 +23,7 @@ case "${MAIN_NETWORK:-wireguard}" in
         NETWORK_TYPE="WireGuard"
         ;;
     "mycelium")
-        MANAGEMENT_IP=$(tofu -chdir="$DEPLOYMENT_DIR" output -raw management_mycelium_ip)
+        MANAGEMENT_IP=$(tofu -chdir="$DEPLOYMENT_DIR" output -raw management_mycelium_address)
         NETWORK_TYPE="Mycelium"
         ;;
     *)

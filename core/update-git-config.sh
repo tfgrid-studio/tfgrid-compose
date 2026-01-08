@@ -73,28 +73,28 @@ update_git_config() {
     fi
     
     # Get VM IP
-    local vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
+    local ipv4_address=$(grep "^ipv4_address:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
     
-    if [ -z "$vm_ip" ]; then
+    if [ -z "$ipv4_address" ]; then
         log_error "No VM IP found for $app_name"
         return 1
     fi
     
-    log_info "Connecting to VM: $vm_ip"
+    log_info "Connecting to VM: $ipv4_address"
     echo ""
     
     # Update git config on the VM
     log_info "Updating git configuration..."
     
     if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        root@$vm_ip "su - developer -c \"git config --global user.name '$TFGRID_GIT_NAME' && git config --global user.email '$TFGRID_GIT_EMAIL'\""; then
+        root@$ipv4_address "su - developer -c \"git config --global user.name '$TFGRID_GIT_NAME' && git config --global user.email '$TFGRID_GIT_EMAIL'\""; then
         
         echo ""
         log_success "✅ Git configuration updated!"
         echo ""
         echo "Verification:"
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "su - developer -c 'git config --global user.name && git config --global user.email'" 2>/dev/null | while read line; do
+            root@$ipv4_address "su - developer -c 'git config --global user.name && git config --global user.email'" 2>/dev/null | while read line; do
             echo "  $line"
         done
         echo ""

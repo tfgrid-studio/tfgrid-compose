@@ -61,7 +61,7 @@ if sudo wg show gateway >/dev/null 2>&1; then
     echo -e "${YELLOW}Testing gateway connectivity...${NC}"
 
     GATEWAY_WG_IP=$(tofu output -json gateway_wireguard_ip 2>/dev/null | jq -r . 2>/dev/null || echo "")
-    GATEWAY_MYCELIUM_IP=$(tofu output -json gateway_mycelium_ip 2>/dev/null | jq -r . 2>/dev/null || echo "")
+    GATEWAY_MYCELIUM_IP=$(tofu output -json gateway_mycelium_address 2>/dev/null | jq -r . 2>/dev/null || echo "")
 
     # Test ping connectivity
     if [[ -n "$GATEWAY_WG_IP" && "$GATEWAY_WG_IP" != "null" ]]; then

@@ -23,13 +23,13 @@ generate_k3s_inventory() {
 
     # Extract node information
     local management_wireguard_ip=$(echo "$terraform_output" | jq -r '.values.outputs.management_node_wireguard_ip.value // empty')
-    local management_mycelium_ip=$(echo "$terraform_output" | jq -r '.values.outputs.management_mycelium_ip.value // empty')
+    local management_mycelium_address=$(echo "$terraform_output" | jq -r '.values.outputs.management_mycelium_address.value // empty')
     local wireguard_ips=$(echo "$terraform_output" | jq -r '.values.outputs.wireguard_ips.value // {}')
-    local mycelium_ips=$(echo "$terraform_output" | jq -r '.values.outputs.mycelium_ips.value // {}')
+    local mycelium_addresss=$(echo "$terraform_output" | jq -r '.values.outputs.mycelium_addresss.value // {}')
 
     # Extract ingress node information
     local ingress_wireguard_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_wireguard_ips.value // {}')
-    local ingress_mycelium_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_mycelium_ips.value // {}')
+    local ingress_mycelium_addresss=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_mycelium_addresss.value // {}')
     local ingress_public_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_public_ips.value // {}')
     local has_ingress_nodes=$(echo "$terraform_output" | jq -r '.values.outputs.has_ingress_nodes.value // false')
 
@@ -39,9 +39,9 @@ generate_k3s_inventory() {
 
     case "$main_network" in
         "mycelium")
-            management_ip="$management_mycelium_ip"
-            node_ips="$mycelium_ips"
-            ingress_node_ips="$ingress_mycelium_ips"
+            management_ip="$management_mycelium_address"
+            node_ips="$mycelium_addresss"
+            ingress_node_ips="$ingress_mycelium_addresss"
             log_info "Using Mycelium IPs for K3s inventory"
             ;;
         *)
@@ -181,20 +181,20 @@ source "$SCRIPT_DIR/node-selector.sh"
 source "$SCRIPT_DIR/interactive-config.sh"
 
 # Get VM IP from deployment state
-get_vm_ip_from_state() {
+get_ipv4_address_from_state() {
     # Try to get VM IP from various state files
     if [ -f "$STATE_DIR/state.yaml" ]; then
         # Check different possible IP field names (take first match only)
-        local vm_ip=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
-        if [ -n "$vm_ip" ]; then
-            echo "$vm_ip"
+        local ipv4_address=$(grep "^ipv4_address:" "$STATE_DIR/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
+        if [ -n "$ipv4_address" ]; then
+            echo "$ipv4_address"
             return 0
         fi
 
         # Try gateway_ip as fallback
-        vm_ip=$(grep "^gateway_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
-        if [ -n "$vm_ip" ]; then
-            echo "$vm_ip"
+        ipv4_address=$(grep "^gateway_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
+        if [ -n "$ipv4_address" ]; then
+            echo "$ipv4_address"
             return 0
         fi
     fi
@@ -901,11 +901,11 @@ EOF
         fi
 
         # Capture Mycelium IPv6 for logging
-        local real_mycelium_ip=""
-        real_mycelium_ip=$(terraform output -raw mycelium_ip 2>/dev/null || echo "")
+        local real_mycelium_address=""
+        real_mycelium_address=$(terraform output -raw mycelium_address 2>/dev/null || echo "")
 
-        if [ -n "$real_mycelium_ip" ] && [ "$real_mycelium_ip" != "null" ] && [ "$real_mycelium_ip" != "<nil>" ]; then
-            log_success "Captured Mycelium IPv6: $real_mycelium_ip"
+        if [ -n "$real_mycelium_address" ] && [ "$real_mycelium_address" != "null" ] && [ "$real_mycelium_address" != "<nil>" ]; then
+            log_success "Captured Mycelium IPv6: $real_mycelium_address"
         else
             log_debug "Mycelium IP not available (normal if mycelium not enabled)"
         fi
@@ -988,7 +988,7 @@ EOF
     echo ""
 
     # Register deployment in Docker-style ID system with contract linkage
-    local vm_ip=$(get_vm_ip_from_state)
+    local ipv4_address=$(get_ipv4_address_from_state)
     local primary_ip_type=""
 
     # Read primary IP type from state (public/wireguard/mycelium)
@@ -998,7 +998,7 @@ EOF
 
     # DNS automation: create A record when DOMAIN/DNS_PROVIDER are configured
     # Only attempt DNS when we have a public IPv4 address
-    if [ -n "$vm_ip" ] && [ "$primary_ip_type" = "public" ]; then
+    if [ -n "$ipv4_address" ] && [ "$primary_ip_type" = "public" ]; then
         # Derive domain from common env vars used by apps/patterns
         local dns_domain=""
         if [ -n "${TFGRID_DOMAIN:-}" ]; then
@@ -1012,12 +1012,12 @@ EOF
         # Only attempt DNS automation for real domains (not localhost/IP) and non-manual provider
         if [ -n "$dns_domain" ] && [ -n "${DNS_PROVIDER:-}" ] && [ "${DNS_PROVIDER:-manual}" != "manual" ]; then
             if [ "$dns_domain" != "localhost" ] && ! [[ "$dns_domain" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                log_step "Setting up DNS for $dns_domain -> $vm_ip (provider: $DNS_PROVIDER)"
+                log_step "Setting up DNS for $dns_domain -> $ipv4_address (provider: $DNS_PROVIDER)"
 
-                if create_dns_record "$dns_domain" "$vm_ip"; then
+                if create_dns_record "$dns_domain" "$ipv4_address"; then
                     # DNS propagation is helpful for HTTPS challenges but should not block deployment
                     if command -v dig >/dev/null 2>&1; then
-                        if ! verify_dns_propagation "$dns_domain" "$vm_ip" 12 5; then
+                        if ! verify_dns_propagation "$dns_domain" "$ipv4_address" 12 5; then
                             log_warning "DNS propagation not yet complete for $dns_domain. Continuing deployment."
                         fi
                     else
@@ -1053,7 +1053,7 @@ EOF
 
     # Use dedicated state directory for perfect deployment isolation
     local dedicated_state_dir="$STATE_BASE_DIR/$DEPLOYMENT_ID"
-    register_deployment "$DEPLOYMENT_ID" "$APP_NAME" "$dedicated_state_dir" "$vm_ip" "$contract_id"
+    register_deployment "$DEPLOYMENT_ID" "$APP_NAME" "$dedicated_state_dir" "$ipv4_address" "$contract_id"
 
     # Mark deployment as active (tracked by deployment ID)
     mark_deployment_active "$DEPLOYMENT_ID"
@@ -1091,11 +1091,11 @@ EOF
     if [ "${TFGRID_OUTPUT_FORMAT:-}" = "json" ]; then
         # Prefer primary_ip from state.yaml, fall back to network-aware resolution
         local primary_ip=""
-        local mycelium_ip=""
+        local mycelium_address=""
 
         if [ -f "$STATE_DIR/state.yaml" ]; then
             primary_ip=$(grep "^primary_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
-            mycelium_ip=$(grep "^mycelium_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+            mycelium_address=$(grep "^mycelium_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
         fi
 
         if [ -z "$primary_ip" ]; then
@@ -1108,8 +1108,8 @@ EOF
         if [ -n "$primary_ip" ]; then
             json="$json,\"primaryIp\":\"$primary_ip\""
         fi
-        if [ -n "$mycelium_ip" ]; then
-            json="$json,\"myceliumIp\":\"$mycelium_ip\""
+        if [ -n "$mycelium_address" ]; then
+            json="$json,\"myceliumIp\":\"$mycelium_address\""
         fi
         if [ -n "$contract_id" ]; then
             json="$json,\"contractId\":\"$contract_id\""
@@ -1257,9 +1257,9 @@ deploy_app_source() {
 
     # Use network-aware IP resolution that respects global preferences
     local DEPLOYMENT_ID=$(basename "$STATE_DIR")
-    local vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
+    local ipv4_address=$(get_deployment_ip "$DEPLOYMENT_ID")
 
-    if [ -z "$vm_ip" ]; then
+    if [ -z "$ipv4_address" ]; then
         log_error "No VM IP found for preferred network"
         return 1
     fi
@@ -1267,16 +1267,16 @@ deploy_app_source() {
     log_info "Preparing VM for app deployment..."
     # Create directories on VM
     if ! ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        root@$vm_ip "mkdir -p /tmp/app-deployment /tmp/app-source" 2>/dev/null; then
+        root@$ipv4_address "mkdir -p /tmp/app-deployment /tmp/app-source" 2>/dev/null; then
         log_error "Failed to create deployment directories on VM"
         return 1
     fi
 
     # Format IP for SCP (IPv6 addresses need brackets for SCP, unlike SSH)
-    local scp_host="$vm_ip"
-    if [[ "$vm_ip" == *":"* ]]; then
+    local scp_host="$ipv4_address"
+    if [[ "$ipv4_address" == *":"* ]]; then
         # IPv6 address - add brackets for SCP
-        scp_host="[$vm_ip]"
+        scp_host="[$ipv4_address]"
     fi
 
     # Copy app deployment hooks to VM (all files, not just .sh)
@@ -1403,9 +1403,9 @@ run_app_hooks() {
 
     # Use network-aware IP resolution that respects global preferences
     local DEPLOYMENT_ID=$(basename "$STATE_DIR")
-    local vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
+    local ipv4_address=$(get_deployment_ip "$DEPLOYMENT_ID")
 
-    if [ -z "$vm_ip" ]; then
+    if [ -z "$ipv4_address" ]; then
         log_error "No VM IP found for preferred network"
         return 1
     fi
@@ -1499,7 +1499,7 @@ run_app_hooks() {
     if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
         # Verbose mode: Show ALL output in real-time with TTY for unbuffered streaming
         ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" 2>&1 | tee "$STATE_DIR/hook-setup.log"
+            root@$ipv4_address "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" 2>&1 | tee "$STATE_DIR/hook-setup.log"
         local setup_status=${PIPESTATUS[0]}
         if [ "$setup_status" -ne 0 ]; then
             log_error "Setup hook failed. Check: $STATE_DIR/hook-setup.log"
@@ -1508,7 +1508,7 @@ run_app_hooks() {
     else
         # Normal mode: Show milestone lines (emoji prefixed) while logging everything
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" 2>&1 | \
+            root@$ipv4_address "cd /tmp/app-deployment && chmod +x setup.sh && $env_vars ./setup.sh" 2>&1 | \
             tee "$STATE_DIR/hook-setup.log" | \
             grep -E '^[[:space:]]*(🚀|📦|🐳|🔧|🌐|📁|📋|🔐|✅|❌|⚠|ℹ|→|▶)' || true
         local setup_status=${PIPESTATUS[0]}
@@ -1529,7 +1529,7 @@ run_app_hooks() {
     if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
         # Verbose mode: Show ALL output in real-time with TTY for unbuffered streaming
         ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" 2>&1 | tee "$STATE_DIR/hook-configure.log"
+            root@$ipv4_address "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" 2>&1 | tee "$STATE_DIR/hook-configure.log"
         local configure_status=${PIPESTATUS[0]}
         if [ "$configure_status" -ne 0 ]; then
             if [ "$configure_optional" = "true" ]; then
@@ -1542,7 +1542,7 @@ run_app_hooks() {
     else
         # Normal mode: Show milestone lines (emoji prefixed) while logging everything
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" 2>&1 | \
+            root@$ipv4_address "cd /tmp/app-deployment && chmod +x configure.sh && $env_vars ./configure.sh" 2>&1 | \
             tee "$STATE_DIR/hook-configure.log" | \
             grep -E '^[[:space:]]*(🚀|📦|🐳|🔧|🌐|📁|📋|🔐|✅|❌|⚠|ℹ|→|▶)' || true
         local configure_status=${PIPESTATUS[0]}
@@ -1572,7 +1572,7 @@ run_app_hooks() {
     if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
         # Verbose mode: Show ALL output in real-time with TTY for unbuffered streaming
         ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "cd /tmp/app-deployment && chmod +x healthcheck.sh && ./healthcheck.sh" 2>&1 | tee "$STATE_DIR/hook-healthcheck.log"
+            root@$ipv4_address "cd /tmp/app-deployment && chmod +x healthcheck.sh && ./healthcheck.sh" 2>&1 | tee "$STATE_DIR/hook-healthcheck.log"
         local health_status=${PIPESTATUS[0]}
         if [ "$health_status" -ne 0 ]; then
             log_warning "Health check had issues. Check: $STATE_DIR/hook-healthcheck.log"
@@ -1583,7 +1583,7 @@ run_app_hooks() {
     else
         # Normal mode: Show milestone lines (emoji prefixed) while logging everything
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "cd /tmp/app-deployment && chmod +x healthcheck.sh && ./healthcheck.sh" 2>&1 | \
+            root@$ipv4_address "cd /tmp/app-deployment && chmod +x healthcheck.sh && ./healthcheck.sh" 2>&1 | \
             tee "$STATE_DIR/hook-healthcheck.log" | \
             grep -E '^[[:space:]]*(🚀|📦|🐳|🔧|🌐|📁|📋|🔐|✅|❌|⚠|ℹ|→|▶)' || true
         local health_status=${PIPESTATUS[0]}
@@ -1604,9 +1604,9 @@ verify_deployment() {
 
     # Use network-aware IP resolution that respects global preferences
     local DEPLOYMENT_ID=$(basename "$STATE_DIR")
-    local vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
+    local ipv4_address=$(get_deployment_ip "$DEPLOYMENT_ID")
 
-    if [ -z "$vm_ip" ]; then
+    if [ -z "$ipv4_address" ]; then
         log_error "No VM IP found for preferred network"
         return 1
     fi
@@ -1614,7 +1614,7 @@ verify_deployment() {
     # Check if VM is accessible
     log_info "Checking VM accessibility..."
     if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        -o ConnectTimeout=10 root@$vm_ip "echo 'VM is accessible'" > /dev/null 2>&1; then
+        -o ConnectTimeout=10 root@$ipv4_address "echo 'VM is accessible'" > /dev/null 2>&1; then
         log_success "VM is accessible via SSH"
     else
         log_warning "VM is not yet accessible via SSH"
@@ -1624,7 +1624,7 @@ verify_deployment() {
     # Check if app service exists
     log_info "Checking application service..."
     if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        root@$vm_ip "systemctl list-units --type=service | grep -q $APP_NAME" 2>/dev/null; then
+        root@$ipv4_address "systemctl list-units --type=service | grep -q $APP_NAME" 2>/dev/null; then
         log_success "Application service found"
     else
         log_warning "Application service not found"
@@ -1746,9 +1746,9 @@ destroy_deployment() {
 # Display deployment URLs after successful deployment
 display_deployment_urls() {
     # Get deployment information from state file
-    local primary_ip=$(state_get "vm_ip") # WireGuard IP stored as vm_ip
+    local primary_ip=$(state_get "ipv4_address") # WireGuard IP stored as ipv4_address
     local primary_ip_type="wireguard"    # Always WireGuard for now
-    local mycelium_ip=$(state_get "mycelium_ip")
+    local mycelium_address=$(state_get "mycelium_address")
 
     # Check if app has custom launch command
     local launch_cmd=$(yaml_get "$APP_MANIFEST" "commands.launch.script" 2>/dev/null)
@@ -1767,9 +1767,9 @@ display_deployment_urls() {
                 echo "  • Gitea (Git hosting): http://$primary_ip/git/"
                 echo "  • AI Agent API: http://$primary_ip/api/"
             fi
-            if [ -n "$mycelium_ip" ]; then
-                echo "  • Gitea (Mycelium): http://[$mycelium_ip]/git/"
-                echo "  • AI Agent API (Mycelium): http://[$mycelium_ip]/api/"
+            if [ -n "$mycelium_address" ]; then
+                echo "  • Gitea (Mycelium): http://[$mycelium_address]/git/"
+                echo "  • AI Agent API (Mycelium): http://[$mycelium_address]/api/"
             fi
             echo "  • Launch in browser: tfgrid-compose launch $APP_NAME"
             ;;
@@ -1778,8 +1778,8 @@ display_deployment_urls() {
             if [ "$primary_ip_type" = "wireguard" ] && [ -n "$primary_ip" ]; then
                 echo "  • Web interface: http://$primary_ip:3000/"
             fi
-            if [ -n "$mycelium_ip" ]; then
-                echo "  • Web interface (Mycelium): http://[$mycelium_ip]:3000/"
+            if [ -n "$mycelium_address" ]; then
+                echo "  • Web interface (Mycelium): http://[$mycelium_address]:3000/"
             fi
             echo "  • Launch in browser: tfgrid-compose launch $APP_NAME"
             ;;
@@ -1794,8 +1794,8 @@ display_deployment_urls() {
             if [ "$primary_ip_type" = "wireguard" ] && [ -n "$primary_ip" ]; then
                 log_info "🌐 Deployment accessible at: $primary_ip"
             fi
-            if [ -n "$mycelium_ip" ]; then
-                log_info "🌐 Mycelium access: [$mycelium_ip]"
+            if [ -n "$mycelium_address" ]; then
+                log_info "🌐 Mycelium access: [$mycelium_address]"
             fi
             ;;
     esac

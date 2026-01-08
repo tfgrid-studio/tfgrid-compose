@@ -281,21 +281,21 @@ validate_deployment_for_context() {
         local contract_id=$(echo "$deployment_details" | grep -E "^\s*contract_id:" | awk '{print $2}' | tr -d '"' || echo "")
         local app_name=$(echo "$deployment_details" | grep -E "^\s*app_name:" | awk '{print $2}' | tr -d '"' || echo "")
         local status=$(echo "$deployment_details" | grep -E "^\s*status:" | awk '{print $2}' | tr -d '"' || echo "active")
-        local vm_ip=$(echo "$deployment_details" | grep -E "^\s*vm_ip:" | awk '{print $2}' | tr -d '"' || echo "")
+        local ipv4_address=$(echo "$deployment_details" | grep -E "^\s*ipv4_address:" | awk '{print $2}' | tr -d '"' || echo "")
         
         log_debug "Validating Docker-style deployment '$deployment_name':"
         log_debug "  App: $app_name"
         log_debug "  Status: $status"
         log_debug "  Contract: $contract_id"
-        log_debug "  VM IP: $vm_ip"
+        log_debug "  VM IP: $ipv4_address"
         
         # If deployment has a contract ID, it's valid regardless of status
         if [ -n "$contract_id" ]; then
             log_debug "Docker-style deployment '$deployment_name' ($app_name) has contract $contract_id, including in context"
             return 0  # Include Docker-style deployments with contracts
-        elif [ -n "$vm_ip" ] && [ "$status" != "failed" ]; then
+        elif [ -n "$ipv4_address" ] && [ "$status" != "failed" ]; then
             # Include deployments with VM IP and non-failed status (legacy deployments)
-            log_debug "Including legacy deployment '$deployment_name' with VM IP: $vm_ip"
+            log_debug "Including legacy deployment '$deployment_name' with VM IP: $ipv4_address"
             return 0
         fi
     fi
@@ -500,14 +500,14 @@ health_check_ai_agent() {
         return 1
     fi
     
-    local vm_ip=$(grep "^vm_ip:" "$state_file" 2>/dev/null | awk '{print $2}' || echo "")
+    local ipv4_address=$(grep "^ipv4_address:" "$state_file" 2>/dev/null | awk '{print $2}' || echo "")
     
-    if [ -z "$vm_ip" ]; then
+    if [ -z "$ipv4_address" ]; then
         return 1
     fi
     
     # Check if AI agent service is responding
-    if curl -sf --max-time 10 "http://$vm_ip:8000/health" >/dev/null 2>&1; then
+    if curl -sf --max-time 10 "http://$ipv4_address:8000/health" >/dev/null 2>&1; then
         return 0
     else
         return 1
@@ -524,14 +524,14 @@ health_check_generic() {
         return 1
     fi
     
-    local vm_ip=$(grep "^vm_ip:" "$state_file" 2>/dev/null | awk '{print $2}' || echo "")
+    local ipv4_address=$(grep "^ipv4_address:" "$state_file" 2>/dev/null | awk '{print $2}' || echo "")
     
-    if [ -z "$vm_ip" ]; then
+    if [ -z "$ipv4_address" ]; then
         return 1
     fi
     
     # Basic connectivity check - try SSH port
-    if timeout 5 bash -c "echo >/dev/tcp/$vm_ip/22" 2>/dev/null; then
+    if timeout 5 bash -c "echo >/dev/tcp/$ipv4_address/22" 2>/dev/null; then
         return 0
     else
         return 1

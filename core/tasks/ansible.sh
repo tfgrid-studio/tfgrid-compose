@@ -41,15 +41,15 @@ ORIG_DIR="$(pwd)"
 
 # Extract variables from state file to pass to Ansible
 APP_NAME=$(grep "^app_name:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
-VM_IP=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+VM_IP=$(grep "^ipv4_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
 PRIMARY_IP=$(grep "^primary_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
-MYCELIUM_IP=$(grep "^mycelium_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+MYCELIUM_IP=$(grep "^mycelium_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
 
 # Build extra vars
 EXTRA_VARS="app_name=${APP_NAME}"
-[ -n "$VM_IP" ] && EXTRA_VARS="$EXTRA_VARS vm_ip=${VM_IP}"
+[ -n "$VM_IP" ] && EXTRA_VARS="$EXTRA_VARS ipv4_address=${VM_IP}"
 [ -n "$PRIMARY_IP" ] && EXTRA_VARS="$EXTRA_VARS primary_ip=${PRIMARY_IP}"
-[ -n "$MYCELIUM_IP" ] && EXTRA_VARS="$EXTRA_VARS mycelium_ip=${MYCELIUM_IP}"
+[ -n "$MYCELIUM_IP" ] && EXTRA_VARS="$EXTRA_VARS mycelium_address=${MYCELIUM_IP}"
 
 # Run the playbook
 cd "$STATE_DIR/ansible" || exit 1

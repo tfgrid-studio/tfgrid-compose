@@ -40,11 +40,11 @@
         {% if network_mode in ['mycelium-only', 'both'] %}
         {% for host in groups['internal'] %}
         {% set vm_id = hostvars[host]['vm_id'] | default(host) %}
-        {% set mycelium_var = 'internal_' + vm_id + '_mycelium_ip' %}
-        {% set mycelium_ip = hostvars['localhost'][mycelium_var] | default('') %}
+        {% set mycelium_var = 'internal_' + vm_id + '_mycelium_address' %}
+        {% set mycelium_address = hostvars['localhost'][mycelium_var] | default('') %}
         {% set port = hostvars[host]['vm_port'] | default(8080 + (vm_id | int)) %}
-        {% if mycelium_ip %}
-        nft add rule inet gateway_nat prerouting iifname {{ external_interface }} tcp dport {{ port }} dnat ip to {{ mycelium_ip }}:{{ port }}
+        {% if mycelium_address %}
+        nft add rule inet gateway_nat prerouting iifname {{ external_interface }} tcp dport {{ port }} dnat ip to {{ mycelium_address }}:{{ port }}
         {% endif %}
         {% endfor %}
         {% endif %}

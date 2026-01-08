@@ -32,7 +32,7 @@ fi
 # Get all IP addresses from Terraform outputs
 MANAGEMENT_WG_IP=$($TERRAFORM_CMD output -raw management_node_wireguard_ip 2>/dev/null || echo "N/A")
 WIREGUARD_IPS=$($TERRAFORM_CMD output -json wireguard_ips 2>/dev/null || echo "{}")
-MYCELIUM_IPS=$($TERRAFORM_CMD output -json mycelium_ips 2>/dev/null || echo "{}")
+MYCELIUM_IPS=$($TERRAFORM_CMD output -json mycelium_addresss 2>/dev/null || echo "{}")
 WORKER_PUBLIC_IPS=$($TERRAFORM_CMD output -json worker_public_ips 2>/dev/null || echo "{}")
 
 echo -e "${YELLOW}🔧 Management Node:${NC}"
@@ -82,7 +82,7 @@ fi
 echo ""
 echo -e "${YELLOW}🌍 Mycelium IPv6 Addresses:${NC}"
 if [ "$MYCELIUM_IPS" != "{}" ]; then
-    echo "  Management: $($TERRAFORM_CMD output -raw management_mycelium_ip 2>/dev/null || echo "N/A")"
+    echo "  Management: $($TERRAFORM_CMD output -raw management_mycelium_address 2>/dev/null || echo "N/A")"
     for key in $(echo "$MYCELIUM_IPS" | jq -r 'keys[]' 2>/dev/null | sort); do
         if [[ $key == node_* ]]; then
             ip=$(echo "$MYCELIUM_IPS" | jq -r ".$key" 2>/dev/null || echo "")

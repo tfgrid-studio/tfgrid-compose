@@ -38,7 +38,7 @@
       GATEWAY_TYPE env: {{ lookup('env', 'GATEWAY_TYPE') | default('NOT_SET') }}
       NETWORK env: {{ lookup('env', 'NETWORK') | default('NOT_SET') }}
       internal_vms: {{ internal_vms | default('NOT_SET') }}
-      mycelium_ip: {{ mycelium_ip | default('NOT_SET') }}
+      mycelium_address: {{ mycelium_address | default('NOT_SET') }}
       wireguard_ip: {{ wireguard_ip | default('NOT_SET') }}
   become: true
 
@@ -93,4 +93,4 @@
       - Firewall: Configured
       - IP Forwarding: Enabled
       - WireGuard: {{ 'Available' if wg_config is defined else 'Not configured' }}
-      - Mycelium: {{ 'Available' if mycelium_ip is defined else 'Not configured' }}
+      - Mycelium: {{ 'Available' if mycelium_address is defined else 'Not configured' }}

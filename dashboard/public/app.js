@@ -15,10 +15,10 @@ function statusBadge(status) {
   return `<span class="badge">${status || 'unknown'}</span>`;
 }
 
-function formatIPs(vm_ip, mycelium_ip) {
+function formatIPs(ipv4_address, mycelium_address) {
   const ips = [];
-  if (vm_ip) ips.push(`<span class="ip-text">${vm_ip}</span>`);
-  if (mycelium_ip) ips.push(`<span class="ip-text">${mycelium_ip}</span>`);
+  if (ipv4_address) ips.push(`<span class="ip-text">${ipv4_address}</span>`);
+  if (mycelium_address) ips.push(`<span class="ip-text">${mycelium_address}</span>`);
   return ips.join('<br/>') || '<span class="ip-text">N/A</span>';
 }
 
@@ -1776,7 +1776,7 @@ async function loadDeployments() {
           <td><span class="ip-text">${d.id}</span></td>
           <td>${d.app_name || ''}</td>
           <td>${statusBadge(d.status)}</td>
-          <td>${formatIPs(d.vm_ip, d.mycelium_ip)}</td>
+          <td>${formatIPs(d.ipv4_address, d.mycelium_address)}</td>
           <td>${d.contract_id ? `<span class="ip-text">${d.contract_id}</span>` : ''}</td>
           <td style="text-align:right">
             <div class="actions-row">
@@ -1791,7 +1791,7 @@ async function loadDeployments() {
           <td><span class="ip-text">${d.id}</span></td>
           <td>${d.app_name || ''}</td>
           <td>${d.status || ''}</td>
-          <td>${formatIPs(d.vm_ip, d.mycelium_ip)}</td>
+          <td>${formatIPs(d.ipv4_address, d.mycelium_address)}</td>
           <td>${d.contract_id ? `<span class="ip-text">${d.contract_id}</span>` : ''}</td>
           <td style="text-align:right">
             <div class="actions-row">

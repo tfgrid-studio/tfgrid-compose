@@ -79,7 +79,7 @@ echo "=================="
 
 GATEWAY_IP=$(tofu output -json gateway_public_ip | jq -r .)
 GATEWAY_WG_IP=$(tofu output -json gateway_wireguard_ip | jq -r .)
-GATEWAY_MYCELIUM_IP=$(tofu output -json gateway_mycelium_ip | jq -r .)
+GATEWAY_MYCELIUM_IP=$(tofu output -json gateway_mycelium_address | jq -r .)
 
 echo "Public IPv4: $GATEWAY_IP"
 echo "WireGuard IP: $GATEWAY_WG_IP"
@@ -91,7 +91,7 @@ echo -e "${GREEN}Internal VMs:${NC}"
 echo "============="
 
 INTERNAL_WG_IPS=$(tofu output -json internal_wireguard_ips)
-INTERNAL_MYCELIUM_IPS=$(tofu output -json internal_mycelium_ips)
+INTERNAL_MYCELIUM_IPS=$(tofu output -json internal_mycelium_addresss)
 
 echo "WireGuard IPs:"
 echo "$INTERNAL_WG_IPS" | jq -r 'to_entries[] | "  \(.key): \(.value)"'

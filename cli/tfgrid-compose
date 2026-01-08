@@ -150,10 +150,10 @@ get_deployment_context() {
                     local details=$(get_deployment_by_id "$deployment_id" 2>/dev/null)
                     if [ -n "$details" ]; then
                         local app_name=$(echo "$details" | grep "^app_name:" | awk '{print $2}' | tr -d '"')
-                        local vm_ip=$(echo "$details" | grep "^vm_ip:" | awk '{print $2}' | tr -d '"')
+                        local ipv4_address=$(echo "$details" | grep "^ipv4_address:" | awk '{print $2}' | tr -d '"')
                         local created_at=$(echo "$details" | grep "^created_at:" | awk '{print $2}' | tr -d '"')
                         local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
-                        echo "$((i+1))) $deployment_id $app_name ($vm_ip) - $age"
+                        echo "$((i+1))) $deployment_id $app_name ($ipv4_address) - $age"
                         deployment_info+=("$deployment_id")
                     fi
                 done
@@ -298,8 +298,8 @@ execute_app_command() {
     export APP_NAME
 
     # Resolve network-aware IP for this deployment
-    vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
-    if [ -z "$vm_ip" ]; then
+    ipv4_address=$(get_deployment_ip "$DEPLOYMENT_ID")
+    if [ -z "$ipv4_address" ]; then
         log_error "No IP found in state for $APP_NAME"
         return 1
     fi
@@ -315,13 +315,13 @@ execute_app_command() {
     fi
 
     # Execute command on VM
-    log_info "Executing '$command' on $APP_NAME ($vm_ip)"
+    log_info "Executing '$command' on $APP_NAME ($ipv4_address)"
     echo ""
 
     if [ -n "$SAVE_TO_CONTEXT" ]; then
         # Capture output to save to context
         OUTPUT=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "APP_NAME=$APP_NAME $SCRIPT_PATH $args" 2>/dev/null)
+            root@$ipv4_address "APP_NAME=$APP_NAME $SCRIPT_PATH $args" 2>/dev/null)
         RESULT=$?
 
         if [ $RESULT -eq 0 ] && [ -n "$OUTPUT" ]; then
@@ -346,11 +346,11 @@ execute_app_command() {
         if [ "$ALLOCATE_TTY" = "true" ]; then
             # Use -t to allocate TTY for interactive commands that need it
             ssh -t -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-                root@$vm_ip "APP_NAME=$APP_NAME $SCRIPT_PATH $args"
+                root@$ipv4_address "APP_NAME=$APP_NAME $SCRIPT_PATH $args"
         else
             # Don't allocate TTY for commands that start background services
             ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-                root@$vm_ip "APP_NAME=$APP_NAME $SCRIPT_PATH $args"
+                root@$ipv4_address "APP_NAME=$APP_NAME $SCRIPT_PATH $args"
         fi
 
         return $?
@@ -1033,11 +1033,11 @@ case "$COMMAND" in
 
                     if [ -n "$details" ]; then
                         local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
-                        local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
+                        local ipv4_address=$(echo "$details" | grep "ipv4_address:" | awk '{print $2}')
                         local created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
                         local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
 
-                        echo "$((i+1))) $deployment_id $app_name ($vm_ip) - $age"
+                        echo "$((i+1))) $deployment_id $app_name ($ipv4_address) - $age"
                         deployment_info+=("$deployment_id")
                     fi
                 done
@@ -1320,8 +1320,8 @@ case "$COMMAND" in
 
             REGISTRY_FILE="$HOME/.config/tfgrid-compose/deployments.yaml"
             if [ -f "$REGISTRY_FILE" ] && command_exists yq; then
-                VM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".vm_ip" "$REGISTRY_FILE" 2>/dev/null)
-                MYCELIUM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".mycelium_ip" "$REGISTRY_FILE" 2>/dev/null)
+                VM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".ipv4_address" "$REGISTRY_FILE" 2>/dev/null)
+                MYCELIUM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".mycelium_address" "$REGISTRY_FILE" 2>/dev/null)
                 APP_NAME=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".app_name" "$REGISTRY_FILE" 2>/dev/null)
 
                 if [ -n "$VM_IP" ] || ([ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]); then
@@ -1381,11 +1381,15 @@ case "$COMMAND" in
                     NETWORK_OVERRIDE="ipv4"
                     shift
                     ;;
-                --mycelium|--myc|-6)
+                --ipv6)
+                    NETWORK_OVERRIDE="ipv6"
+                    shift
+                    ;;
+                --mycelium|--myc|-m)
                     NETWORK_OVERRIDE="mycelium"
                     shift
                     ;;
-                --wireguard|--wg)
+                --wireguard|--wg|-w)
                     NETWORK_OVERRIDE="wireguard"
                     shift
                     ;;
@@ -1414,8 +1418,6 @@ case "$COMMAND" in
 
             # Find matching deployment (partial ID or app name)
             DEPLOYMENT_ID=""
-            VM_IP=""
-            MYCELIUM_IP=""
 
             if command_exists yq; then
                 # Try exact deployment ID match first
@@ -1432,8 +1434,6 @@ case "$COMMAND" in
                 fi
 
                 if [ -n "$DEPLOYMENT_ID" ]; then
-                    VM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".vm_ip" "$REGISTRY_FILE" 2>/dev/null)
-                    MYCELIUM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".mycelium_ip" "$REGISTRY_FILE" 2>/dev/null)
                     APP_NAME=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".app_name" "$REGISTRY_FILE" 2>/dev/null)
                 fi
             else
@@ -1447,62 +1447,20 @@ case "$COMMAND" in
                 exit 1
             fi
 
-            if [ -z "$VM_IP" ] && [ -z "$MYCELIUM_IP" ]; then
-                log_error "No IP addresses found for deployment: $DEPLOYMENT_ID"
+            # Use get_preferred_ip to get the best IP based on preference or override
+            local result=$(get_preferred_ip "$DEPLOYMENT_ID" "$NETWORK_OVERRIDE")
+
+            if [ -z "$result" ]; then
+                if [ -n "$NETWORK_OVERRIDE" ]; then
+                    log_error "No $NETWORK_OVERRIDE address available for this deployment"
+                else
+                    log_error "No IP addresses found for deployment: $DEPLOYMENT_ID"
+                fi
                 exit 1
             fi
 
-            # Determine which IP to use based on override or preference
-            CONNECT_IP=""
-            NETWORK_TYPE=""
-
-            if [ "$NETWORK_OVERRIDE" = "ipv4" ]; then
-                # User explicitly requested IPv4
-                if [ -n "$VM_IP" ] && [ "$VM_IP" != "null" ]; then
-                    CONNECT_IP="$VM_IP"
-                    NETWORK_TYPE="ipv4"
-                else
-                    log_error "No IPv4 address available for this deployment"
-                    exit 1
-                fi
-            elif [ "$NETWORK_OVERRIDE" = "mycelium" ]; then
-                # User explicitly requested mycelium
-                if [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
-                    CONNECT_IP="$MYCELIUM_IP"
-                    NETWORK_TYPE="mycelium"
-                else
-                    log_error "No mycelium address available for this deployment"
-                    exit 1
-                fi
-            elif [ "$NETWORK_OVERRIDE" = "wireguard" ]; then
-                # User explicitly requested wireguard (currently uses vm_ip)
-                if [ -n "$VM_IP" ] && [ "$VM_IP" != "null" ]; then
-                    CONNECT_IP="$VM_IP"
-                    NETWORK_TYPE="wireguard"
-                else
-                    log_error "No wireguard address available for this deployment"
-                    exit 1
-                fi
-            else
-                # Use global preference
-                PREFERRED_NETWORK=$(get_global_network_preference 2>/dev/null || echo "wireguard")
-
-                if [ "$PREFERRED_NETWORK" = "mycelium" ] && [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
-                    CONNECT_IP="$MYCELIUM_IP"
-                    NETWORK_TYPE="mycelium"
-                elif [ -n "$VM_IP" ] && [ "$VM_IP" != "null" ]; then
-                    CONNECT_IP="$VM_IP"
-                    NETWORK_TYPE="ipv4"
-                elif [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
-                    CONNECT_IP="$MYCELIUM_IP"
-                    NETWORK_TYPE="mycelium"
-                fi
-            fi
-
-            if [ -z "$CONNECT_IP" ]; then
-                log_error "No suitable IP address found for deployment: $DEPLOYMENT_ID"
-                exit 1
-            fi
+            CONNECT_IP=$(echo "$result" | cut -d'|' -f1)
+            NETWORK_TYPE=$(echo "$result" | cut -d'|' -f2)
 
             log_info "Direct SSH to $APP_NAME ($DEPLOYMENT_ID) via $NETWORK_TYPE..."
 
@@ -1524,36 +1482,25 @@ case "$COMMAND" in
             # App source not found - fall back to direct SSH using registry data
             log_debug "App source not found, falling back to direct SSH"
 
-            REGISTRY_FILE="$HOME/.config/tfgrid-compose/deployments.yaml"
-            if [ -f "$REGISTRY_FILE" ] && command_exists yq; then
-                VM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".vm_ip" "$REGISTRY_FILE" 2>/dev/null)
-                MYCELIUM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".mycelium_ip" "$REGISTRY_FILE" 2>/dev/null)
+            # Use get_preferred_ip to get the best IP based on preference or override
+            local result=$(get_preferred_ip "$DEPLOYMENT_ID" "$NETWORK_OVERRIDE")
+
+            if [ -n "$result" ]; then
+                CONNECT_IP=$(echo "$result" | cut -d'|' -f1)
+                NETWORK_TYPE=$(echo "$result" | cut -d'|' -f2)
+
+                REGISTRY_FILE="$HOME/.config/tfgrid-compose/deployments.yaml"
                 APP_NAME=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".app_name" "$REGISTRY_FILE" 2>/dev/null)
 
-                if [ -n "$VM_IP" ] || ([ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]); then
-                    # Respect global network preference
-                    PREFERRED_NETWORK=$(get_global_network_preference 2>/dev/null || echo "wireguard")
+                log_info "SSH to $APP_NAME ($DEPLOYMENT_ID) via $NETWORK_TYPE..."
 
-                    if [ "$PREFERRED_NETWORK" = "mycelium" ] && [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
-                        CONNECT_IP="$MYCELIUM_IP"
-                        log_info "SSH to $APP_NAME ($DEPLOYMENT_ID) via mycelium..."
-                    elif [ -n "$VM_IP" ] && [ "$VM_IP" != "null" ]; then
-                        CONNECT_IP="$VM_IP"
-                        log_info "SSH to $APP_NAME ($DEPLOYMENT_ID)..."
-                    elif [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
-                        # Fallback to mycelium if no wireguard IP
-                        CONNECT_IP="$MYCELIUM_IP"
-                        log_info "SSH to $APP_NAME ($DEPLOYMENT_ID) via mycelium..."
-                    fi
-
-                    echo ""
-                    ssh -o LogLevel=ERROR \
-                        -o StrictHostKeyChecking=no \
-                        -o UserKnownHostsFile=/dev/null \
-                        -o ConnectTimeout=10 \
-                        "root@$CONNECT_IP"
-                    exit $?
-                fi
+                echo ""
+                ssh -o LogLevel=ERROR \
+                    -o StrictHostKeyChecking=no \
+                    -o UserKnownHostsFile=/dev/null \
+                    -o ConnectTimeout=10 \
+                    "root@$CONNECT_IP"
+                exit $?
             fi
 
             # No fallback possible
@@ -1608,9 +1555,9 @@ address)
                     details=$(get_deployment_by_id "$deployment_id" 2>/dev/null)
                     if [ -n "$details" ]; then
                         app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}' | tr -d '"' || echo "")
-                        vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}' | tr -d '"' || echo "")
-                        mycelium_ip=$(echo "$details" | grep "mycelium_ip:" | awk '{print $2}' | tr -d '"' || echo "")
-                        echo "  $deployment_id $app_name ($vm_ip) $([ -n "$mycelium_ip" ] && echo "[mycelium: $mycelium_ip]")"
+                        ipv4_address=$(echo "$details" | grep "ipv4_address:" | awk '{print $2}' | tr -d '"' || echo "")
+                        mycelium_address=$(echo "$details" | grep "mycelium_address:" | awk '{print $2}' | tr -d '"' || echo "")
+                        echo "  $deployment_id $app_name ($ipv4_address) $([ -n "$mycelium_address" ] && echo "[mycelium: $mycelium_address]")"
                     fi
                 done
                 echo ""
@@ -1651,11 +1598,11 @@ address)
             deployment_ids=()
 
             if command_exists yq; then
-                while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+                while IFS='|' read -r deployment_id app_name ipv4_address contract_id status created_at; do
                     if [ -n "$deployment_id" ] && [ -n "$app_name" ] && [ "$status" = "active" ]; then
-                        mycelium_ip=$(yq eval ".deployments.\"$deployment_id\".mycelium_ip // \"\"" "$HOME/.config/tfgrid-compose/deployments.yaml" 2>/dev/null || echo "")
-                        display_name="$deployment_id $app_name ($vm_ip)"
-                        [ -n "$mycelium_ip" ] && display_name="$display_name [mycelium: $mycelium_ip]"
+                        mycelium_address=$(yq eval ".deployments.\"$deployment_id\".mycelium_address // \"\"" "$HOME/.config/tfgrid-compose/deployments.yaml" 2>/dev/null || echo "")
+                        display_name="$deployment_id $app_name ($ipv4_address)"
+                        [ -n "$mycelium_address" ] && display_name="$display_name [mycelium: $mycelium_address]"
                         deployment_options+=("$display_name")
                         deployment_ids+=("$deployment_id")
                     fi
@@ -1705,21 +1652,21 @@ address)
     fi
 
     app_name=$(echo "$details" | grep "^app_name:" | awk '{print $2}' | tr -d '"')
-    vm_ip=$(echo "$details" | grep "^vm_ip:" | awk '{print $2}' | tr -d '"')
-    mycelium_ip=$(echo "$details" | grep "^mycelium_ip:" | awk '{print $2}' | tr -d '"' || echo "")
+    ipv4_address=$(echo "$details" | grep "^ipv4_address:" | awk '{print $2}' | tr -d '"')
+    mycelium_address=$(echo "$details" | grep "^mycelium_address:" | awk '{print $2}' | tr -d '"' || echo "")
     contract_id=$(echo "$details" | grep "^contract_id:" | awk '{print $2}' | tr -d '"')
     created_at=$(echo "$details" | grep "^created_at:" | awk '{print $2}' | tr -d '"')
     state_dir=$(echo "$details" | grep "^state_dir:" | awk '{print $2}' | tr -d '"')
 
-    # Fallback: handle vm_ip/mycelium_ip stored as YAML block scalars (vm_ip: |-) by reading from state.yaml
-    if [ "$vm_ip" = "|-" ] || [ -z "$vm_ip" ]; then
+    # Fallback: handle ipv4_address/mycelium_address stored as YAML block scalars (ipv4_address: |-) by reading from state.yaml
+    if [ "$ipv4_address" = "|-" ] || [ -z "$ipv4_address" ]; then
         if [ -n "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
-            vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
+            ipv4_address=$(grep "^ipv4_address:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
         fi
     fi
-    if [ "$mycelium_ip" = "|-" ] || [ -z "$mycelium_ip" ]; then
+    if [ "$mycelium_address" = "|-" ] || [ -z "$mycelium_address" ]; then
         if [ -n "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
-            mycelium_ip=$(grep "^mycelium_ip:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
+            mycelium_address=$(grep "^mycelium_address:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
         fi
     fi
 
@@ -1732,9 +1679,9 @@ address)
         primary_ip_type=$(grep "^primary_ip_type:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
     fi
 
-    # Fallback: if no explicit primary_ip, use network-aware vm_ip
+    # Fallback: if no explicit primary_ip, use network-aware ipv4_address
     if [ -z "$primary_ip" ]; then
-        primary_ip="$vm_ip"
+        primary_ip="$ipv4_address"
     fi
 
     echo "📋 Deployment: $DEPLOYMENT_ID"
@@ -1753,24 +1700,24 @@ address)
         tfgrid-ai-stack)
             echo "🌐 Access URLs:"
             echo ""
-            if [ -n "$vm_ip" ]; then
+            if [ -n "$ipv4_address" ]; then
                 echo "📦 WireGuard Addresses (IPv4):"
-                echo "  • Gateway:       http://$vm_ip/"
-                echo "  • Gitea (Git):   http://$vm_ip/git/"
-                echo "  • AI Agent API:  http://$vm_ip/api/"
+                echo "  • Gateway:       http://$ipv4_address/"
+                echo "  • Gitea (Git):   http://$ipv4_address/git/"
+                echo "  • AI Agent API:  http://$ipv4_address/api/"
                 echo ""
             fi
 
-            if [ -n "$mycelium_ip" ]; then
+            if [ -n "$mycelium_address" ]; then
                 echo "🫚 Mycelium Addresses (IPv6):"
-                echo "  • Gateway:       http://[$mycelium_ip]/"
-                echo "  • Gitea (Git):   http://[$mycelium_ip]/git/"
-                echo "  • AI Agent API:  http://[$mycelium_ip]/api/"
+                echo "  • Gateway:       http://[$mycelium_address]/"
+                echo "  • Gitea (Git):   http://[$mycelium_address]/git/"
+                echo "  • AI Agent API:  http://[$mycelium_address]/api/"
                 echo ""
                 echo "💡 Pro tip: Mycelium URLs work from anywhere on the internet!"
             fi
 
-            if [ -z "$mycelium_ip" ] && [ -z "$vm_ip" ]; then
+            if [ -z "$mycelium_address" ] && [ -z "$ipv4_address" ]; then
                 echo "❌ No IP addresses found for this deployment"
             fi
 
@@ -1784,9 +1731,9 @@ address)
         tfgrid-ai-agent)
             echo "🤖 AI Agent URLs:"
             echo ""
-            if [ -n "$vm_ip" ]; then
-                echo "  • API:           http://$vm_ip:8000"
-                echo "  • Health:        http://$vm_ip:8000/health"
+            if [ -n "$ipv4_address" ]; then
+                echo "  • API:           http://$ipv4_address:8000"
+                echo "  • Health:        http://$ipv4_address:8000/health"
                 echo ""
             fi
             echo "🔧 Management:"
@@ -1797,12 +1744,12 @@ address)
         tfgrid-gitea)
             echo "📦 Gitea Git Server:"
             echo ""
-            if [ -n "$vm_ip" ]; then
-                echo "  • Web Interface: http://$vm_ip:3000"
+            if [ -n "$ipv4_address" ]; then
+                echo "  • Web Interface: http://$ipv4_address:3000"
                 echo ""
             fi
-            if [ -n "$mycelium_ip" ]; then
-                echo "  • Mycelium Web:  http://[$mycelium_ip]:3000"
+            if [ -n "$mycelium_address" ]; then
+                echo "  • Mycelium Web:  http://[$mycelium_address]:3000"
                 echo ""
             fi
             echo "🔧 Management:"
@@ -1830,13 +1777,13 @@ address)
                         ;;
                 esac
                 echo ""
-            elif [ -n "$vm_ip" ]; then
-                echo "📡 Primary IP:          $vm_ip"
+            elif [ -n "$ipv4_address" ]; then
+                echo "📡 Primary IP:          $ipv4_address"
                 echo ""
             fi
 
-            if [ -n "$mycelium_ip" ] && [ "$primary_ip_type" != "mycelium" ]; then
-                echo "🫚 Mycelium (Global):   $mycelium_ip"
+            if [ -n "$mycelium_address" ] && [ "$primary_ip_type" != "mycelium" ]; then
+                echo "🫚 Mycelium (Global):   $mycelium_address"
                 echo ""
                 echo "💡 Mycelium provides global IPv6 connectivity!"
                 echo ""
@@ -2014,8 +1961,8 @@ EOF
         fi
 
         # Resolve network-aware IP
-        vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
-        if [ -z "$vm_ip" ]; then
+        ipv4_address=$(get_deployment_ip "$DEPLOYMENT_ID")
+        if [ -z "$ipv4_address" ]; then
             log_error "No IP found in state for $APP_NAME"
             exit 1
         fi
@@ -2023,11 +1970,11 @@ EOF
         # Remaining args form the remote command
         REMOTE_CMD="$@"
 
-        log_info "Executing on $APP_NAME ($DEPLOYMENT_ID @ $vm_ip): $REMOTE_CMD"
+        log_info "Executing on $APP_NAME ($DEPLOYMENT_ID @ $ipv4_address): $REMOTE_CMD"
         echo ""
 
         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            root@$vm_ip "$REMOTE_CMD"
+            root@$ipv4_address "$REMOTE_CMD"
 
         exit $?
         ;;
@@ -2078,14 +2025,14 @@ EOF
         case "$APP_NAME" in
             tfgrid-ai-stack)
                 # Resolve IP for this deployment and export VM_IP for the helper
-                vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
-                if [ -z "$vm_ip" ]; then
+                ipv4_address=$(get_deployment_ip "$DEPLOYMENT_ID")
+                if [ -z "$ipv4_address" ]; then
                     log_error "No IP found in state for $APP_NAME"
                     exit 1
                 fi
-                log_info "Using deployment $DEPLOYMENT_ID ($APP_NAME @ $vm_ip) for login"
+                log_info "Using deployment $DEPLOYMENT_ID ($APP_NAME @ $ipv4_address) for login"
                 echo ""
-                VM_IP="$vm_ip" bash "$DEPLOYER_ROOT/scripts/qwen-login.sh"
+                VM_IP="$ipv4_address" bash "$DEPLOYER_ROOT/scripts/qwen-login.sh"
                 exit $?
                 ;;
         esac
@@ -2971,8 +2918,8 @@ EOF
         fi
 
         # Get deployment IP for health check
-        vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
-        if [ -z "$vm_ip" ]; then
+        ipv4_address=$(get_deployment_ip "$DEPLOYMENT_ID")
+        if [ -z "$ipv4_address" ]; then
             log_error "No IP found in state for $APP_NAME"
             exit 1
         fi
@@ -2980,14 +2927,14 @@ EOF
         if [ -n "$HEALTHCHECK_SCRIPT" ]; then
             log_info "Running project-specific health check..."
             ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-                root@$vm_ip "bash -s" < "$HEALTHCHECK_SCRIPT"
+                root@$ipv4_address "bash -s" < "$HEALTHCHECK_SCRIPT"
         else
             log_info "Running basic cluster validation..."
             # Basic validation - check if we can connect and run basic commands
             ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-                root@$vm_ip "kubectl get nodes --no-headers | wc -l" 2>/dev/null || echo "0"
+                root@$ipv4_address "kubectl get nodes --no-headers | wc -l" 2>/dev/null || echo "0"
             NODE_COUNT=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-                root@$vm_ip "kubectl get nodes --no-headers | wc -l" 2>/dev/null || echo "0")
+                root@$ipv4_address "kubectl get nodes --no-headers | wc -l" 2>/dev/null || echo "0")
 
             if [ "$NODE_COUNT" -gt 0 ]; then
                 log_success "Cluster validation passed: $NODE_COUNT nodes ready"
@@ -3083,7 +3030,7 @@ EOF
                        "ID" "APP NAME" "STATUS" "AGE" "CONTRACT" "SOURCE"
                 echo "────────────────────────────────────────────────────────────────────────────"
 
-                echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at origin; do
+                echo "$deployments" | while IFS='|' read -r deployment_id app_name ipv4_address contract_id status created_at origin; do
                     # Skip if missing basic fields
                     if [ -z "$deployment_id" ] || [ -z "$app_name" ]; then
                         continue

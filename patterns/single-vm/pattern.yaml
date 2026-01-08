@@ -4,9 +4,9 @@ description: Single VM deployment with Wireguard and Mycelium networking
 
 # What this pattern provides
 provides:
-  - vm_ip
+  - ipv4_address
   - wireguard_ip
-  - mycelium_ip
+  - mycelium_address
   - ssh_access
 
 # What apps must provide

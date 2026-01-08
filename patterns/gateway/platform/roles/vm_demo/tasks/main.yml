@@ -64,7 +64,7 @@
 
       VM ID: {{ vm_id | default(inventory_hostname) }}
       WireGuard IP: {{ wireguard_ip | default('N/A') }}
-      Mycelium IP: {{ mycelium_ip | default('N/A') }}
+      Mycelium IP: {{ mycelium_address | default('N/A') }}
       VM Port: {{ vm_port | default('8080') }}
       Hostname: {{ ansible_hostname }}
       Gateway Type: {{ gateway_type | default('gateway_nat') }}
@@ -73,11 +73,11 @@
       {% if network_mode == 'wireguard-only' %}
       VM Status Page: http://{{ wireguard_ip | default('localhost') }}:{{ vm_port | default('8080') }}
       {% elif network_mode == 'mycelium-only' %}
-      VM Status Page: http://[{{ mycelium_ip | default('localhost') }}]:{{ vm_port | default('8080') }}
+      VM Status Page: http://[{{ mycelium_address | default('localhost') }}]:{{ vm_port | default('8080') }}
       {% else %}
       VM Status Pages:
         - WireGuard: http://{{ wireguard_ip | default('localhost') }}:{{ vm_port | default('8080') }}
-        - Mycelium: http://[{{ mycelium_ip | default('localhost') }}]:{{ vm_port | default('8080') }}
+        - Mycelium: http://[{{ mycelium_address | default('localhost') }}]:{{ vm_port | default('8080') }}
       {% endif %}
 
       Features:

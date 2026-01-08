@@ -15,9 +15,9 @@ log_step "Generating Ansible inventory..."
 
 # Get app name and IPs from state file (source of truth)
 APP_NAME=$(grep "^app_name:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
-vm_ip=$(grep "^vm_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+ipv4_address=$(grep "^ipv4_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
 
-if [ -z "$vm_ip" ]; then
+if [ -z "$ipv4_address" ]; then
     log_error "No VM IP found in state"
     exit 1
 fi

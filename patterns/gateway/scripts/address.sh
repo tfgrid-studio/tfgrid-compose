@@ -20,9 +20,9 @@ cd "$INFRASTRUCTURE_DIR"
 # Get all IP addresses from Terraform outputs
 GATEWAY_PUBLIC_IP=$(tofu output -json gateway_public_ip 2>/dev/null | jq -r . 2>/dev/null | sed 's|/.*||' || echo "N/A")
 GATEWAY_WG_IP=$(tofu output -json gateway_wireguard_ip 2>/dev/null | jq -r . 2>/dev/null | sed 's|/.*||' || echo "N/A")
-GATEWAY_MYCELIUM_IP=$(tofu output -json gateway_mycelium_ip 2>/dev/null | jq -r . 2>/dev/null || echo "N/A")
+GATEWAY_MYCELIUM_IP=$(tofu output -json gateway_mycelium_address 2>/dev/null | jq -r . 2>/dev/null || echo "N/A")
 INTERNAL_WG_IPS=$(tofu output -json internal_wireguard_ips 2>/dev/null || echo "{}")
-INTERNAL_MYCELIUM_IPS=$(tofu output -json internal_mycelium_ips 2>/dev/null || echo "{}")
+INTERNAL_MYCELIUM_IPS=$(tofu output -json internal_mycelium_addresss 2>/dev/null || echo "{}")
 
 echo -e "${YELLOW}🌐 Public Access:${NC}"
 echo "  Gateway: http://$GATEWAY_PUBLIC_IP"

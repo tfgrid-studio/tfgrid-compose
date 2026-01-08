@@ -75,13 +75,13 @@ terraform_output=$(tofu -chdir="$DEPLOYMENT_DIR" show -json)
 
 # Extract node information
 management_wireguard_ip=$(echo "$terraform_output" | jq -r '.values.outputs.management_node_wireguard_ip.value // empty')
-management_mycelium_ip=$(echo "$terraform_output" | jq -r '.values.outputs.management_mycelium_ip.value // empty')
+management_mycelium_address=$(echo "$terraform_output" | jq -r '.values.outputs.management_mycelium_address.value // empty')
 wireguard_ips=$(echo "$terraform_output" | jq -r '.values.outputs.wireguard_ips.value // {}')
-mycelium_ips=$(echo "$terraform_output" | jq -r '.values.outputs.mycelium_ips.value // {}')
+mycelium_addresss=$(echo "$terraform_output" | jq -r '.values.outputs.mycelium_addresss.value // {}')
 
 # Extract ingress node information (optional)
 ingress_wireguard_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_wireguard_ips.value // {}')
-ingress_mycelium_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_mycelium_ips.value // {}')
+ingress_mycelium_addresss=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_mycelium_addresss.value // {}')
 ingress_public_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_public_ips.value // {}')
 has_ingress_nodes=$(echo "$terraform_output" | jq -r '.values.outputs.has_ingress_nodes.value // false')
 
@@ -93,8 +93,8 @@ case "${MAIN_NETWORK:-wireguard}" in
         log_info "Using WireGuard IPs for Ansible connectivity"
         ;;
     "mycelium")
-        management_ip="$management_mycelium_ip"
-        node_ips="$mycelium_ips"
+        management_ip="$management_mycelium_address"
+        node_ips="$mycelium_addresss"
         log_info "Using Mycelium IPs for Ansible connectivity"
         ;;
     *)
@@ -213,7 +213,7 @@ EOF
             ingress_node_ips="$ingress_wireguard_ips"
             ;;
         "mycelium")
-            ingress_node_ips="$ingress_mycelium_ips"
+            ingress_node_ips="$ingress_mycelium_addresss"
             ;;
     esac
 

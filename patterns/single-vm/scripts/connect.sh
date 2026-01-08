@@ -23,8 +23,8 @@ source "$SCRIPT_DIR/core/common.sh"
 source "$SCRIPT_DIR/core/network.sh"
 
 # Get VM IPs from state
-VM_IP=$(grep "vm_ip:" "$STATE_DIR/state.yaml" | awk '{print $2}')
-MYCELIUM_IP=$(grep "mycelium_ip:" "$STATE_DIR/state.yaml" | awk '{print $2}')
+VM_IP=$(grep "ipv4_address:" "$STATE_DIR/state.yaml" | awk '{print $2}')
+MYCELIUM_IP=$(grep "mycelium_address:" "$STATE_DIR/state.yaml" | awk '{print $2}')
 PRIMARY_IP_TYPE=$(grep "primary_ip_type:" "$STATE_DIR/state.yaml" | awk '{print $2}')
 
 if [ -z "$VM_IP" ]; then

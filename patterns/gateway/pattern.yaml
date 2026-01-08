@@ -11,10 +11,10 @@ description: Gateway VM with public IPv4 + backend VMs with private networking
 provides:
   gateway_ip: Gateway public IPv4 address
   gateway_wireguard_ip: Gateway Wireguard IP
-  gateway_mycelium_ip: Gateway Mycelium IP
+  gateway_mycelium_address: Gateway Mycelium IP
   backend_ips: Backend VM IP addresses
   backend_wireguard_ips: Backend Wireguard IPs
-  backend_mycelium_ips: Backend Mycelium IPs
+  backend_mycelium_addresss: Backend Mycelium IPs
 
 # Requires from app
 requires:

@@ -51,7 +51,7 @@ setup_test_data() {
     # Create test state files
     cat > "$TEST_APP_WG_DIR/state.yaml" << 'EOF'
 preferred_network: wireguard
-vm_ip: 192.168.1.100
+ipv4_address: 192.168.1.100
 wormhole_ip: 192.168.1.101
 network_config:
   wireguard_public_key: test-key-123
@@ -61,8 +61,8 @@ EOF
 
     cat > "$TEST_APP_MY_DIR/state.yaml" << 'EOF'
 preferred_network: mycelium
-vm_ip: 192.168.2.100
-mycelium_ip: 200::1
+ipv4_address: 192.168.2.100
+mycelium_address: 200::1
 wormhole_ip: 192.168.2.101
 network_config:
   mycelium_public_key: mycelium-test-key

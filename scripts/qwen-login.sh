@@ -4,7 +4,7 @@ set -e
 
 # Get VM IP from environment or state
 if [ -z "$VM_IP" ]; then
-    VM_IP=$(cat .tfgrid-compose/state.yaml 2>/dev/null | grep '^vm_ip:' | awk '{print $2}')
+    VM_IP=$(cat .tfgrid-compose/state.yaml 2>/dev/null | grep '^ipv4_address:' | awk '{print $2}')
 fi
 
 if [ -z "$VM_IP" ]; then

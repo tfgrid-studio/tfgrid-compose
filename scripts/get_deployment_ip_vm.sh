@@ -17,9 +17,9 @@ get_field() {
 }
 
 PREF="${DEPLOYMENT_NETWORK_PREFERENCE:-}"
-VM_IP=$(get_field "vm_ip")
+VM_IP=$(get_field "ipv4_address")
 PRIMARY_IP=$(get_field "primary_ip")
-MYCELIUM_IP=$(get_field "mycelium_ip")
+MYCELIUM_IP=$(get_field "mycelium_address")
 
 # Default preference if not provided
 if [ -z "$PREF" ]; then
@@ -40,12 +40,12 @@ case "$PREF" in
     fi
     ;;
   wireguard|*)
-    # For now both wireguard and default use primary_ip/vm_ip
+    # For now both wireguard and default use primary_ip/ipv4_address
     :
     ;;
 esac
 
-# Fallback order: primary_ip, then vm_ip
+# Fallback order: primary_ip, then ipv4_address
 if [ -n "$PRIMARY_IP" ]; then
   echo "$PRIMARY_IP"
   exit 0

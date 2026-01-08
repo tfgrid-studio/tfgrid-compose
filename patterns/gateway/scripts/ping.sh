@@ -30,9 +30,9 @@ echo ""
 cd "$INFRASTRUCTURE_DIR"
 
 GATEWAY_WG_IP=$(tofu output -json gateway_wireguard_ip 2>/dev/null | jq -r . 2>/dev/null || echo "")
-GATEWAY_MYCELIUM_IP=$(tofu output -json gateway_mycelium_ip 2>/dev/null | jq -r . 2>/dev/null || echo "")
+GATEWAY_MYCELIUM_IP=$(tofu output -json gateway_mycelium_address 2>/dev/null | jq -r . 2>/dev/null || echo "")
 INTERNAL_WG_IPS=$(tofu output -json internal_wireguard_ips 2>/dev/null || echo "{}")
-INTERNAL_MYCELIUM_IPS=$(tofu output -json internal_mycelium_ips 2>/dev/null || echo "{}")
+INTERNAL_MYCELIUM_IPS=$(tofu output -json internal_mycelium_addresss 2>/dev/null || echo "{}")
 
 if [[ -z "$GATEWAY_WG_IP" || "$GATEWAY_WG_IP" == "null" ]]; then
     echo -e "${RED}ERROR: Could not get gateway IP from Terraform outputs${NC}"
@@ -67,7 +67,7 @@ echo ""
 echo -e "${YELLOW}Testing Mycelium IPv6 connectivity...${NC}"
 
 # Get Mycelium IPs
-INTERNAL_MYCELIUM_IPS=$(tofu output -json internal_mycelium_ips 2>/dev/null || echo "{}")
+INTERNAL_MYCELIUM_IPS=$(tofu output -json internal_mycelium_addresss 2>/dev/null || echo "{}")
 
 echo "$INTERNAL_MYCELIUM_IPS" | jq -r 'to_entries[] | "\(.key) \(.value)"' 2>/dev/null | while read -r name ip; do
     if [[ -n "$ip" && "$ip" != "null" ]]; then

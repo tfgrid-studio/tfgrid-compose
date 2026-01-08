@@ -37,8 +37,8 @@ is_app_deployed() {
         return 0
     fi
     
-    # Fallback: check for old vm_ip file format (backward compatibility)
-    if [ -f "$state_dir/vm_ip" ]; then
+    # Fallback: check for old ipv4_address file format (backward compatibility)
+    if [ -f "$state_dir/ipv4_address" ]; then
         return 0
     fi
     
@@ -134,7 +134,7 @@ list_deployed_apps() {
     
     # Parse deployments from registry
     if command_exists yq; then
-        while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+        while IFS='|' read -r deployment_id app_name ipv4_address contract_id status created_at; do
             if [ -n "$deployment_id" ] && [ -n "$app_name" ]; then
                 local has_valid_contract=true
                 
@@ -167,15 +167,15 @@ list_deployed_apps() {
                     
                     if [ "$deployment_id" = "$current_app" ]; then
                         if [ "$has_valid_contract" = false ]; then
-                            echo "  * $deployment_id $display_name (no contracts) - ${vm_ip:-N/A}"
+                            echo "  * $deployment_id $display_name (no contracts) - ${ipv4_address:-N/A}"
                         else
-                            echo "  * $deployment_id $display_name - ${vm_ip:-N/A}"
+                            echo "  * $deployment_id $display_name - ${ipv4_address:-N/A}"
                         fi
                     else
                         if [ "$has_valid_contract" = false ]; then
-                            echo "    $deployment_id $display_name (no contracts) - ${vm_ip:-N/A}"
+                            echo "    $deployment_id $display_name (no contracts) - ${ipv4_address:-N/A}"
                         else
-                            echo "    $deployment_id $display_name - ${vm_ip:-N/A}"
+                            echo "    $deployment_id $display_name - ${ipv4_address:-N/A}"
                         fi
                     fi
                 else
@@ -214,19 +214,19 @@ list_deployed_apps() {
                     found_any=1
                     
                     # Get VM IP for display
-                    local vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
+                    local ipv4_address=$(grep "^ipv4_address:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
                     
                     if [ "$app_name" = "$current_app" ]; then
                         if [ "$has_valid_contract" = false ]; then
-                            echo "  * $app_name (active, no contracts) - $vm_ip"
+                            echo "  * $app_name (active, no contracts) - $ipv4_address"
                         else
-                            echo "  * $app_name (active) - $vm_ip"
+                            echo "  * $app_name (active) - $ipv4_address"
                         fi
                     else
                         if [ "$has_valid_contract" = false ]; then
-                            echo "    $app_name (no contracts) - $vm_ip"
+                            echo "    $app_name (no contracts) - $ipv4_address"
                         else
-                            echo "    $app_name - $vm_ip"
+                            echo "    $app_name - $ipv4_address"
                         fi
                     fi
                 else
@@ -420,8 +420,8 @@ is_deployment_healthy() {
     fi
     
     # Check if VM IP is accessible (basic health check)
-    local vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
-    if [ -z "$vm_ip" ]; then
+    local ipv4_address=$(grep "^ipv4_address:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
+    if [ -z "$ipv4_address" ]; then
         return 1
     fi
     

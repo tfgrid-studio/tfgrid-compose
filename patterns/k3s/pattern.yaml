@@ -11,10 +11,10 @@ description: Kubernetes cluster (K3s) with master and worker nodes
 provides:
   master_ip: Master node public IPv4
   master_wireguard_ip: Master Wireguard IP
-  master_mycelium_ip: Master Mycelium IP
+  master_mycelium_address: Master Mycelium IP
   worker_ips: Worker node IP addresses
   worker_wireguard_ips: Worker Wireguard IPs
-  worker_mycelium_ips: Worker Mycelium IPs
+  worker_mycelium_addresss: Worker Mycelium IPs
   kubeconfig: Kubernetes configuration file
   cluster_endpoint: Kubernetes API endpoint
 

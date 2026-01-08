@@ -17,10 +17,10 @@ echo ""
 
 # Read and display all IPs from state
 if [ -f "$STATE_DIR/state.yaml" ]; then
-    VM_IP=$(grep "vm_ip:" "$STATE_DIR/state.yaml" | awk '{print $2}')
+    VM_IP=$(grep "ipv4_address:" "$STATE_DIR/state.yaml" | awk '{print $2}')
     PRIMARY_IP=$(grep "primary_ip:" "$STATE_DIR/state.yaml" | awk '{print $2}' 2>/dev/null)
     PRIMARY_IP_TYPE=$(grep "primary_ip_type:" "$STATE_DIR/state.yaml" | awk '{print $2}' 2>/dev/null)
-    MYCELIUM_IP=$(grep "mycelium_ip:" "$STATE_DIR/state.yaml" | awk '{print $2}' 2>/dev/null || echo "N/A")
+    MYCELIUM_IP=$(grep "mycelium_address:" "$STATE_DIR/state.yaml" | awk '{print $2}' 2>/dev/null || echo "N/A")
     
     echo "VM IP:        $VM_IP"
     

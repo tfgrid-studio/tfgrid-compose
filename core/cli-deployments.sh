@@ -149,12 +149,12 @@ cmd_select() {
     log_success "Selected $DEPLOYMENT_ID ($RESOLVED_APP_NAME) [forced]"
 
     # Show additional info from registry
-    local vm_ip=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".vm_ip" "$REGISTRY_FILE" 2>/dev/null)
-    local mycelium_ip=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".mycelium_ip" "$REGISTRY_FILE" 2>/dev/null)
+    local ipv4_address=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".ipv4_address" "$REGISTRY_FILE" 2>/dev/null)
+    local mycelium_address=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".mycelium_address" "$REGISTRY_FILE" 2>/dev/null)
     local status=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".status" "$REGISTRY_FILE" 2>/dev/null)
 
-    [ -n "$vm_ip" ] && [ "$vm_ip" != "null" ] && log_info "VM IP: $vm_ip"
-    [ -n "$mycelium_ip" ] && [ "$mycelium_ip" != "null" ] && log_info "Mycelium: $mycelium_ip"
+    [ -n "$ipv4_address" ] && [ "$ipv4_address" != "null" ] && log_info "VM IP: $ipv4_address"
+    [ -n "$mycelium_address" ] && [ "$mycelium_address" != "null" ] && log_info "Mycelium: $mycelium_address"
     [ -n "$status" ] && [ "$status" != "null" ] && log_info "Status: $status"
     echo ""
     return 0
@@ -198,7 +198,7 @@ cmd_select() {
 
     if [ -n "$all_deployments" ] && command_exists yq; then
       # Use enhanced deployment listing with timestamps (include contract_id)
-      while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+      while IFS='|' read -r deployment_id app_name ipv4_address contract_id status created_at; do
         # Skip if deployment details not available
         if [ -z "$deployment_id" ] || [ -z "$app_name" ]; then
           continue
@@ -229,7 +229,7 @@ cmd_select() {
             age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
 
             # Format deployment option
-            option="$i) $deployment_id $app_name ($vm_ip) - $age"
+            option="$i) $deployment_id $app_name ($ipv4_address) - $age"
             DEPLOYMENT_OPTIONS+=("$option")
 
             # Mark if currently selected
@@ -255,12 +255,12 @@ cmd_select() {
             DEPLOYMENTS+=("$app")
 
             # Get VM IP if available
-            vm_ip=$(grep "^vm_ip:" "$app_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+            ipv4_address=$(grep "^ipv4_address:" "$app_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
 
             # Get deployment status for display
             status=$(check_deployment_status "$app")
 
-            option="$i) $app ($vm_ip) [$status]"
+            option="$i) $app ($ipv4_address) [$status]"
             DEPLOYMENT_OPTIONS+=("$option")
 
             # Check if currently selected
@@ -295,7 +295,7 @@ cmd_select() {
         # Show deployments from registry that have active contracts but failed other validation
         # Reuse the batch-fetched active_contract_ids from earlier
         if command_exists yq; then
-          while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+          while IFS='|' read -r deployment_id app_name ipv4_address contract_id status created_at; do
             # Only show deployments with ACTIVE contracts on the grid
             if [ -n "$deployment_id" ] && [ -n "$contract_id" ] && [ "$contract_id" != "null" ] && [ "$contract_id" != "" ]; then
               # Check if contract is in active list (local string match - fast)
@@ -307,7 +307,7 @@ cmd_select() {
                   "failed") status_emoji="❌" ;;
                   "deploying") status_emoji="⏳" ;;
                 esac
-                echo "$status_emoji $deployment_id $app_name ($vm_ip) - $age"
+                echo "$status_emoji $deployment_id $app_name ($ipv4_address) - $age"
               fi
             fi
           done <<< "$any_deployments"
@@ -377,11 +377,11 @@ cmd_select() {
 
           if [ -n "$details" ]; then
             app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
-            vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
+            ipv4_address=$(echo "$details" | grep "ipv4_address:" | awk '{print $2}')
             created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
             age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
 
-            echo "$((i+1))) $deployment_id $app_name ($vm_ip) - $age"
+            echo "$((i+1))) $deployment_id $app_name ($ipv4_address) - $age"
             deployment_info+=("$deployment_id")
           fi
         done
@@ -422,12 +422,12 @@ cmd_select() {
     details=$(get_deployment_by_id "$APP_NAME" 2>/dev/null)
     if [ -n "$details" ]; then
       app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
-      vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
+      ipv4_address=$(echo "$details" | grep "ipv4_address:" | awk '{print $2}')
       created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
       age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
 
       log_success "Selected $APP_NAME $app_name"
-      log_info "VM: $vm_ip | Age: $age"
+      log_info "VM: $ipv4_address | Age: $age"
     else
       log_success "Selected $APP_NAME"
     fi

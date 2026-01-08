@@ -112,8 +112,8 @@ async function getDeployments() {
     return {
       id,
       app_name: d.app_name || null,
-      vm_ip: d.vm_ip || null,
-      mycelium_ip: d.mycelium_ip || null,
+      ipv4_address: d.ipv4_address || null,
+      mycelium_address: d.mycelium_address || null,
       contract_id: d.contract_id || null,
       status: d.status || null,
       created_at: d.created_at || null,

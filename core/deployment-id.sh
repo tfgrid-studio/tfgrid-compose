@@ -36,19 +36,19 @@ register_deployment() {
     local deployment_id="$1"
     local app_name="$2"
     local state_dir="$3"
-    local vm_ip="$4"
+    local ipv4_address="$4"
     local contract_id="${5:-}"  # Optional contract ID from grid
 
-    # Validate inputs (vm_ip can be empty for early registration)
+    # Validate inputs (ipv4_address can be empty for early registration)
     if [ -z "$deployment_id" ] || [ -z "$app_name" ]; then
         log_error "register_deployment: missing required parameters (deployment_id, app_name)"
         return 1
     fi
 
-    # Best-effort lookup of mycelium_ip from state.yaml (for registry convenience)
-    local mycelium_ip=""
+    # Best-effort lookup of mycelium_address from state.yaml (for registry convenience)
+    local mycelium_address=""
     if [ -n "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
-        mycelium_ip=$(grep "^mycelium_ip:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}' || echo "")
+        mycelium_address=$(grep "^mycelium_address:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}' || echo "")
     fi
 
     local origin="${APP_ORIGIN:-}"
@@ -84,16 +84,16 @@ register_deployment() {
 
     local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-    # Set status based on whether vm_ip is available (deploying vs active)
+    # Set status based on whether ipv4_address is available (deploying vs active)
     local status="active"
-    if [ -z "$vm_ip" ]; then
+    if [ -z "$ipv4_address" ]; then
         status="deploying"
     fi
 
     # Use yq if available, otherwise use simple sed/awk
     if command_exists yq; then
-        # Construct the JSON object safely (include mycelium_ip when available)
-        local json_obj="{\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"vm_ip\": \"$vm_ip\", \"mycelium_ip\": \"$mycelium_ip\", \"created_at\": \"$timestamp\", \"status\": \"$status\"}"
+        # Construct the JSON object safely (include mycelium_address when available)
+        local json_obj="{\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"ipv4_address\": \"$ipv4_address\", \"mycelium_address\": \"$mycelium_address\", \"created_at\": \"$timestamp\", \"status\": \"$status\"}"
 
         if [ -n "$origin" ]; then
             json_obj=$(echo "$json_obj" | sed 's/}$/, "origin": "'$origin'"}/')
@@ -117,9 +117,9 @@ register_deployment() {
         log_warning "yq not available, using basic text registry"
         local line=""
         if [ -n "$contract_id" ]; then
-            line="$deployment_id|$app_name|$state_dir|$vm_ip|$contract_id|$timestamp|active"
+            line="$deployment_id|$app_name|$state_dir|$ipv4_address|$contract_id|$timestamp|active"
         else
-            line="$deployment_id|$app_name|$state_dir|$vm_ip||$timestamp|active"
+            line="$deployment_id|$app_name|$state_dir|$ipv4_address||$timestamp|active"
         fi
         echo "$line" >> "$DEPLOYMENT_REGISTRY"
     fi
@@ -159,7 +159,7 @@ get_deployment_by_id() {
         # Fallback: search in text registry
         local line=$(grep "^$deployment_id|" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
         if [ -n "$line" ]; then
-            echo "$line" | awk -F'|' '{print "id:" $1 "\napp_name:" $2 "\nstate_dir:" $3 "\nvm_ip:" $4 "\ncreated_at:" $5 "\nstatus:" $6}'
+            echo "$line" | awk -F'|' '{print "id:" $1 "\napp_name:" $2 "\nstate_dir:" $3 "\nipv4_address:" $4 "\ncreated_at:" $5 "\nstatus:" $6}'
         fi
     fi
 }
@@ -198,44 +198,44 @@ get_all_deployments() {
 		return 0
 	fi
 
-	# Minimal YAML parser for deployments: { id: {app_name, vm_ip, contract_id, status, created_at, origin} }
-	local id="" app_name="" vm_ip="" contract_id="" status="" created_at="" origin="" in_vm_ip_block=false
+	# Minimal YAML parser for deployments: { id: {app_name, ipv4_address, contract_id, status, created_at, origin} }
+	local id="" app_name="" ipv4_address="" contract_id="" status="" created_at="" origin="" in_ipv4_address_block=false
 
 	while IFS= read -r line; do
 		# Detect new deployment block: two-space indented 16-hex key ending with ':'
 		if [[ "$line" =~ ^[[:space:]]{2}([a-f0-9]{16}):[[:space:]]*$ ]]; then
 			# Flush previous record if any
 			if [ -n "$id" ]; then
-				echo "$id|$app_name|$vm_ip|$contract_id|$status|$created_at|$origin"
+				echo "$id|$app_name|$ipv4_address|$contract_id|$status|$created_at|$origin"
 			fi
 
 			id="${BASH_REMATCH[1]}"
-			app_name="" vm_ip="" contract_id="" status="" created_at="" origin=""
-			in_vm_ip_block=false
+			app_name="" ipv4_address="" contract_id="" status="" created_at="" origin=""
+			in_ipv4_address_block=false
 			continue
 		fi
 
 		# Inside a deployment block, parse simple key: value pairs
 		if [ -n "$id" ]; then
-			# vm_ip scalar or block start
-			if [[ "$line" =~ ^[[:space:]]{4}vm_ip:[[:space:]]*(.*)$ ]]; then
+			# ipv4_address scalar or block start
+			if [[ "$line" =~ ^[[:space:]]{4}ipv4_address:[[:space:]]*(.*)$ ]]; then
 				local rhs="${BASH_REMATCH[1]}"
-				in_vm_ip_block=false
+				in_ipv4_address_block=false
 				# Handle simple scalar on same line
 				if [ -n "$rhs" ] && [ "$rhs" != "|-" ]; then
-					vm_ip="${rhs//\"/}"
+					ipv4_address="${rhs//\"/}"
 				elif [ "$rhs" = "|-" ]; then
 					# Start of multiline block, capture next non-empty scalar line
-					in_vm_ip_block=true
+					in_ipv4_address_block=true
 				fi
 				continue
 			fi
 
-			# Capture first non-empty line of vm_ip block
-			if [ "$in_vm_ip_block" = true ]; then
+			# Capture first non-empty line of ipv4_address block
+			if [ "$in_ipv4_address_block" = true ]; then
 				if [[ "$line" =~ ^[[:space:]]{6}([0-9.]+).* ]]; then
-					vm_ip="${BASH_REMATCH[1]}"
-					in_vm_ip_block=false
+					ipv4_address="${BASH_REMATCH[1]}"
+					in_ipv4_address_block=false
 				fi
 				continue
 			fi
@@ -266,7 +266,7 @@ get_all_deployments() {
 
 	# Flush last record
 	if [ -n "$id" ]; then
-		echo "$id|$app_name|$vm_ip|$contract_id|$status|$created_at|$origin"
+		echo "$id|$app_name|$ipv4_address|$contract_id|$status|$created_at|$origin"
 	fi
 }
 
@@ -357,7 +357,7 @@ resolve_partial_deployment_id() {
         done <<< "$all_deployments"
     else
         # Fallback: search in text registry
-        while IFS='|' read -r deployment_id app_name state_dir vm_ip timestamp status; do
+        while IFS='|' read -r deployment_id app_name state_dir ipv4_address timestamp status; do
             if [[ "$deployment_id" == "$partial_id"* ]]; then
                 matches+=("$deployment_id")
             fi
@@ -451,7 +451,7 @@ list_deployments_docker_style() {
     echo "────────────────────────────────────────────────────────────────────────────────────────"
 
     # Display all deployments
-    echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at origin; do
+    echo "$deployments" | while IFS='|' read -r deployment_id app_name ipv4_address contract_id status created_at origin; do
         local age=$(calculate_deployment_age "$created_at")
         local display_contract="$contract_id"
         if [ -z "$display_contract" ] || [ "$display_contract" = "unknown" ]; then
@@ -460,16 +460,16 @@ list_deployments_docker_style() {
             display_contract="${display_contract:0:9}..."
         fi
 
-        # Best-effort: override vm_ip with full value from registry when yq is available
+        # Best-effort: override ipv4_address with full value from registry when yq is available
         if command_exists yq; then
-            local full_vm_ip
-            full_vm_ip=$(yq eval ".deployments.\"$deployment_id\".vm_ip // \"\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
-            if [ -n "$full_vm_ip" ]; then
+            local full_ipv4_address
+            full_ipv4_address=$(yq eval ".deployments.\"$deployment_id\".ipv4_address // \"\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
+            if [ -n "$full_ipv4_address" ]; then
                 # If multiline, take the first non-empty line
-                if [[ "$full_vm_ip" == *$'\n'* ]]; then
-                    full_vm_ip=$(printf '%s\n' "$full_vm_ip" | sed -n '1{/^[[:space:]]*$/d;p}')
+                if [[ "$full_ipv4_address" == *$'\n'* ]]; then
+                    full_ipv4_address=$(printf '%s\n' "$full_ipv4_address" | sed -n '1{/^[[:space:]]*$/d;p}')
                 fi
-                vm_ip="$full_vm_ip"
+                ipv4_address="$full_ipv4_address"
             fi
         fi
 
@@ -497,7 +497,7 @@ list_deployments_docker_style() {
                "$deployment_id" \
                "${app_name:0:19}" \
                "${status:0:9}" \
-               "$vm_ip" \
+               "$ipv4_address" \
                "$display_contract" \
                "${origin:0:9}" \
                "$age"
@@ -611,7 +611,7 @@ list_deployments_docker_style_active_contracts() {
            "CONTAINER ID" "APP NAME" "STATUS" "IP ADDRESS" "CONTRACT" "SOURCE" "AGE"
     echo "────────────────────────────────────────────────────────────────────────────────────────"
 
-    echo "$deployments" | while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at origin; do
+    echo "$deployments" | while IFS='|' read -r deployment_id app_name ipv4_address contract_id status created_at origin; do
         if [ -z "$deployment_id" ]; then
             continue
         fi
@@ -650,14 +650,14 @@ list_deployments_docker_style_active_contracts() {
                 fi
             fi
 
-            # Also override vm_ip with the full value from the registry when available
-            local full_vm_ip
-            full_vm_ip=$(yq eval ".deployments.\"$deployment_id\".vm_ip // \"\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
-            if [ -n "$full_vm_ip" ]; then
-                if [[ "$full_vm_ip" == *$'\n'* ]]; then
-                    full_vm_ip=$(printf '%s\n' "$full_vm_ip" | sed -n '1{/^[[:space:]]*$/d;p}')
+            # Also override ipv4_address with the full value from the registry when available
+            local full_ipv4_address
+            full_ipv4_address=$(yq eval ".deployments.\"$deployment_id\".ipv4_address // \"\"" "$DEPLOYMENT_REGISTRY" 2>/dev/null || echo "")
+            if [ -n "$full_ipv4_address" ]; then
+                if [[ "$full_ipv4_address" == *$'\n'* ]]; then
+                    full_ipv4_address=$(printf '%s\n' "$full_ipv4_address" | sed -n '1{/^[[:space:]]*$/d;p}')
                 fi
-                vm_ip="$full_vm_ip"
+                ipv4_address="$full_ipv4_address"
             fi
         fi
 
@@ -676,7 +676,7 @@ list_deployments_docker_style_active_contracts() {
                "$deployment_id" \
                "${app_name:0:19}" \
                "${status:0:9}" \
-               "$vm_ip" \
+               "$ipv4_address" \
                "$display_contract" \
                "${origin:0:9}" \
                "$age"
@@ -712,7 +712,7 @@ list_deployments_docker_style_all() {
     # Source 1: Registry entries
     local deployments=$(get_all_deployments 2>/dev/null || echo "")
     if [ -n "$deployments" ]; then
-        while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at origin; do
+        while IFS='|' read -r deployment_id app_name ipv4_address contract_id status created_at origin; do
             [ -z "$deployment_id" ] && continue
 
             # Check if contract is active on grid
@@ -722,7 +722,7 @@ list_deployments_docker_style_all() {
                     local age=$(calculate_deployment_age "$created_at")
                     local display_contract="$contract_id"
                     [ ${#display_contract} -gt 9 ] && display_contract="${display_contract:0:9}..."
-                    output_lines+=("$(printf "%-16s %-19s %-9s %-15s %-9s %-9s %s" "$deployment_id" "${app_name:0:19}" "${status:0:9}" "$vm_ip" "$display_contract" "${origin:-custom}" "$age")")
+                    output_lines+=("$(printf "%-16s %-19s %-9s %-15s %-9s %-9s %s" "$deployment_id" "${app_name:0:19}" "${status:0:9}" "$ipv4_address" "$display_contract" "${origin:-custom}" "$age")")
                 fi
             fi
         done <<< "$deployments"
@@ -760,13 +760,13 @@ list_deployments_docker_style_all() {
             if [ "$has_active" = "true" ]; then
                 # Get info from state.yaml
                 local app_name="(unknown)"
-                local vm_ip=""
+                local ipv4_address=""
                 local status="incomplete"
                 local created_at=""
 
                 if [ -f "$state_dir/state.yaml" ]; then
                     app_name=$(grep "^app_name:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "(unknown)")
-                    vm_ip=$(grep "^vm_ip:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+                    ipv4_address=$(grep "^ipv4_address:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
                     created_at=$(grep "^deployed_at:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
                 fi
 
@@ -774,7 +774,7 @@ list_deployments_docker_style_all() {
                 local display_contract="$first_contract"
                 [ ${#display_contract} -gt 9 ] && display_contract="${display_contract:0:9}..."
 
-                output_lines+=("$(printf "%-16s %-19s %-9s %-15s %-9s %-9s %s" "$deployment_id" "${app_name:0:19}" "${status:0:9}" "$vm_ip" "$display_contract" "state-dir" "$age")")
+                output_lines+=("$(printf "%-16s %-19s %-9s %-15s %-9s %-9s %s" "$deployment_id" "${app_name:0:19}" "${status:0:9}" "$ipv4_address" "$display_contract" "state-dir" "$age")")
             fi
         done
     fi
@@ -841,7 +841,7 @@ cleanup_invalid_deployments() {
             local failed_count=0
 
             if command_exists yq; then
-                while IFS='|' read -r deployment_id app_name vm_ip status created_at; do
+                while IFS='|' read -r deployment_id app_name ipv4_address status created_at; do
                     if [ -n "$deployment_id" ]; then
                         local state_dir="$HOME/.config/tfgrid-compose/state/$deployment_id"
                         if [ -d "$state_dir" ]; then
@@ -894,7 +894,7 @@ cleanup_orphaned_deployments() {
 
     local cleaned_count=0
 
-    while IFS='|' read -r deployment_id app_name vm_ip contract_id status created_at; do
+    while IFS='|' read -r deployment_id app_name ipv4_address contract_id status created_at; do
         if [ -z "$deployment_id" ]; then
             continue
         fi
@@ -928,11 +928,11 @@ get_all_deployments_raw() {
         yq eval '.deployments | keys[]' "$DEPLOYMENT_REGISTRY" | while read -r deployment_id; do
             if [ -n "$deployment_id" ]; then
                 local app_name=$(yq eval ".deployments.\"$deployment_id\".app_name // \"\"" "$DEPLOYMENT_REGISTRY")
-                local vm_ip=$(yq eval ".deployments.\"$deployment_id\".vm_ip // \"\"" "$DEPLOYMENT_REGISTRY")
+                local ipv4_address=$(yq eval ".deployments.\"$deployment_id\".ipv4_address // \"\"" "$DEPLOYMENT_REGISTRY")
                 local contract_id=$(yq eval ".deployments.\"$deployment_id\".contract_id // \"\"" "$DEPLOYMENT_REGISTRY")
                 local status=$(yq eval ".deployments.\"$deployment_id\".status // \"\"" "$DEPLOYMENT_REGISTRY")
                 local created_at=$(yq eval ".deployments.\"$deployment_id\".created_at // \"\"" "$DEPLOYMENT_REGISTRY")
-                echo "$deployment_id|$app_name|$vm_ip|$contract_id|$status|$created_at"
+                echo "$deployment_id|$app_name|$ipv4_address|$contract_id|$status|$created_at"
             fi
         done
     else

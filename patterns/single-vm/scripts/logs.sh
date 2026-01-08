@@ -13,7 +13,7 @@ if [ ! -f "$STATE_DIR/state.yaml" ]; then
 fi
 
 # Get VM IP and app name from state
-VM_IP=$(grep "vm_ip:" "$STATE_DIR/state.yaml" | awk '{print $2}')
+VM_IP=$(grep "ipv4_address:" "$STATE_DIR/state.yaml" | awk '{print $2}')
 APP_NAME=$(grep "app_name:" "$STATE_DIR/state.yaml" | awk '{print $2}')
 
 if [ -z "$VM_IP" ] || [ -z "$APP_NAME" ]; then

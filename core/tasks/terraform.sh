@@ -67,7 +67,7 @@ if [ -n "$primary_ip" ]; then
     primary_ip=$(echo "$primary_ip" | cut -d'/' -f1)
     
     # STATE_DIR is already absolute path, don't prepend $orig_dir
-    echo "vm_ip: $primary_ip" >> "$STATE_DIR/state.yaml"
+    echo "ipv4_address: $primary_ip" >> "$STATE_DIR/state.yaml"
     echo "primary_ip: $primary_ip" >> "$STATE_DIR/state.yaml"
     echo "primary_ip_type: $primary_ip_type" >> "$STATE_DIR/state.yaml"
     log_success "Primary IP ($primary_ip_type): $primary_ip"
@@ -84,10 +84,10 @@ if [ -n "$deployment_name" ]; then
 fi
 
 # Pattern-specific outputs
-mycelium_ip=$($TF_CMD output -raw mycelium_ip 2>/dev/null || echo "")
-if [ -n "$mycelium_ip" ]; then
-    echo "mycelium_ip: $mycelium_ip" >> "$STATE_DIR/state.yaml"
-    log_info "Mycelium IP: $mycelium_ip"
+mycelium_address=$($TF_CMD output -raw mycelium_address 2>/dev/null || echo "")
+if [ -n "$mycelium_address" ]; then
+    echo "mycelium_address: $mycelium_address" >> "$STATE_DIR/state.yaml"
+    log_info "Mycelium IP: $mycelium_address"
 fi
 
 wg_config=$($TF_CMD output -raw wg_config 2>/dev/null || echo "")
