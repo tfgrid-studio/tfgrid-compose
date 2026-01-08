@@ -1369,11 +1369,24 @@ case "$COMMAND" in
         # SSH command (deployment-centric)
         # Parse flags
         DIRECT_MODE=false
+        NETWORK_OVERRIDE=""
         APP_INPUT=""
         while [ $# -gt 0 ]; do
             case "$1" in
                 --direct|-d)
                     DIRECT_MODE=true
+                    shift
+                    ;;
+                --ipv4|--ip4|-4)
+                    NETWORK_OVERRIDE="ipv4"
+                    shift
+                    ;;
+                --mycelium|--myc|-6)
+                    NETWORK_OVERRIDE="mycelium"
+                    shift
+                    ;;
+                --wireguard|--wg)
+                    NETWORK_OVERRIDE="wireguard"
                     shift
                     ;;
                 *)
@@ -1439,14 +1452,59 @@ case "$COMMAND" in
                 exit 1
             fi
 
-            # Prefer mycelium if available, otherwise use VM IP
-            if [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
-                CONNECT_IP="$MYCELIUM_IP"
-                log_info "Direct SSH to $APP_NAME ($DEPLOYMENT_ID) via mycelium..."
+            # Determine which IP to use based on override or preference
+            CONNECT_IP=""
+            NETWORK_TYPE=""
+
+            if [ "$NETWORK_OVERRIDE" = "ipv4" ]; then
+                # User explicitly requested IPv4
+                if [ -n "$VM_IP" ] && [ "$VM_IP" != "null" ]; then
+                    CONNECT_IP="$VM_IP"
+                    NETWORK_TYPE="ipv4"
+                else
+                    log_error "No IPv4 address available for this deployment"
+                    exit 1
+                fi
+            elif [ "$NETWORK_OVERRIDE" = "mycelium" ]; then
+                # User explicitly requested mycelium
+                if [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
+                    CONNECT_IP="$MYCELIUM_IP"
+                    NETWORK_TYPE="mycelium"
+                else
+                    log_error "No mycelium address available for this deployment"
+                    exit 1
+                fi
+            elif [ "$NETWORK_OVERRIDE" = "wireguard" ]; then
+                # User explicitly requested wireguard (currently uses vm_ip)
+                if [ -n "$VM_IP" ] && [ "$VM_IP" != "null" ]; then
+                    CONNECT_IP="$VM_IP"
+                    NETWORK_TYPE="wireguard"
+                else
+                    log_error "No wireguard address available for this deployment"
+                    exit 1
+                fi
             else
-                CONNECT_IP="$VM_IP"
-                log_info "Direct SSH to $APP_NAME ($DEPLOYMENT_ID)..."
+                # Use global preference
+                PREFERRED_NETWORK=$(get_global_network_preference 2>/dev/null || echo "wireguard")
+
+                if [ "$PREFERRED_NETWORK" = "mycelium" ] && [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
+                    CONNECT_IP="$MYCELIUM_IP"
+                    NETWORK_TYPE="mycelium"
+                elif [ -n "$VM_IP" ] && [ "$VM_IP" != "null" ]; then
+                    CONNECT_IP="$VM_IP"
+                    NETWORK_TYPE="ipv4"
+                elif [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
+                    CONNECT_IP="$MYCELIUM_IP"
+                    NETWORK_TYPE="mycelium"
+                fi
             fi
+
+            if [ -z "$CONNECT_IP" ]; then
+                log_error "No suitable IP address found for deployment: $DEPLOYMENT_ID"
+                exit 1
+            fi
+
+            log_info "Direct SSH to $APP_NAME ($DEPLOYMENT_ID) via $NETWORK_TYPE..."
 
             echo ""
             ssh -o LogLevel=ERROR \
