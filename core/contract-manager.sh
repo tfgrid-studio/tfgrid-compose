@@ -798,39 +798,42 @@ state_clean() {
 
     if [ ${#orphaned[@]} -eq 0 ]; then
         log_success "No orphaned state directories found"
-        return 0
-    fi
+    else
+        echo "Found ${#orphaned[@]} orphaned state directories:"
+        echo ""
+        for i in "${!orphaned[@]}"; do
+            echo "  - ${orphaned[$i]} (${orphaned_names[$i]})"
+        done
+        echo ""
 
-    echo "Found ${#orphaned[@]} orphaned state directories:"
-    echo ""
-    for i in "${!orphaned[@]}"; do
-        echo "  - ${orphaned[$i]} (${orphaned_names[$i]})"
-    done
-    echo ""
-
-    if [ "$dry_run" = "true" ]; then
-        log_info "Dry run - no directories removed"
-        return 0
-    fi
-
-    if [ "$force" != "true" ]; then
-        echo -n "Remove ${#orphaned[@]} orphaned state directories? (yes/no): "
-        read -r confirm
-        if [ "$confirm" != "yes" ]; then
-            log_info "Cancelled"
-            return 0
+        if [ "$dry_run" = "true" ]; then
+            log_info "Dry run - no directories removed"
+        elif [ "$force" != "true" ]; then
+            echo -n "Remove ${#orphaned[@]} orphaned state directories? (yes/no): "
+            read -r confirm
+            if [ "$confirm" = "yes" ]; then
+                # Remove orphaned directories
+                local removed=0
+                for container_id in "${orphaned[@]}"; do
+                    rm -rf "$state_dir/$container_id"
+                    echo "  Removed state dir: $container_id"
+                    removed=$((removed + 1))
+                done
+                log_success "Removed $removed orphaned state directories"
+            else
+                log_info "Skipped state directory cleanup"
+            fi
+        else
+            # Force mode - remove without prompting
+            local removed=0
+            for container_id in "${orphaned[@]}"; do
+                rm -rf "$state_dir/$container_id"
+                echo "  Removed state dir: $container_id"
+                removed=$((removed + 1))
+            done
+            log_success "Removed $removed orphaned state directories"
         fi
     fi
-
-    # Remove orphaned directories
-    local removed=0
-    for container_id in "${orphaned[@]}"; do
-        rm -rf "$state_dir/$container_id"
-        echo "  Removed state dir: $container_id"
-        removed=$((removed + 1))
-    done
-
-    log_success "Removed $removed orphaned state directories"
 
     # Also clean up registry entries without active contracts
     echo ""
@@ -863,16 +866,35 @@ state_clean() {
 
         local contract_id=$(yq eval ".deployments.\"$deployment_id\".contract_id // \"\"" "$registry_file" 2>/dev/null)
         local app_name=$(yq eval ".deployments.\"$deployment_id\".app_name // \"unknown\"" "$registry_file" 2>/dev/null)
+        local entry_state_dir=$(yq eval ".deployments.\"$deployment_id\".state_dir // \"\"" "$registry_file" 2>/dev/null)
 
-        # Check if contract is active
-        local is_active=false
+        # Check if this deployment is still valid
+        local is_valid=false
+
+        # Case 1: Has a contract_id that's still active on the grid
         if [ -n "$contract_id" ] && [ "$contract_id" != "null" ] && [ "$contract_id" != "" ]; then
             if echo "$active_contracts" | grep -q "^${contract_id}$"; then
-                is_active=true
+                is_valid=true
             fi
         fi
 
-        if [ "$is_active" = "false" ]; then
+        # Case 2: No contract_id but state directory still exists (deployment in progress)
+        if [ "$is_valid" = "false" ] && [ -n "$entry_state_dir" ] && [ -d "$entry_state_dir" ]; then
+            # State dir exists - check if it has active contracts in terraform state
+            local tf_state="$entry_state_dir/terraform/terraform.tfstate"
+            if [ -f "$tf_state" ]; then
+                local state_contracts=$(grep -o '"id": "[0-9]*"' "$tf_state" 2>/dev/null | grep -o '[0-9]*' || echo "")
+                while IFS= read -r cid; do
+                    [ -z "$cid" ] && continue
+                    if echo "$active_contracts" | grep -q "^${cid}$"; then
+                        is_valid=true
+                        break
+                    fi
+                done <<< "$state_contracts"
+            fi
+        fi
+
+        if [ "$is_valid" = "false" ]; then
             orphaned_registry+=("$deployment_id")
             orphaned_registry_names+=("$app_name")
         fi
