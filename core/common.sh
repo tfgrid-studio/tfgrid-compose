@@ -535,7 +535,7 @@ show_help() {
     echo ""
     echo -e "${CYAN}Network Management:${NC}"
     echo -e "  ${GREEN}network${NC} <subcommand>  Manage network settings"
-    echo -e "      ${GREEN}provision${NC} <nets>   Set networks to provision (ipv4,mycelium,wireguard,ipv6,all)"
+    echo -e "      ${GREEN}provision${NC} <nets>   Set networks to provision (mycelium,wireguard,ipv4,ipv6,all)"
     echo -e "      ${GREEN}prefer${NC} <nets>      Set connection preference order (e.g., mycelium,ipv4)"
     echo -e "      ${GREEN}get${NC}, ${GREEN}show${NC}         Show current settings"
     echo -e "      ${GREEN}list${NC}               List available networks"

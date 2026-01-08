@@ -8,16 +8,16 @@ readonly _TFGRID_NETWORK_SH_SOURCED=1
 # Source required modules
 source "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh"
 
-# Network type constants
-if [ -z "${NETWORK_IPV4:-}" ]; then
-    readonly NETWORK_IPV4="ipv4"
-    readonly NETWORK_IPV6="ipv6"
+# Network type constants (ordered by security: encrypted/overlay first)
+if [ -z "${NETWORK_MYCELIUM:-}" ]; then
     readonly NETWORK_MYCELIUM="mycelium"
     readonly NETWORK_WIREGUARD="wireguard"
-    readonly ALL_NETWORKS="ipv4,ipv6,mycelium,wireguard"
+    readonly NETWORK_IPV4="ipv4"
+    readonly NETWORK_IPV6="ipv6"
+    readonly ALL_NETWORKS="mycelium,wireguard,ipv4,ipv6"
 
-    # Default settings
-    readonly DEFAULT_PROVISION="ipv4,mycelium"
+    # Default settings (prefer secure networks)
+    readonly DEFAULT_PROVISION="mycelium,ipv4"
     readonly DEFAULT_PREFER="mycelium,ipv4"
 
     # Config files
@@ -461,10 +461,10 @@ network_subcommand() {
             echo "Available Networks"
             echo "=================="
             echo ""
+            echo "  mycelium  - Mycelium overlay network (global IPv6, encrypted, recommended)"
+            echo "  wireguard - WireGuard VPN (private network, encrypted)"
             echo "  ipv4      - Public IPv4 address (direct internet access)"
             echo "  ipv6      - Public IPv6 address (direct internet access)"
-            echo "  mycelium  - Mycelium overlay network (global IPv6, encrypted)"
-            echo "  wireguard - WireGuard VPN (private network)"
             echo ""
             echo "Use 'all' with provision to enable all networks."
             echo ""
