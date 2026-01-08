@@ -1313,7 +1313,38 @@ case "$COMMAND" in
             exit 1
         fi
 
+        # Try to load app, but fall back to direct SSH if app source not found
         if ! load_app_for_deployment "$DEPLOYMENT_ID"; then
+            # App source not found - fall back to direct SSH using registry data
+            log_debug "App source not found, falling back to direct SSH"
+
+            REGISTRY_FILE="$HOME/.config/tfgrid-compose/deployments.yaml"
+            if [ -f "$REGISTRY_FILE" ] && command_exists yq; then
+                VM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".vm_ip" "$REGISTRY_FILE" 2>/dev/null)
+                MYCELIUM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".mycelium_ip" "$REGISTRY_FILE" 2>/dev/null)
+                APP_NAME=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".app_name" "$REGISTRY_FILE" 2>/dev/null)
+
+                if [ -n "$VM_IP" ] || ([ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]); then
+                    # Prefer mycelium if available
+                    if [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
+                        CONNECT_IP="$MYCELIUM_IP"
+                        log_info "SSH to $APP_NAME ($DEPLOYMENT_ID) via mycelium..."
+                    else
+                        CONNECT_IP="$VM_IP"
+                        log_info "SSH to $APP_NAME ($DEPLOYMENT_ID)..."
+                    fi
+
+                    echo ""
+                    ssh -o LogLevel=ERROR \
+                        -o StrictHostKeyChecking=no \
+                        -o UserKnownHostsFile=/dev/null \
+                        -o ConnectTimeout=10 \
+                        "root@$CONNECT_IP"
+                    exit $?
+                fi
+            fi
+
+            # No fallback possible
             exit 1
         fi
 
@@ -1430,7 +1461,44 @@ case "$COMMAND" in
             exit 1
         fi
 
+        # Try to load app, but fall back to direct SSH if app source not found
         if ! load_app_for_deployment "$DEPLOYMENT_ID"; then
+            # App source not found - fall back to direct SSH using registry data
+            log_debug "App source not found, falling back to direct SSH"
+
+            REGISTRY_FILE="$HOME/.config/tfgrid-compose/deployments.yaml"
+            if [ -f "$REGISTRY_FILE" ] && command_exists yq; then
+                VM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".vm_ip" "$REGISTRY_FILE" 2>/dev/null)
+                MYCELIUM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".mycelium_ip" "$REGISTRY_FILE" 2>/dev/null)
+                APP_NAME=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".app_name" "$REGISTRY_FILE" 2>/dev/null)
+
+                if [ -n "$VM_IP" ] || ([ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]); then
+                    # Respect global network preference
+                    PREFERRED_NETWORK=$(get_global_network_preference 2>/dev/null || echo "wireguard")
+
+                    if [ "$PREFERRED_NETWORK" = "mycelium" ] && [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
+                        CONNECT_IP="$MYCELIUM_IP"
+                        log_info "SSH to $APP_NAME ($DEPLOYMENT_ID) via mycelium..."
+                    elif [ -n "$VM_IP" ] && [ "$VM_IP" != "null" ]; then
+                        CONNECT_IP="$VM_IP"
+                        log_info "SSH to $APP_NAME ($DEPLOYMENT_ID)..."
+                    elif [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
+                        # Fallback to mycelium if no wireguard IP
+                        CONNECT_IP="$MYCELIUM_IP"
+                        log_info "SSH to $APP_NAME ($DEPLOYMENT_ID) via mycelium..."
+                    fi
+
+                    echo ""
+                    ssh -o LogLevel=ERROR \
+                        -o StrictHostKeyChecking=no \
+                        -o UserKnownHostsFile=/dev/null \
+                        -o ConnectTimeout=10 \
+                        "root@$CONNECT_IP"
+                    exit $?
+                fi
+            fi
+
+            # No fallback possible
             exit 1
         fi
 
