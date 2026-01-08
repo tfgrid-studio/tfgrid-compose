@@ -38,8 +38,10 @@ cmd_ps() {
   fi
 
   if [ "$show_all" = true ]; then
-    if list_deployments_docker_style >/dev/null 2>&1; then
-      list_deployments_docker_style
+    # --all: Show all deployments with active contracts (including incomplete/failed)
+    # This includes both registry entries AND state directories with active contracts
+    if list_deployments_docker_style_all >/dev/null 2>&1; then
+      list_deployments_docker_style_all
       echo ""
       log_info "Select deployment: tfgrid-compose select <deployment-id|app-name>"
       log_info "Run commands: tfgrid-compose <command> [args]"
@@ -102,7 +104,10 @@ cmd_select() {
       else
         # Try partial ID match (Docker-style)
         local matches=$(yq eval '.deployments | keys | .[]' "$REGISTRY_FILE" 2>/dev/null | grep "^$APP_NAME" || true)
-        local match_count=$(echo "$matches" | grep -c . || echo "0")
+        local match_count=0
+        if [ -n "$matches" ]; then
+          match_count=$(echo "$matches" | wc -l | tr -d ' ')
+        fi
 
         if [ "$match_count" -eq 1 ]; then
           DEPLOYMENT_ID="$matches"

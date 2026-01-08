@@ -11,32 +11,32 @@ generate_k3s_inventory() {
     local output_dir="$2"
     local tf_dir="$state_dir/terraform"
     local output_file="$output_dir/inventory.ini"
-    
+
     # Get terraform outputs
     local terraform_output
     terraform_output=$(tofu -chdir="$tf_dir" show -json 2>/dev/null)
-    
+
     if [ -z "$terraform_output" ]; then
         log_error "Failed to get terraform outputs"
         return 1
     fi
-    
+
     # Extract node information
     local management_wireguard_ip=$(echo "$terraform_output" | jq -r '.values.outputs.management_node_wireguard_ip.value // empty')
     local management_mycelium_ip=$(echo "$terraform_output" | jq -r '.values.outputs.management_mycelium_ip.value // empty')
     local wireguard_ips=$(echo "$terraform_output" | jq -r '.values.outputs.wireguard_ips.value // {}')
     local mycelium_ips=$(echo "$terraform_output" | jq -r '.values.outputs.mycelium_ips.value // {}')
-    
+
     # Extract ingress node information
     local ingress_wireguard_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_wireguard_ips.value // {}')
     local ingress_mycelium_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_mycelium_ips.value // {}')
     local ingress_public_ips=$(echo "$terraform_output" | jq -r '.values.outputs.ingress_public_ips.value // {}')
     local has_ingress_nodes=$(echo "$terraform_output" | jq -r '.values.outputs.has_ingress_nodes.value // false')
-    
+
     # Get network preference from .env or default to wireguard
     local main_network="${MAIN_NETWORK:-wireguard}"
     local management_ip node_ips ingress_node_ips
-    
+
     case "$main_network" in
         "mycelium")
             management_ip="$management_mycelium_ip"
@@ -51,20 +51,20 @@ generate_k3s_inventory() {
             log_info "Using WireGuard IPs for K3s inventory"
             ;;
     esac
-    
+
     if [ -z "$management_ip" ]; then
         log_error "Failed to extract management node IP"
         return 1
     fi
-    
+
     # Count nodes from terraform output
     local control_count=$(echo "$node_ips" | jq -r 'keys | length')
     local ingress_count=$(echo "$ingress_node_ips" | jq -r 'keys | length' 2>/dev/null || echo "0")
-    
+
     # Get control/worker split from .env
     local k3s_control_nodes="${K3S_CONTROL_NODES:-3}"
     local k3s_worker_nodes="${K3S_WORKER_NODES:-3}"
-    
+
     # Generate inventory file
     cat > "$output_file" << EOF
 # TFGrid K3s Cluster Ansible Inventory
@@ -190,7 +190,7 @@ get_vm_ip_from_state() {
             echo "$vm_ip"
             return 0
         fi
-        
+
         # Try gateway_ip as fallback
         vm_ip=$(grep "^gateway_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}')
         if [ -n "$vm_ip" ]; then
@@ -198,7 +198,7 @@ get_vm_ip_from_state() {
             return 0
         fi
     fi
-    
+
     # Return empty if not found
     echo ""
     return 1
@@ -346,16 +346,16 @@ cleanup_on_error() {
 deploy_app() {
     log_step "Starting deployment orchestration..."
     echo ""
-    
+
     # Generate unique deployment ID (Docker-style)
     if [ -z "${DEPLOYMENT_ID:-}" ]; then
         export DEPLOYMENT_ID=$(generate_deployment_id)
         log_info "Generated deployment ID: $DEPLOYMENT_ID"
     fi
-    
+
     # Mark deployment as deploying (track by deployment ID)
     mark_deployment_deploying "$DEPLOYMENT_ID"
-    
+
     # Setup error trap
     trap 'cleanup_on_error "$DEPLOYMENT_ID" "$ERROR_MESSAGE"' ERR
 
@@ -365,7 +365,7 @@ deploy_app() {
         log_info "🔄 Resume mode enabled - skipping completed steps"
         echo ""
     fi
-    
+
     # Source .env from app directory if it exists
     if [ -f "$APP_DIR/.env" ]; then
         log_info "Loading configuration from $APP_DIR/.env"
@@ -374,32 +374,37 @@ deploy_app() {
         log_warning "No .env found in app directory"
         log_info "Run: tfgrid-compose init <app> to create one"
     fi
-    
+
     # Validate prerequisites
     if ! check_requirements; then
         log_error "Prerequisites not met"
         return 1
     fi
-    
+
     # Ensure dedicated state directory exists (creates per-deployment isolation)
     if [ -z "${DEPLOYMENT_ID:-}" ]; then
         export DEPLOYMENT_ID=$(generate_deployment_id)
         log_info "Generated deployment ID: $DEPLOYMENT_ID"
     fi
-    
+
     # Create dedicated state directory for this deployment
     local dedicated_state_dir="$STATE_BASE_DIR/$DEPLOYMENT_ID"
     mkdir -p "$dedicated_state_dir"
-    
+
     # Update STATE_DIR to point to dedicated directory
     export STATE_DIR="$dedicated_state_dir"
     log_info "Using dedicated state directory: $STATE_DIR"
-    
+
+    # Register deployment early (with placeholder values) to keep registry in sync with state dir
+    # This ensures both exist together - will be updated with real values after terraform succeeds
+    register_deployment "$DEPLOYMENT_ID" "$APP_NAME" "$dedicated_state_dir" "" ""
+    log_debug "Registered deployment placeholder: $DEPLOYMENT_ID"
+
     # === Node & Resource Selection ===
     echo ""
     log_step "Configuring deployment..."
     echo ""
-    
+
     # Determine resources (priority: flags > .env > manifest > defaults)
     # For AI-stack style apps, use resources.cpu.*, for single-vm style apps
     # prefer resources.vm.* when present.
@@ -553,7 +558,7 @@ deploy_app() {
     fi
 
     DEPLOY_NETWORK=${CUSTOM_NETWORK:-${TF_VAR_tfgrid_network:-"main"}}
-    
+
     # Interactive mode
     if [ "$INTERACTIVE_MODE" = "true" ]; then
         log_info "Running interactive configuration..."
@@ -561,7 +566,7 @@ deploy_app() {
             log_error "Interactive configuration cancelled"
             return 1
         fi
-        
+
         # Use values from interactive config
         DEPLOY_NODE=${SELECTED_NODE_ID}
         DEPLOY_CPU=${SELECTED_CPU}
@@ -623,16 +628,16 @@ deploy_app() {
             fi
         fi
     fi
-    
+
     # Ensure all values are clean integers (remove any whitespace/newlines)
     DEPLOY_NODE=$(echo "$DEPLOY_NODE" | tr -d '[:space:]')
     DEPLOY_CPU=$(echo "$DEPLOY_CPU" | tr -d '[:space:]')
     DEPLOY_MEM=$(echo "$DEPLOY_MEM" | tr -d '[:space:]')
     DEPLOY_DISK=$(echo "$DEPLOY_DISK" | tr -d '[:space:]')
-    
+
     # Export Terraform variables based on pattern
     export TF_VAR_tfgrid_network=$DEPLOY_NETWORK
-    
+
     # Pattern-specific variable mapping
     case "$PATTERN_NAME" in
         single-vm)
@@ -663,7 +668,7 @@ deploy_app() {
             # K3s pattern - Multi-node auto-selection
             # Read cluster configuration from app's tfgrid-compose.yaml
             local app_manifest="$APP_MANIFEST"
-            
+
             # Node counts from manifest or environment or defaults
             local K3S_CONTROL_COUNT=${K3S_CONTROL_COUNT:-$(yaml_get "$app_manifest" "nodes.masters.count" 2>/dev/null)}
             local K3S_WORKER_COUNT=${K3S_WORKER_COUNT:-$(yaml_get "$app_manifest" "nodes.workers.count" 2>/dev/null)}
@@ -671,7 +676,7 @@ deploy_app() {
             K3S_CONTROL_COUNT=${K3S_CONTROL_COUNT:-3}
             K3S_WORKER_COUNT=${K3S_WORKER_COUNT:-3}
             K3S_INGRESS_COUNT=${K3S_INGRESS_COUNT:-0}
-            
+
             # Resource specs from manifest or environment or defaults
             local K3S_MGMT_CPU=${K3S_MGMT_CPU:-1}
             local K3S_MGMT_MEM=${K3S_MGMT_MEM:-2048}
@@ -695,14 +700,14 @@ deploy_app() {
             K3S_INGRESS_CPU=${K3S_INGRESS_CPU:-2}
             K3S_INGRESS_MEM=${K3S_INGRESS_MEM:-4096}
             K3S_INGRESS_DISK=${K3S_INGRESS_DISK:-25}
-            
+
             log_step "K3s cluster node selection"
             local total_nodes=$((1 + K3S_CONTROL_COUNT + K3S_WORKER_COUNT + K3S_INGRESS_COUNT))
             log_info "Cluster: 1 mgmt + $K3S_CONTROL_COUNT control + $K3S_WORKER_COUNT worker + $K3S_INGRESS_COUNT ingress = $total_nodes nodes"
             echo ""
-            
+
             local all_selected=""
-            
+
             # 1. Select management node
             log_info "Selecting management node..."
             local mgmt_node=$(select_best_node "$K3S_MGMT_CPU" "$K3S_MGMT_MEM" "$K3S_MGMT_DISK" "$DEPLOY_NETWORK" \
@@ -717,11 +722,11 @@ deploy_app() {
             export TF_VAR_management_cpu=$K3S_MGMT_CPU
             export TF_VAR_management_mem=$K3S_MGMT_MEM
             export TF_VAR_management_disk=$K3S_MGMT_DISK
-            
+
             # Set unique network name using deployment ID to avoid conflicts
             local network_suffix="${DEPLOYMENT_ID:0:8}"
             export TF_VAR_network_name="k3s_net_${network_suffix}"
-            
+
             # 2. Select control plane nodes
             log_info "Selecting $K3S_CONTROL_COUNT control plane nodes..."
             local control_nodes=$(select_multiple_nodes "$K3S_CONTROL_COUNT" "$K3S_CONTROL_CPU" "$K3S_CONTROL_MEM" "$K3S_CONTROL_DISK" \
@@ -737,7 +742,7 @@ deploy_app() {
             export TF_VAR_control_cpu=$K3S_CONTROL_CPU
             export TF_VAR_control_mem=$K3S_CONTROL_MEM
             export TF_VAR_control_disk=$K3S_CONTROL_DISK
-            
+
             # 3. Select worker nodes
             log_info "Selecting $K3S_WORKER_COUNT worker nodes..."
             local worker_nodes=$(select_multiple_nodes "$K3S_WORKER_COUNT" "$K3S_WORKER_CPU" "$K3S_WORKER_MEM" "$K3S_WORKER_DISK" \
@@ -752,7 +757,7 @@ deploy_app() {
             export TF_VAR_worker_cpu=$K3S_WORKER_CPU
             export TF_VAR_worker_mem=$K3S_WORKER_MEM
             export TF_VAR_worker_disk=$K3S_WORKER_DISK
-            
+
             # 4. Select ingress nodes (if configured)
             if [ "$K3S_INGRESS_COUNT" -gt 0 ]; then
                 log_info "Selecting $K3S_INGRESS_COUNT ingress nodes (with public IPv4)..."
@@ -778,7 +783,7 @@ deploy_app() {
                 export TF_VAR_ingress_nodes="[]"
                 export TF_VAR_worker_public_ipv4=true
             fi
-            
+
             log_success "K3s cluster nodes selected successfully"
             echo ""
             ;;
@@ -794,14 +799,14 @@ deploy_app() {
             log_warning "Unknown pattern '$PATTERN_NAME', using generic vm_* variables"
             ;;
     esac
-    
+
     log_success "Configuration complete"
     echo ""
 
     # Show concise deployment summary so operators can verify settings
     log_step "Deployment configuration summary"
     log_info "App: $APP_NAME v$APP_VERSION ($PATTERN_NAME pattern)"
-    
+
     if [ "$PATTERN_NAME" = "k3s" ]; then
         # K3s-specific summary
         log_info "Cluster: $K3S_CONTROL_COUNT control + $K3S_WORKER_COUNT worker + $K3S_INGRESS_COUNT ingress nodes"
@@ -821,7 +826,7 @@ deploy_app() {
         log_info "Public IPv4: $ipv4_status"
     fi
     echo ""
-    
+
     # Save deployment metadata
     log_step "Saving deployment metadata..."
     cat > "$STATE_DIR/state.yaml" << EOF
@@ -843,10 +848,10 @@ EOF
         echo "deploy_disk_type: $DEPLOY_DISK_TYPE" >> "$STATE_DIR/state.yaml"
     fi
     echo "deploy_ipv4: $DEPLOY_IPV4" >> "$STATE_DIR/state.yaml"
-    
+
     log_success "Metadata saved"
     echo ""
-    
+
     # Step 1: Generate Terraform configuration (skip if resuming and terraform done)
     if [ "${RESUME_TERRAFORM_DONE:-false}" = "false" ]; then
         if ! generate_terraform_config; then
@@ -913,34 +918,34 @@ EOF
         log_error "WireGuard setup failed"
         return 1
     fi
-    
+
     # Step 2.6: Wait for SSH to be ready
     echo ""
     if ! bash "$DEPLOYER_ROOT/core/wait-ssh.sh"; then
         log_warning "SSH check timed out, but continuing..."
         log_info "Deployment may fail if VM is not ready"
     fi
-    
+
     # Step 3: Generate Ansible inventory
     # K3s pattern has its own multi-node inventory generator
     if [ "$PATTERN_NAME" = "k3s" ] && [ -f "$PATTERN_DIR/scripts/generate-inventory.sh" ]; then
         log_step "Generating K3s multi-node inventory..."
-        
+
         # The K3s inventory generator needs to run from the pattern directory
         # and reads terraform state from infrastructure/
         local k3s_infra_dir="$STATE_DIR/terraform"
         local k3s_platform_dir="$STATE_DIR/ansible"
-        
+
         # Create platform directory if needed
         mkdir -p "$k3s_platform_dir"
-        
+
         # Copy the generate-inventory script and run it with proper paths
         # We need to generate inventory that points to the terraform state in our state dir
         if ! generate_k3s_inventory "$STATE_DIR" "$k3s_platform_dir"; then
             log_error "Failed to generate K3s inventory"
             return 1
         fi
-        
+
         # Copy inventory to state dir root for ansible.sh
         if [ -f "$k3s_platform_dir/inventory.ini" ]; then
             cp "$k3s_platform_dir/inventory.ini" "$STATE_DIR/inventory.ini"
@@ -951,7 +956,7 @@ EOF
             return 1
         fi
     fi
-    
+
     # Step 4: Run Ansible
     # First copy pattern platform contents to state directory
     mkdir -p "$STATE_DIR/ansible"
@@ -960,28 +965,28 @@ EOF
         log_error "Ansible configuration failed"
         return 1
     fi
-    
+
     # Step 5: Deploy app source code
     if ! deploy_app_source; then
         log_error "Failed to deploy app source"
         return 1
     fi
-    
+
     # Step 6: Run app hooks
     if ! run_app_hooks; then
         log_error "App deployment hooks failed"
         return 1
     fi
-    
+
     # Step 7: Verify deployment
     if ! verify_deployment; then
         log_warning "Deployment verification had issues"
     fi
-    
+
     echo ""
     log_success "🎉 Deployment complete!"
     echo ""
-    
+
     # Register deployment in Docker-style ID system with contract linkage
     local vm_ip=$(get_vm_ip_from_state)
     local primary_ip_type=""
@@ -1030,14 +1035,14 @@ EOF
     if [ -f "$STATE_DIR/terraform/terraform.tfstate" ]; then
         node_ids=$(cd "$STATE_DIR" && terraform output node_ids 2>/dev/null | jq -r '.[]' 2>/dev/null | tr '\n' ',' | sed 's/,$//' || echo "")
     fi
-    
+
     # Extract contract ID from terraform state (grid_deployment resource ID)
     local contract_id=""
     if [ -f "$STATE_DIR/terraform/terraform.tfstate" ]; then
         # Extract directly from terraform state JSON
         # The grid_deployment resource ID IS the contract ID
         contract_id=$(jq -r '.resources[]? | select(.type == "grid_deployment" and .name == "vm") | .instances[0].attributes.id' "$STATE_DIR/terraform/terraform.tfstate" 2>/dev/null || echo "")
-        
+
         if [ -n "$contract_id" ] && [ "$contract_id" != "null" ]; then
             log_info "Contract ID extracted from terraform state: $contract_id"
         else
@@ -1045,21 +1050,21 @@ EOF
             contract_id=""
         fi
     fi
-    
+
     # Use dedicated state directory for perfect deployment isolation
     local dedicated_state_dir="$STATE_BASE_DIR/$DEPLOYMENT_ID"
     register_deployment "$DEPLOYMENT_ID" "$APP_NAME" "$dedicated_state_dir" "$vm_ip" "$contract_id"
-    
+
     # Mark deployment as active (tracked by deployment ID)
     mark_deployment_active "$DEPLOYMENT_ID"
-    
+
     # Perform health check to verify deployment
     log_info "Performing health check..."
     if ! perform_deployment_health_check "$DEPLOYMENT_ID" "$PATTERN_NAME"; then
         log_warning "Health check failed - deployment may not be fully functional"
         mark_deployment_failed "$DEPLOYMENT_ID" "Health check failed after deployment"
     fi
-    
+
     log_info "App: $APP_NAME v$APP_VERSION"
     log_info "Pattern: $PATTERN_NAME v$PATTERN_VERSION"
     echo ""
@@ -1116,22 +1121,22 @@ EOF
 
     # Disable error trap on success
     trap - ERR
-    
+
     return 0
 }
 
 # Generate Terraform configuration
 generate_terraform_config() {
     log_step "Generating Terraform configuration..."
-    
+
     # Parse manifest configuration and export as Terraform variables
     log_info "Parsing manifest configuration..."
-    
+
     # Parse nodes configuration
     local gateway_nodes=$(yaml_get "$APP_MANIFEST" "nodes.gateway")
     local backend_nodes=$(yaml_get "$APP_MANIFEST" "nodes.backend")
     local vm_node=$(yaml_get "$APP_MANIFEST" "nodes.vm")
-    
+
     # Gateway pattern nodes
     if [ -n "$gateway_nodes" ]; then
         # Handle single node or array format
@@ -1142,18 +1147,18 @@ generate_terraform_config() {
         fi
         log_info "Gateway node: $TF_VAR_gateway_node"
     fi
-    
+
     if [ -n "$backend_nodes" ]; then
         export TF_VAR_internal_nodes="$backend_nodes"
         log_info "Backend nodes: $TF_VAR_internal_nodes"
     fi
-    
+
     # Single-VM pattern nodes (only if not already set from node selection)
     if [ -z "$TF_VAR_vm_node" ] && [ -n "$vm_node" ]; then
         export TF_VAR_vm_node="$vm_node"
         log_info "VM node: $TF_VAR_vm_node"
     fi
-    
+
     # Parse resources configuration
     local gateway_cpu=$(yaml_get "$APP_MANIFEST" "resources.gateway.cpu")
     local gateway_mem=$(yaml_get "$APP_MANIFEST" "resources.gateway.memory")
@@ -1164,23 +1169,23 @@ generate_terraform_config() {
     local vm_cpu=$(yaml_get "$APP_MANIFEST" "resources.vm.cpu")
     local vm_mem=$(yaml_get "$APP_MANIFEST" "resources.vm.memory")
     local vm_disk=$(yaml_get "$APP_MANIFEST" "resources.vm.disk")
-    
+
     # Export gateway resources
     [ -n "$gateway_cpu" ] && export TF_VAR_gateway_cpu="$gateway_cpu"
     [ -n "$gateway_mem" ] && export TF_VAR_gateway_mem="$gateway_mem"
     [ -n "$gateway_disk" ] && export TF_VAR_gateway_disk="$gateway_disk"
-    
-    # Export backend resources  
+
+    # Export backend resources
     [ -n "$backend_cpu" ] && export TF_VAR_internal_cpu="$backend_cpu"
     [ -n "$backend_mem" ] && export TF_VAR_internal_mem="$backend_mem"
     [ -n "$backend_disk" ] && export TF_VAR_internal_disk="$backend_disk"
-    
+
     # Export single-VM resources ONLY if not already set (from node selection)
     # This prevents overwriting the values we set earlier based on auto-selection
     [ -z "$TF_VAR_vm_cpu" ] && [ -n "$vm_cpu" ] && export TF_VAR_vm_cpu="$vm_cpu"
     [ -z "$TF_VAR_vm_mem" ] && [ -n "$vm_mem" ] && export TF_VAR_vm_mem="$vm_mem"
     [ -z "$TF_VAR_vm_disk" ] && [ -n "$vm_disk" ] && export TF_VAR_vm_disk="$vm_disk"
-    
+
     # Log resources based on pattern
     if [ -n "$gateway_cpu" ]; then
         log_info "Resources: Gateway(CPU=$gateway_cpu, Mem=$gateway_mem MB, Disk=$gateway_disk GB)"
@@ -1191,34 +1196,34 @@ generate_terraform_config() {
     if [ -n "$vm_cpu" ]; then
         log_info "Resources: VM(CPU=$vm_cpu, Mem=$vm_mem MB, Disk=$vm_disk GB)"
     fi
-    
+
     # Parse gateway configuration
     local gateway_mode=$(yaml_get "$APP_MANIFEST" "gateway.mode")
     local gateway_domains=$(yaml_get "$APP_MANIFEST" "gateway.domains")
     local ssl_enabled=$(yaml_get "$APP_MANIFEST" "gateway.ssl.enabled")
     local ssl_email=$(yaml_get "$APP_MANIFEST" "gateway.ssl.email")
-    
+
     # Export gateway configuration as environment variables (for Ansible)
     [ -n "$gateway_mode" ] && export GATEWAY_TYPE="gateway_${gateway_mode}"
     [ -n "$ssl_enabled" ] && [ "$ssl_enabled" = "true" ] && export ENABLE_SSL="true"
     [ -n "$ssl_email" ] && export SSL_EMAIL="$ssl_email"
-    
+
     # Parse first domain from domains array
     if [ -n "$gateway_domains" ]; then
         local first_domain=$(echo "$gateway_domains" | grep -o '[a-zA-Z0-9.-]*\.[a-zA-Z]\{2,\}' | head -1)
         [ -n "$first_domain" ] && export DOMAIN_NAME="$first_domain"
         log_info "Domain: $DOMAIN_NAME (SSL: ${ENABLE_SSL:-false})"
     fi
-    
+
     # Parse backend configuration
     local backend_count=$(yaml_get "$APP_MANIFEST" "backend.count")
     [ -n "$backend_count" ] && log_info "Backend VMs: $backend_count"
-    
+
     # Parse network configuration from manifest
     local main_network=$(yaml_get "$APP_MANIFEST" "network.main")
     local inter_node_network=$(yaml_get "$APP_MANIFEST" "network.inter_node")
     local network_mode=$(yaml_get "$APP_MANIFEST" "network.mode")
-    
+
     # If manifest doesn't define a mode, fall back to global network mode preference
     if [ -z "$network_mode" ] || [ "$network_mode" = "null" ]; then
         # get_global_network_mode is defined in core/network.sh, which is sourced by the CLI
@@ -1226,22 +1231,22 @@ generate_terraform_config() {
             network_mode=$(get_global_network_mode)
         fi
     fi
-    
+
     # Export network configuration (use manifest values or defaults)
     export TF_VAR_tfgrid_network="${TF_VAR_tfgrid_network:-main}"
     export MAIN_NETWORK="${main_network:-${MAIN_NETWORK:-wireguard}}"
     export INTER_NODE_NETWORK="${inter_node_network:-${INTER_NODE_NETWORK:-wireguard}}"
     export NETWORK_MODE="${network_mode:-wireguard-only}"
     export TF_VAR_network_mode="$NETWORK_MODE"
-    
+
     # Pass main_network to Terraform
     export TF_VAR_main_network="$MAIN_NETWORK"
-    
+
     log_info "Network: Main=$MAIN_NETWORK, InterNode=$INTER_NODE_NETWORK, Mode=$NETWORK_MODE"
-    
+
     # Copy pattern infrastructure to state directory
     cp -r "$PATTERN_INFRASTRUCTURE_DIR" "$STATE_DIR/terraform"
-    
+
     log_success "Configuration parsed from manifest"
     return 0
 }
@@ -1350,7 +1355,7 @@ deploy_app_source() {
     # Copy essential app files (docker-compose.yaml, scripts/, etc.) from app root
     log_info "Copying essential app files..."
     local copied_files=0
-    
+
     # Copy docker-compose.yaml if exists
     if [ -f "$APP_DIR/docker-compose.yaml" ]; then
         if scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
@@ -1358,7 +1363,7 @@ deploy_app_source() {
             ((copied_files++))
         fi
     fi
-    
+
     # Copy scripts directory if exists
     if [ -d "$APP_DIR/scripts" ]; then
         if scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
@@ -1366,7 +1371,7 @@ deploy_app_source() {
             ((copied_files++))
         fi
     fi
-    
+
     # Copy config directory if exists
     if [ -d "$APP_DIR/config" ]; then
         if scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
@@ -1374,7 +1379,7 @@ deploy_app_source() {
             ((copied_files++))
         fi
     fi
-    
+
     # Copy templates directory if exists
     if [ -d "$APP_DIR/templates" ]; then
         if scp -r -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
@@ -1382,7 +1387,7 @@ deploy_app_source() {
             ((copied_files++))
         fi
     fi
-    
+
     if [ $copied_files -gt 0 ]; then
         log_success "Copied $copied_files essential app files/directories to VM"
     else
@@ -1404,13 +1409,13 @@ run_app_hooks() {
         log_error "No VM IP found for preferred network"
         return 1
     fi
-    
+
     # Load credentials to get git config
     if [ -f "$CREDENTIALS_FILE" ]; then
         source "$DEPLOYER_ROOT/core/login.sh"
         load_credentials || true
     fi
-    
+
     # Prepare environment variables for deployment hooks
     local env_vars=""
     if [ -n "$TFGRID_GIT_NAME" ]; then
@@ -1432,7 +1437,7 @@ run_app_hooks() {
     local network_preference=$(get_network_preference "$DEPLOYMENT_ID")
     env_vars="$env_vars export DEPLOYMENT_NETWORK_PREFERENCE='$network_preference';"
     log_info "Passing network preference to deployment hooks: $network_preference"
-    
+
     # Derive canonical domain for hooks (used by apps like tfgrid-wordpress
     # to configure Caddy and TLS inside the VM). Prefer TFGRID_DOMAIN, then
     # DOMAIN, then DOMAIN_NAME.
@@ -1463,11 +1468,11 @@ run_app_hooks() {
         env_vars="$env_vars export TFGRID_SSL_EMAIL='$hook_ssl_email'; export SSL_EMAIL='$hook_ssl_email';"
         log_info "Passing SSL email to deployment hooks: $hook_ssl_email"
     fi
-    
+
     # Check if Ansible playbook exists (Option B: Ansible deployment)
     if [ -f "$APP_DIR/deployment/playbook.yml" ]; then
         log_info "Detected Ansible playbook deployment"
-        
+
         # Run Ansible playbook
         if ! ansible-playbook -i "$STATE_DIR/inventory.ini" "$APP_DIR/deployment/playbook.yml" \
             > "$STATE_DIR/ansible-app.log" 2>&1; then
@@ -1478,7 +1483,7 @@ run_app_hooks() {
         log_success "Ansible deployment complete"
         return 0
     fi
-    
+
     # Default: Bash hook scripts (Option A: Bash deployment)
     log_info "Using bash hook scripts deployment"
 
@@ -1488,7 +1493,7 @@ run_app_hooks() {
         verbose_flag="-v"
         log_info "Verbose mode enabled - hook output will be shown in real-time"
     fi
-    
+
     # Hook 1: setup.sh
     log_info "Running setup hook..."
     if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
@@ -1514,7 +1519,7 @@ run_app_hooks() {
         fi
     fi
     log_success "Setup complete"
-    
+
     # Hook 2: configure.sh
     log_info "Running configure hook..."
 
@@ -1557,11 +1562,11 @@ run_app_hooks() {
     else
         log_success "Configuration complete"
     fi
-    
+
     # Give service a moment to start
     log_info "Waiting for service to start..."
     sleep 5
-    
+
     # Hook 3: healthcheck.sh
     log_info "Running healthcheck..."
     if [ "${TFGRID_VERBOSE:-}" = "1" ] || [ "${VERBOSE:-}" = "1" ]; then
@@ -1589,7 +1594,7 @@ run_app_hooks() {
             log_success "Health check passed"
         fi
     fi
-    
+
     return 0
 }
 
@@ -1632,13 +1637,13 @@ verify_deployment() {
 # Destroy deployment
 destroy_deployment() {
     log_step "Destroying deployment..."
-    
+
     if ! deployment_exists; then
         log_error "No deployment found to destroy"
         log_info "State directory not found: $STATE_DIR"
         return 1
     fi
-    
+
     # Tear down WireGuard interface if it exists
     local wg_interface="wg-${APP_NAME}"
     if sudo wg show "$wg_interface" &>/dev/null; then
@@ -1647,7 +1652,7 @@ destroy_deployment() {
         sudo rm -f "/etc/wireguard/${wg_interface}.conf"
         log_success "WireGuard interface removed"
     fi
-    
+
     # Load deployment variables from state for Terraform destroy
     if [ -f "$STATE_DIR/state.yaml" ]; then
         log_info "Loading deployment configuration..."
@@ -1657,10 +1662,10 @@ destroy_deployment() {
         local deploy_mem=$(yaml_get "$STATE_DIR/state.yaml" "deploy_mem")
         local deploy_disk=$(yaml_get "$STATE_DIR/state.yaml" "deploy_disk")
         local deploy_network=$(yaml_get "$STATE_DIR/state.yaml" "deploy_network")
-        
+
         # Export network variable
         export TF_VAR_tfgrid_network="${deploy_network:-main}"
-        
+
         # Export pattern-specific variables
         case "$pattern_name" in
             single-vm)
@@ -1691,7 +1696,7 @@ destroy_deployment() {
         esac
         log_info "Loaded variables: pattern=$pattern_name, node=$deploy_node"
     fi
-    
+
     # Run Terraform destroy
     if [ -d "$STATE_DIR/terraform" ]; then
         log_info "Destroying infrastructure..."
@@ -1727,13 +1732,13 @@ destroy_deployment() {
 
         cd "$orig_dir"
     fi
-    
+
     # Clear state
     state_clear
-    
+
     # Unregister from Docker-style ID system
     unregister_deployment "$APP_NAME"
-    
+
     log_success "Deployment destroyed"
     return 0
 }
