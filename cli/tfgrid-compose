@@ -79,7 +79,7 @@ load_context() {
         grep "^app:" "$CONTEXT_FILE" | awk '{print $2}'
         return
     fi
-    
+
     # Fall back to global current app (from switch command)
     if [ -f "$HOME/.config/tfgrid-compose/current-app" ]; then
         cat "$HOME/.config/tfgrid-compose/current-app"
@@ -90,7 +90,7 @@ load_context() {
 get_app_command_script() {
     local app_path="$1"
     local command="$2"
-    
+
     # Read command script from manifest (including any arguments after script path)
     grep -A 2 "^  ${command}:" "$app_path/tfgrid-compose.yaml" 2>/dev/null | \
         grep "script:" | sed 's/.*script:[[:space:]]*//'
@@ -99,25 +99,25 @@ get_app_command_script() {
 # Check if selected app has a specific command
 app_has_command() {
     local command="$1"
-    
+
     local current_app=$(get_current_app)
     if [ -z "$current_app" ]; then
         return 1
     fi
-    
+
     if ! get_deployment_context "$current_app" >/dev/null 2>&1; then
         return 1
     fi
-    
+
     if ! load_app_for_deployment "$DEPLOYMENT_ID" >/dev/null 2>&1; then
         return 1
     fi
-    
+
     local script_path=$(get_app_command_script "$APP_DIR" "$command")
     if [ -n "$script_path" ]; then
         return 0
     fi
-    
+
     return 1
 }
 
@@ -126,10 +126,10 @@ get_deployment_context() {
     local base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
     local resolved=""
     local result=0
-    
+
     DEPLOYMENT_ID=""
     STATE_DIR=""
-    
+
     if [ -n "$identifier" ]; then
         resolved=$(resolve_deployment "$identifier" 2>/dev/null || echo "")
         result=$?
@@ -181,14 +181,14 @@ get_deployment_context() {
         fi
         DEPLOYMENT_ID="$ctx"
     fi
-    
+
     local details=$(get_deployment_by_id "$DEPLOYMENT_ID" 2>/dev/null || echo "")
     if [ -z "$details" ]; then
         log_error "Deployment not found: $DEPLOYMENT_ID"
         log_info "Use 'tfgrid-compose ps' to see available deployments"
         return 1
     fi
-    
+
     local state_dir=""
     if command_exists yq; then
         state_dir=$(echo "$details" | yq eval '.state_dir // ""' - 2>/dev/null || echo "")
@@ -203,42 +203,42 @@ get_deployment_context() {
         log_info "State directory: $state_dir"
         return 1
     fi
-    
+
     STATE_DIR="$state_dir"
     export STATE_DIR
-    
+
     local app_name=$(echo "$details" | grep "^app_name:" | awk '{print $2}' | tr -d '"' || echo "")
     if [ -z "$app_name" ] && [ -f "$STATE_DIR/state.yaml" ]; then
         app_name=$(grep "^app_name:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
     fi
     APP_NAME="$app_name"
     export APP_NAME
-    
+
     return 0
 }
 
 load_app_for_deployment() {
     local deployment_id="$1"
     local base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
-    
+
     if [ -z "$deployment_id" ]; then
         log_error "Deployment ID is required"
         return 1
     fi
-    
+
     local state_dir="${STATE_DIR:-$base_dir/$deployment_id}"
     if [ ! -f "$state_dir/state.yaml" ]; then
         log_error "Deployment state not found for: $deployment_id"
         return 1
     fi
-    
+
     local app_dir=""
     if command_exists yq; then
         app_dir=$(yq eval '.app_dir // ""' "$state_dir/state.yaml" 2>/dev/null || echo "")
     else
         app_dir=$(grep "^app_dir:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
     fi
-    
+
     if [ -z "$app_dir" ]; then
         local app_name="$APP_NAME"
         if [ -z "$app_name" ]; then
@@ -253,19 +253,19 @@ load_app_for_deployment() {
             fi
         fi
     fi
-    
+
     if [ -z "$app_dir" ] || [ ! -d "$app_dir" ]; then
         log_error "Failed to locate app source for deployment: $deployment_id"
         return 1
     fi
-    
+
     APP_PATH="$app_dir"
     export APP_PATH
-    
+
     if ! load_app "$APP_PATH"; then
         return 1
     fi
-    
+
     return 0
 }
 
@@ -274,17 +274,17 @@ execute_app_command() {
     local command="$1"
     shift
     local args="$@"
-    
+
     # Get deployment context (auto-detect or use current)
     if ! get_deployment_context ""; then
         return 1
     fi
-    
+
     # Load app manifest for this deployment
     if ! load_app_for_deployment "$DEPLOYMENT_ID"; then
         return 1
     fi
-    
+
     # Get command script from app manifest
     SCRIPT_PATH=$(get_app_command_script "$APP_DIR" "$command")
     if [ -z "$SCRIPT_PATH" ]; then
@@ -294,52 +294,52 @@ execute_app_command() {
         log_info "Run 'tfgrid-compose help' to see available commands"
         return 1
     fi
-    
+
     export APP_NAME
-    
+
     # Resolve network-aware IP for this deployment
     vm_ip=$(get_deployment_ip "$DEPLOYMENT_ID")
     if [ -z "$vm_ip" ]; then
         log_error "No IP found in state for $APP_NAME"
         return 1
     fi
-    
+
     # Check if this command should save to context
     MANIFEST="$APP_DIR/tfgrid-compose.yaml"
     SAVE_TO_CONTEXT=$(grep -A 5 "^  $command:" "$MANIFEST" 2>/dev/null | grep "save_to_context:" | awk '{print $2}')
-    
+
     # Check if this command needs TTY allocation (defaults to true for backwards compatibility)
     ALLOCATE_TTY=$(grep -A 5 "^  $command:" "$MANIFEST" 2>/dev/null | grep "allocate_tty:" | awk '{print $2}')
     if [ -z "$ALLOCATE_TTY" ]; then
         ALLOCATE_TTY="true"  # Default to true for backwards compatibility
     fi
-    
+
     # Execute command on VM
     log_info "Executing '$command' on $APP_NAME ($vm_ip)"
     echo ""
-    
+
     if [ -n "$SAVE_TO_CONTEXT" ]; then
         # Capture output to save to context
         OUTPUT=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
             root@$vm_ip "APP_NAME=$APP_NAME $SCRIPT_PATH $args" 2>/dev/null)
         RESULT=$?
-        
+
         if [ $RESULT -eq 0 ] && [ -n "$OUTPUT" ]; then
             # Save to context file
             CONTEXT_FILE="$HOME/.config/tfgrid-compose/context.yaml"
             mkdir -p "$(dirname "$CONTEXT_FILE")"
-            
+
             # Remove old value if exists
             if [ -f "$CONTEXT_FILE" ]; then
                 sed -i "/^$SAVE_TO_CONTEXT:/d" "$CONTEXT_FILE"
             fi
-            
+
             # Add new value
             echo "$SAVE_TO_CONTEXT: $OUTPUT" >> "$CONTEXT_FILE"
-            
+
             log_success "Selected $command: $OUTPUT"
         fi
-        
+
         return $RESULT
     else
         # Conditionally allocate TTY based on metadata
@@ -352,7 +352,7 @@ execute_app_command() {
             ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
                 root@$vm_ip "APP_NAME=$APP_NAME $SCRIPT_PATH $args"
         fi
-        
+
         return $?
     fi
 }
@@ -361,31 +361,31 @@ execute_app_command() {
 resolve_app_path() {
 	local app_input="$1"
 	local quiet="${2:-false}"
-	
+
 	if [ -z "$app_input" ]; then
 		return 1
 	fi
-	
+
 	# If it's a path (contains / or starts with .), return as-is
 	if [[ "$app_input" == */* ]] || [[ "$app_input" == .* ]]; then
 		echo "$app_input"
 		return 0
 	fi
-	
+
 	# Treat as registry app name (no deployment resolution here)
 	local app_name="$app_input"
 	local cached_path="$APP_CACHE_DIR/$app_name"
-	
+
 	if [ -d "$cached_path" ]; then
 		echo "$cached_path"
 		return 0
 	fi
-	
+
 	# Not cached - try to download from registry
 	if [ "$quiet" != "true" ]; then
 		log_info "Looking up $app_name in registry..."
 	fi
-	
+
 	local repo_url=$(get_app_repo "$app_name")
 	if [ -z "$repo_url" ]; then
 		if [ "$quiet" != "true" ]; then
@@ -393,12 +393,12 @@ resolve_app_path() {
 		fi
 		return 1
 	fi
-	
+
 	local app_path=$(get_app "$app_name" "$repo_url")
 	if [ -z "$app_path" ]; then
 		return 1
 	fi
-	
+
 	echo "$app_path"
 	return 0
 }
@@ -432,48 +432,48 @@ case "$COMMAND" in
         fi
         exit 0
         ;;
-    
+
     search)
         # Search registry
         log_command "Search Registry"
-        
+
         QUERY="${1:-}"
         TAG="${2:-}"
-        
+
         if [ -n "$TAG" ] && [ "$1" = "--tag" ]; then
             TAG="$2"
             QUERY=""
         fi
-        
+
         log_info "Available apps:"
         echo ""
-        
+
         if ! search_registry "$QUERY" "$TAG"; then
             log_error "Failed to search registry"
             exit 1
         fi
-        
+
         echo ""
         log_info "Deploy an app: tfgrid-compose up <app-name>"
         log_info "Multi-deploy: tfgrid-compose up <app> --name=<suffix>"
         exit 0
         ;;
-        
+
     ps)
         cmd_ps "$@"
         exit $?
         ;;
-    
+
     select)
         cmd_select "$@"
         exit $?
         ;;
-        
+
     unselect)
         cmd_unselect "$@"
         exit $?
         ;;
-    
+
     unselect-project)
         cmd_unselect_project "$@"
         exit $?
@@ -488,7 +488,7 @@ case "$COMMAND" in
         cmd_commands "$@"
         exit $?
         ;;
-        
+
     up)
         # Deploy command
         log_command "Deploy Application"
@@ -532,7 +532,7 @@ case "$COMMAND" in
             fi
             log_info "Using active app: $APP_INPUT"
         fi
-        
+
         # Determine if input is app name or path, or if we're resuming
         APP_NAME=""
         APP_PATH=""
@@ -600,12 +600,12 @@ case "$COMMAND" in
                 log_success "Using app: $APP_NAME"
             fi
         fi
-        
+
         # Validate app path
         if ! validate_app_path "$APP_PATH"; then
             exit 1
         fi
-        
+
         # Parse deployment flags FIRST (before checking deployment status)
         shift  # Remove app name
         PATTERN_NAME=""
@@ -627,7 +627,7 @@ case "$COMMAND" in
         CUSTOM_SIZE=""
         CUSTOM_DISK_TYPE=""
         CUSTOM_IPV4=""
-        
+
         while [[ $# -gt 0 ]]; do
             case $1 in
                 --pattern)
@@ -806,7 +806,7 @@ case "$COMMAND" in
                     ;;
             esac
         done
-        
+
         # Export for use in orchestrator
         export INTERACTIVE_MODE
         export TFGRID_OUTPUT_FORMAT="$OUTPUT_FORMAT"
@@ -824,16 +824,16 @@ case "$COMMAND" in
         export CUSTOM_SIZE
         export CUSTOM_DISK_TYPE
         export CUSTOM_IPV4
-        
+
         # Handle cache refresh logic
         # --force implies --refresh unless --no-refresh is specified
         if [ "$FORCE_DEPLOY" = "true" ] && [ "$NO_REFRESH" != "true" ]; then
             REFRESH_CACHE=true
         fi
-        
+
         # Track if we destroyed a deployment (for cache refresh)
         DESTROYED_DEPLOYMENT=false
-        
+
         # Check if app is already deployed or has stale state
         if is_app_deployed "$APP_NAME"; then
             # Check if deployment is healthy
@@ -854,13 +854,13 @@ case "$COMMAND" in
                 else
                     # Auto-generate unique deployment name instead of erroring
                     UNIQUE_APP_NAME=$(generate_unique_deployment_name "$APP_NAME" "$DEPLOYMENT_NAME")
-                    
+
                     if [ "$UNIQUE_APP_NAME" != "$APP_NAME" ]; then
                         log_info "Using deployment name: $UNIQUE_APP_NAME"
                         log_info "First deployment: $APP_NAME"
                         log_info "This deployment: $UNIQUE_APP_NAME"
                     fi
-                    
+
                     # Update APP_NAME for rest of deployment
                     APP_NAME="$UNIQUE_APP_NAME"
                     export APP_NAME
@@ -868,7 +868,7 @@ case "$COMMAND" in
             else
                 # Deployment exists but unhealthy - clean stale state
                 log_warning "Found unhealthy deployment state for $APP_NAME"
-                
+
                 # Check if force deploy is requested
                 if [ "$FORCE_DEPLOY" = "true" ]; then
                     log_info "Force deploy requested, cleaning unhealthy state..."
@@ -886,17 +886,17 @@ case "$COMMAND" in
                 fi
             fi
         fi
-        
+
         # Refresh app cache if requested and we destroyed something
         # Pull latest code from repository
         if [ "$REFRESH_CACHE" = "true" ] && [ "$DESTROYED_DEPLOYMENT" = "true" ]; then
             log_info "Refreshing app cache..."
-            
+
             if [ "$FORCE_DEPLOY" = "true" ]; then
                 # For --force, delete and re-clone to guarantee fresh code
                 log_info "Force deploy: removing cached app for fresh download..."
                 clean_app_cache "$APP_NAME"
-                
+
                 # Re-download fresh from registry
                 log_info "Downloading fresh app from registry..."
                 APP_PATH=$(get_app "$APP_NAME" "$REPO_URL")
@@ -915,11 +915,11 @@ case "$COMMAND" in
             update_cached_app "$APP_NAME" || true  # Don't fail if update fails, use existing cache
             echo ""
         fi
-        
+
         # Initialize deployment state for this app
         init_deployment_state "$APP_NAME"
         export_app_state_dir "$APP_NAME"
-        
+
         # Load app
         if ! load_app "$APP_PATH"; then
             exit 1
@@ -927,7 +927,7 @@ case "$COMMAND" in
 
         # Export app origin (registry vs custom path) for orchestrator/registry
         export APP_ORIGIN
-        
+
         # Determine pattern to use
         if [ -z "$PATTERN_NAME" ]; then
             PATTERN_NAME=$(get_recommended_pattern)
@@ -941,59 +941,59 @@ case "$COMMAND" in
 
         # Export pattern name for error handling
         export PATTERN_NAME
-        
+
         # Load pattern
         if ! load_pattern "$PATTERN_NAME"; then
             exit 1
         fi
-        
+
         # Check compatibility
         if ! check_pattern_compatibility "$PATTERN_NAME"; then
             exit 1
         fi
-        
+
         # Validate app structure
         if ! validate_app_structure; then
             exit 1
         fi
-        
+
         # Validate pattern requirements
         if ! validate_pattern_requirements; then
             exit 1
         fi
-        
+
         echo ""
-        
+
         # Load preferences for deployment (before validation)
         export_for_deployment
-        
+
         # Validate network prerequisites based on manifest config
         main_network=$(yaml_get "$APP_MANIFEST" "network.main")
         inter_node=$(yaml_get "$APP_MANIFEST" "network.inter_node")
         mode=$(yaml_get "$APP_MANIFEST" "network.mode")
-        
+
         if ! validate_network_prerequisites "$main_network" "$inter_node" "$mode"; then
             log_error "Network validation failed"
             exit 1
         fi
-        
+
         echo ""
         log_success "All validations passed! Starting deployment..."
         echo ""
-        
+
         # Deploy the app
         if ! deploy_app; then
             log_error "Deployment failed"
             exit 1
         fi
-        
+
         exit 0
         ;;
-        
+
     inspect)
         # Docker-style deployment inspection
         DEPLOYMENT_ID="${1:-}"
-        
+
         if [ -z "$DEPLOYMENT_ID" ]; then
             echo ""
             echo "Usage: tfgrid-compose inspect <deployment-id>"
@@ -1003,14 +1003,14 @@ case "$COMMAND" in
             echo "Get deployment ID from: tfgrid-compose ps"
             exit 1
         fi
-        
+
         log_info "TFGrid Compose v$VERSION - Deployment Inspection"
         echo ""
-        
+
         # Resolve deployment ID or app name to actual ID with enhanced resolution
         RESOLVED_DEPLOYMENT=$(resolve_deployment "$DEPLOYMENT_ID" 2>/dev/null)
         RESOLVE_RESULT=$?
-        
+
         case $RESOLVE_RESULT in
             0)
                 # Single match found
@@ -1021,36 +1021,36 @@ case "$COMMAND" in
                 echo ""
                 echo "📱 Multiple deployments found for: $DEPLOYMENT_ID"
                 echo ""
-                
+
                 # Parse ambiguous results and show options
                 local IFS=$'\n'
                 local options=($RESOLVED_DEPLOYMENT)
                 local deployment_info=()
-                
+
                 for i in "${!options[@]}"; do
                     local deployment_id="${options[$i]}"
                     local details=$(get_deployment_by_id "$deployment_id" 2>/dev/null)
-                    
+
                     if [ -n "$details" ]; then
                         local app_name=$(echo "$details" | grep "app_name:" | awk '{print $2}')
                         local vm_ip=$(echo "$details" | grep "vm_ip:" | awk '{print $2}')
                         local created_at=$(echo "$details" | grep "created_at:" | awk '{print $2}')
                         local age=$(calculate_deployment_age "$created_at" 2>/dev/null || echo "unknown")
-                        
+
                         echo "$((i+1))) $deployment_id $app_name ($vm_ip) - $age"
                         deployment_info+=("$deployment_id")
                     fi
                 done
-                
+
                 echo ""
                 read -p "Select deployment [1-${#options[@]}]: " choice
-                
+
                 # Validate choice
                 if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#options[@]} ]; then
                     log_error "Invalid choice"
                     exit 1
                 fi
-                
+
                 # Get selected deployment
                 RESOLVED_ID="${deployment_info[$((choice-1))]}"
                 echo ""
@@ -1063,30 +1063,30 @@ case "$COMMAND" in
                 exit 1
                 ;;
         esac
-        
+
         echo "Deployment Details:"
         echo "==================="
         echo ""
-        
+
         # Get deployment details
         DEPLOYMENT_DETAILS=$(get_deployment_by_id "$RESOLVED_ID")
-        
+
         if [ -z "$DEPLOYMENT_DETAILS" ]; then
             log_error "Deployment details not found for ID: $RESOLVED_ID"
             exit 1
         fi
-        
+
         # Display deployment details
         if command_exists yq; then
             echo "$DEPLOYMENT_DETAILS" | yq eval '.' -
         else
             echo "$DEPLOYMENT_DETAILS"
         fi
-        
+
         echo ""
         echo "State Directory: $HOME/.config/tfgrid-compose/state/$RESOLVED_ID"
         echo ""
-        
+
         # Show state.yaml if it exists
         local state_file="$HOME/.config/tfgrid-compose/state/$RESOLVED_ID/state.yaml"
         if [ -f "$state_file" ]; then
@@ -1098,15 +1098,15 @@ case "$COMMAND" in
                 cat "$state_file"
             fi
         fi
-        
+
         exit 0
         ;;
-        
+
     down)
         # Down command
         log_info "TFGrid Compose v$VERSION"
         echo ""
-        
+
         # Try to get app path from argument or context
         APP_PATH="$1"
         if [ -z "$APP_PATH" ]; then
@@ -1118,12 +1118,12 @@ case "$COMMAND" in
             fi
             log_info "Using app from context: $APP_PATH"
         fi
-        
+
         # If it's a name (not a path), look up in registry
         if [[ ! "$APP_PATH" =~ ^\.?/ ]] && [ ! -d "$APP_PATH" ]; then
             APP_NAME="$APP_PATH"
             log_info "Looking up $APP_NAME in registry..."
-            
+
             # Check cache first
             if is_app_cached "$APP_NAME"; then
                 APP_PATH="$APPS_CACHE_DIR/$APP_NAME"
@@ -1135,7 +1135,7 @@ case "$COMMAND" in
                     log_error "App not found in registry: $APP_NAME"
                     exit 1
                 fi
-                
+
                 APP_PATH=$(get_app "$APP_NAME" "$REPO_URL")
                 if [ $? -ne 0 ]; then
                     exit 1
@@ -1143,50 +1143,50 @@ case "$COMMAND" in
                 log_success "Using app: $APP_NAME"
             fi
         fi
-        
+
         # Validate app path
         if ! validate_app_path "$APP_PATH"; then
             exit 1
         fi
-        
+
         # Check deployment exists
         if ! validate_deployment_exists; then
             exit 1
         fi
-        
+
         # Load mnemonic (needed for Terraform destroy)
         if ! load_mnemonic; then
             exit 1
         fi
         log_success "ThreeFold mnemonic configured"
         echo ""
-        
+
         # Load app to get configuration (needed for Terraform variables)
         if ! load_app "$APP_PATH"; then
             exit 1
         fi
-        
+
         # Get pattern from manifest
         PATTERN_NAME=$(get_recommended_pattern)
         if [ -z "$PATTERN_NAME" ]; then
             log_error "No pattern specified and no recommended pattern in manifest"
             exit 1
         fi
-        
+
         # Load pattern (needed for generate_terraform_config)
         if ! load_pattern "$PATTERN_NAME"; then
             exit 1
         fi
-        
+
         # Parse manifest and export Terraform variables (but don't copy infrastructure)
         # Just parse config to export TF_VAR_* environment variables
         log_info "Loading configuration from manifest..."
-        
+
         # Parse nodes, resources, gateway, network config (no 'local' - not in function)
         gateway_nodes=$(yaml_get "$APP_MANIFEST" "nodes.gateway")
         backend_nodes=$(yaml_get "$APP_MANIFEST" "nodes.backend")
         vm_node=$(yaml_get "$APP_MANIFEST" "nodes.vm")
-        
+
         if [ -n "$gateway_nodes" ]; then
             if [[ "$gateway_nodes" == "["* ]]; then
                 export TF_VAR_gateway_node=$(echo "$gateway_nodes" | tr -d '[]' | awk '{print $1}' | tr -d ',')
@@ -1194,10 +1194,10 @@ case "$COMMAND" in
                 export TF_VAR_gateway_node="$gateway_nodes"
             fi
         fi
-        
+
         [ -n "$backend_nodes" ] && export TF_VAR_internal_nodes="$backend_nodes"
         [ -n "$vm_node" ] && export TF_VAR_vm_node="$vm_node"
-        
+
         # Parse resources
         gateway_cpu=$(yaml_get "$APP_MANIFEST" "resources.gateway.cpu")
         gateway_mem=$(yaml_get "$APP_MANIFEST" "resources.gateway.memory")
@@ -1208,7 +1208,7 @@ case "$COMMAND" in
         vm_cpu=$(yaml_get "$APP_MANIFEST" "resources.vm.cpu")
         vm_mem=$(yaml_get "$APP_MANIFEST" "resources.vm.memory")
         vm_disk=$(yaml_get "$APP_MANIFEST" "resources.vm.disk")
-        
+
         [ -n "$gateway_cpu" ] && export TF_VAR_gateway_cpu="$gateway_cpu"
         [ -n "$gateway_mem" ] && export TF_VAR_gateway_mem="$gateway_mem"
         [ -n "$gateway_disk" ] && export TF_VAR_gateway_disk="$gateway_disk"
@@ -1218,24 +1218,24 @@ case "$COMMAND" in
         [ -n "$vm_cpu" ] && export TF_VAR_vm_cpu="$vm_cpu"
         [ -n "$vm_mem" ] && export TF_VAR_vm_mem="$vm_mem"
         [ -n "$vm_disk" ] && export TF_VAR_vm_disk="$vm_disk"
-        
+
         # Parse network
         main_network=$(yaml_get "$APP_MANIFEST" "network.main")
         export MAIN_NETWORK="${main_network:-wireguard}"
         export TF_VAR_main_network="$MAIN_NETWORK"
         export TF_VAR_tfgrid_network="${TF_VAR_tfgrid_network:-main}"
-        
+
         log_success "Configuration loaded from manifest"
-        
+
         # Destroy the deployment
         if ! destroy_deployment; then
             log_error "Destroy failed"
             exit 1
         fi
-        
+
         # Cleanup deployment status tracking
         cleanup_deployment "$APP_NAME"
-        
+
         # Auto-unselect if this was the active app
         CURRENT_APP_FILE="$HOME/.config/tfgrid-compose/current-app"
         if [ -f "$CURRENT_APP_FILE" ]; then
@@ -1246,15 +1246,15 @@ case "$COMMAND" in
                 log_info "Unselected (app no longer deployed)"
             fi
         fi
-        
+
         exit 0
         ;;
-        
+
     clean)
         # Clean up state directory
         log_info "TFGrid Compose v$VERSION"
         echo ""
-        
+
         if [ -d "$STATE_DIR" ]; then
             log_warning "This will remove the local state directory: $STATE_DIR"
             read -p "Are you sure? (y/N): " -n 1 -r
@@ -1270,7 +1270,7 @@ case "$COMMAND" in
         fi
         exit 0
         ;;
-        
+
     logs)
         # Logs command - context-based precedence
         # If app is selected and has 'logs' command, use app version
@@ -1278,90 +1278,179 @@ case "$COMMAND" in
             execute_app_command "logs" "$@"
             exit $?
         fi
-        
+
         # Use built-in logs (pattern-based) on a deployment
         APP_INPUT="$1"
         if ! get_deployment_context "$APP_INPUT"; then
             exit 1
         fi
-        
+
         if ! load_app_for_deployment "$DEPLOYMENT_ID"; then
             exit 1
         fi
-        
+
         # Get pattern from manifest (recommended pattern)
         PATTERN_NAME=$(get_recommended_pattern)
-        
+
         if [ -z "$PATTERN_NAME" ]; then
             log_error "Cannot determine pattern for app"
             exit 1
         fi
-        
+
         # Load pattern
         if ! load_pattern "$PATTERN_NAME"; then
             exit 1
         fi
-        
+
         # Execute pattern logs script
         execute_pattern_script "logs"
         ;;
-        
+
     status)
         # Status command (deployment-centric)
         APP_INPUT="$1"
         if ! get_deployment_context "$APP_INPUT"; then
             exit 1
         fi
-        
+
         if ! load_app_for_deployment "$DEPLOYMENT_ID"; then
             exit 1
         fi
-        
+
         # Get pattern
         PATTERN_NAME=$(get_recommended_pattern)
-        
+
         if [ -z "$PATTERN_NAME" ]; then
             log_error "Cannot determine pattern for app"
             exit 1
         fi
-        
+
         # Load pattern
         if ! load_pattern "$PATTERN_NAME"; then
             exit 1
         fi
-        
+
         # Execute pattern status script
         execute_pattern_script "status"
         ;;
-        
+
     ssh|connect)
         # SSH command (deployment-centric)
-        APP_INPUT="$1"
+        # Parse flags
+        DIRECT_MODE=false
+        APP_INPUT=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --direct|-d)
+                    DIRECT_MODE=true
+                    shift
+                    ;;
+                *)
+                    APP_INPUT="$1"
+                    shift
+                    ;;
+            esac
+        done
+
+        # Direct mode: bypass all validation, get IP directly from registry
+        # Useful for failed deployments where state directory may not exist
+        if [ "$DIRECT_MODE" = "true" ]; then
+            if [ -z "$APP_INPUT" ]; then
+                log_error "Direct mode requires deployment ID or app name"
+                log_info "Usage: tfgrid-compose ssh --direct <deployment-id>"
+                exit 1
+            fi
+
+            # Try to find deployment in registry (supports partial IDs)
+            REGISTRY_FILE="$HOME/.config/tfgrid-compose/deployments.yaml"
+            if [ ! -f "$REGISTRY_FILE" ]; then
+                log_error "No deployments registry found"
+                exit 1
+            fi
+
+            # Find matching deployment (partial ID or app name)
+            DEPLOYMENT_ID=""
+            VM_IP=""
+            MYCELIUM_IP=""
+
+            if command_exists yq; then
+                # Try exact deployment ID match first
+                if yq eval ".deployments.\"$APP_INPUT\"" "$REGISTRY_FILE" 2>/dev/null | grep -q "app_name"; then
+                    DEPLOYMENT_ID="$APP_INPUT"
+                else
+                    # Try partial ID match
+                    DEPLOYMENT_ID=$(yq eval '.deployments | keys | .[]' "$REGISTRY_FILE" 2>/dev/null | grep "^$APP_INPUT" | head -1)
+
+                    # Try app name match if no ID match
+                    if [ -z "$DEPLOYMENT_ID" ]; then
+                        DEPLOYMENT_ID=$(yq eval ".deployments | to_entries | .[] | select(.value.app_name == \"$APP_INPUT\") | .key" "$REGISTRY_FILE" 2>/dev/null | head -1)
+                    fi
+                fi
+
+                if [ -n "$DEPLOYMENT_ID" ]; then
+                    VM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".vm_ip" "$REGISTRY_FILE" 2>/dev/null)
+                    MYCELIUM_IP=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".mycelium_ip" "$REGISTRY_FILE" 2>/dev/null)
+                    APP_NAME=$(yq eval ".deployments.\"$DEPLOYMENT_ID\".app_name" "$REGISTRY_FILE" 2>/dev/null)
+                fi
+            else
+                log_error "yq is required for direct mode"
+                exit 1
+            fi
+
+            if [ -z "$DEPLOYMENT_ID" ]; then
+                log_error "Deployment not found: $APP_INPUT"
+                log_info "Use 'tfgrid-compose ps --all' to see all deployments"
+                exit 1
+            fi
+
+            if [ -z "$VM_IP" ] && [ -z "$MYCELIUM_IP" ]; then
+                log_error "No IP addresses found for deployment: $DEPLOYMENT_ID"
+                exit 1
+            fi
+
+            # Prefer mycelium if available, otherwise use VM IP
+            if [ -n "$MYCELIUM_IP" ] && [ "$MYCELIUM_IP" != "null" ]; then
+                CONNECT_IP="$MYCELIUM_IP"
+                log_info "Direct SSH to $APP_NAME ($DEPLOYMENT_ID) via mycelium..."
+            else
+                CONNECT_IP="$VM_IP"
+                log_info "Direct SSH to $APP_NAME ($DEPLOYMENT_ID)..."
+            fi
+
+            echo ""
+            ssh -o LogLevel=ERROR \
+                -o StrictHostKeyChecking=no \
+                -o UserKnownHostsFile=/dev/null \
+                -o ConnectTimeout=10 \
+                "root@$CONNECT_IP"
+            exit $?
+        fi
+
         if ! get_deployment_context "$APP_INPUT"; then
             exit 1
         fi
-        
+
         if ! load_app_for_deployment "$DEPLOYMENT_ID"; then
             exit 1
         fi
-        
+
         # Get pattern
         PATTERN_NAME=$(get_recommended_pattern)
-        
+
         if [ -z "$PATTERN_NAME" ]; then
             log_error "Cannot determine pattern for app"
             exit 1
         fi
-        
+
         # Load pattern
         if ! load_pattern "$PATTERN_NAME"; then
             exit 1
         fi
-        
+
         # Execute pattern connect script
         execute_pattern_script "connect"
         ;;
-        
+
 address)
     # Address command - show deployment addresses
     log_command "Deployment Addresses"
@@ -1638,24 +1727,24 @@ address)
     echo "   Run: tfgrid-compose ps"
     exit 0
     ;;
-        
+
     init)
         # Initialize app configuration
         if [ -z "$1" ]; then
             log_error "Usage: tfgrid-compose init <app>"
             exit 1
         fi
-        
+
         APP_PATH="$1"
-        
+
         log_info "TFGrid Compose v$VERSION - Initialize Configuration"
         echo ""
-        
+
         # Load app
         if ! load_app "$APP_PATH"; then
             exit 1
         fi
-        
+
         # Check if .env already exists
         if [ -f "$APP_DIR/.env" ]; then
             read -p "⚠️  .env already exists. Overwrite? (y/N): " -n 1 -r
@@ -1665,7 +1754,7 @@ address)
                 exit 0
             fi
         fi
-        
+
         echo "📡 ThreeFold Grid Configuration"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         read -p "Node ID for VM: " NODE_ID
@@ -1673,36 +1762,36 @@ address)
             log_error "Node ID is required"
             exit 1
         fi
-        
+
         read -p "TFGrid Network (main/test/dev) [main]: " NETWORK
         NETWORK=${NETWORK:-main}
-        
+
         echo ""
         echo "🔧 VM Resources"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        
+
         # Get recommended resources from app
         REC_CPU=$(get_app_resource "cpu" "recommended")
         REC_MEM=$(get_app_resource "memory" "recommended")
         REC_DISK=$(get_app_resource "disk" "recommended")
-        
+
         read -p "CPU cores [${REC_CPU:-4}]: " CPU
         CPU=${CPU:-${REC_CPU:-4}}
         read -p "Memory (MB) [${REC_MEM:-8192}]: " MEM
         MEM=${MEM:-${REC_MEM:-8192}}
         read -p "Disk (GB) [${REC_DISK:-100}]: " DISK
         DISK=${DISK:-${REC_DISK:-100}}
-        
+
         echo ""
         echo "🌐 Network Connectivity"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         read -p "Connectivity (wireguard/mycelium) [wireguard]: " CONN
         CONN=${CONN:-wireguard}
-        
+
         # Git config from local
         GIT_NAME=$(git config --global user.name 2>/dev/null || echo "")
         GIT_EMAIL=$(git config --global user.email 2>/dev/null || echo "")
-        
+
         echo ""
         echo "🔐 Git Configuration"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -1720,10 +1809,10 @@ address)
             read -p "Git name: " GIT_NAME
             read -p "Git email: " GIT_EMAIL
         fi
-        
+
         read -p "GitHub username (optional) [$GIT_NAME]: " GITHUB_USER
         GITHUB_USER=${GITHUB_USER:-$GIT_NAME}
-        
+
         # Create .env
         cat > "$APP_DIR/.env" <<EOF
 # TFGrid Compose Configuration for $APP_NAME
@@ -1743,11 +1832,11 @@ export CONNECTIVITY_NETWORK="$CONN"
 export GIT_USER_NAME="$GIT_NAME"
 export GIT_USER_EMAIL="$GIT_EMAIL"
 EOF
-        
+
         if [ -n "$GITHUB_USER" ]; then
             echo "export GITHUB_USER=\"$GITHUB_USER\"" >> "$APP_DIR/.env"
         fi
-        
+
         echo ""
         log_success "Configuration saved to $APP_DIR/.env"
         echo ""
@@ -1759,12 +1848,12 @@ EOF
         echo "  2. Deploy your app:"
         echo "     tfgrid-compose up $APP_NAME"
         ;;
-        
+
     exec)
         # Execute command on deployed VM
         # Usage: tfgrid-compose exec [deployment-id|app-name] <command> [args...]
         # If target is not specified, uses current deployment context
-        
+
         if [ -z "$1" ]; then
             log_error "No command specified"
             log_info "Usage: tfgrid-compose exec [deployment|app] <command> [args...]"
@@ -1816,19 +1905,19 @@ EOF
 
         exit $?
         ;;
-        
+
     patterns)
         # List available patterns
         log_info "TFGrid Compose v$VERSION"
         echo ""
         list_patterns
         ;;
-        
+
     update)
         cmd_update "$@"
         exit $?
         ;;
-        
+
     cache)
         cmd_cache "$@"
         exit $?
@@ -2048,15 +2137,15 @@ EOF
     docs)
         # Documentation command
         DOCS_URL="https://docs.tfgrid.studio"
-        
+
         echo ""
         echo "📚 TFGrid Compose Documentation"
         echo ""
         echo "→ $DOCS_URL"
         echo ""
-        
+
         sleep 0.5
-        
+
         # Try to open in browser
         if command -v xdg-open &> /dev/null; then
             echo "Opening in browser..."
@@ -2079,7 +2168,7 @@ EOF
     shortcut)
         # Shortcut command - create/manage command shortcuts
         SHORTCUT_NAME="$1"
-        
+
         # Handle subcommands
         case "$SHORTCUT_NAME" in
             --list|-l)
@@ -2087,7 +2176,7 @@ EOF
                 echo ""
                 echo "🔗 Active shortcuts:"
                 echo ""
-                
+
                 FOUND=false
                 for file in "$HOME/.local/bin"/*; do
                     if [ -L "$file" ] && [ "$(readlink "$file")" = "$HOME/.local/bin/tfgrid-compose" ]; then
@@ -2095,14 +2184,14 @@ EOF
                         FOUND=true
                     fi
                 done
-                
+
                 if [ "$FOUND" = "false" ]; then
                     echo "  (no shortcuts configured)"
                 fi
                 echo ""
                 exit 0
                 ;;
-                
+
             --remove|-r)
                 # Remove shortcut
                 REMOVE_NAME="$2"
@@ -2110,34 +2199,34 @@ EOF
                     log_error "Usage: tfgrid-compose shortcut --remove <name>"
                     exit 1
                 fi
-                
+
                 # Don't allow removing tfgrid-compose itself
                 if [ "$REMOVE_NAME" = "tfgrid-compose" ]; then
                     log_error "Cannot remove tfgrid-compose (main command)"
                     exit 1
                 fi
-                
+
                 SHORTCUT_PATH="$HOME/.local/bin/$REMOVE_NAME"
-                
+
                 if [ ! -L "$SHORTCUT_PATH" ]; then
                     log_error "Shortcut '$REMOVE_NAME' does not exist"
                     exit 1
                 fi
-                
+
                 if [ "$(readlink "$SHORTCUT_PATH")" != "$HOME/.local/bin/tfgrid-compose" ]; then
                     log_error "'$REMOVE_NAME' is not a tfgrid-compose shortcut"
                     exit 1
                 fi
-                
+
                 rm "$SHORTCUT_PATH"
                 log_success "Removed shortcut: $REMOVE_NAME"
                 exit 0
                 ;;
-                
+
             --default|-d)
                 # Reset to default (tfgrid)
                 SHORTCUT_PATH="$HOME/.local/bin/tfgrid"
-                
+
                 if [ -L "$SHORTCUT_PATH" ] && [ "$(readlink "$SHORTCUT_PATH")" = "$HOME/.local/bin/tfgrid-compose" ]; then
                     log_info "Default shortcut 'tfgrid' already exists"
                 else
@@ -2146,7 +2235,7 @@ EOF
                 fi
                 exit 0
                 ;;
-                
+
             --help|-h)
                 # Show help
                 echo ""
@@ -2168,13 +2257,13 @@ EOF
                 echo ""
                 exit 0
                 ;;
-                
+
             "")
                 # Interactive mode (no arguments)
                 echo ""
                 echo "🔗 Shortcut Management (Interactive)"
                 echo ""
-                
+
                 # Show current shortcuts
                 echo "Current shortcuts:"
                 FOUND=false
@@ -2184,12 +2273,12 @@ EOF
                         FOUND=true
                     fi
                 done
-                
+
                 if [ "$FOUND" = "false" ]; then
                     echo "  (none configured)"
                 fi
                 echo ""
-                
+
                 # Interactive menu
                 echo "What would you like to do?"
                 echo "  1) Create a new shortcut"
@@ -2198,34 +2287,34 @@ EOF
                 echo "  4) Reset to default (tfgrid)"
                 echo "  5) Exit"
                 echo ""
-                
+
                 read -p "Enter choice [1-5]: " choice
-                
+
                 case $choice in
                     1)
                         # Create shortcut
                         echo ""
                         echo "Popular choices: tf, grid, tfc"
                         read -p "Enter shortcut name: " new_name
-                        
+
                         if [ -z "$new_name" ]; then
                             log_error "No name provided"
                             exit 1
                         fi
-                        
+
                         # Validate shortcut name
                         if [[ ! "$new_name" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]]; then
                             log_error "Invalid shortcut name: $new_name"
                             log_info "Name must start with a letter and contain only letters, numbers, hyphens, and underscores"
                             exit 1
                         fi
-                        
+
                         # Don't allow overwriting tfgrid-compose itself
                         if [ "$new_name" = "tfgrid-compose" ]; then
                             log_error "Cannot use 'tfgrid-compose' as shortcut name"
                             exit 1
                         fi
-                        
+
                         # Check if command already exists in PATH
                         if command -v "$new_name" &> /dev/null; then
                             EXISTING_CMD=$(command -v "$new_name")
@@ -2245,9 +2334,9 @@ EOF
                                 fi
                             fi
                         fi
-                        
+
                         SHORTCUT_PATH="$HOME/.local/bin/$new_name"
-                        
+
                         # Warn if shortcut already exists
                         if [ -e "$SHORTCUT_PATH" ]; then
                             if [ -L "$SHORTCUT_PATH" ] && [ "$(readlink "$SHORTCUT_PATH")" = "$HOME/.local/bin/tfgrid-compose" ]; then
@@ -2259,7 +2348,7 @@ EOF
                                 exit 1
                             fi
                         fi
-                        
+
                         # Create symlink
                         ln -s "$HOME/.local/bin/tfgrid-compose" "$SHORTCUT_PATH"
                         echo ""
@@ -2268,47 +2357,47 @@ EOF
                         log_info "You can now use: $new_name <command>"
                         echo ""
                         ;;
-                        
+
                     2)
                         # Remove shortcut
                         echo ""
                         read -p "Enter shortcut name to remove: " remove_name
-                        
+
                         if [ -z "$remove_name" ]; then
                             log_error "No name provided"
                             exit 1
                         fi
-                        
+
                         # Don't allow removing tfgrid-compose itself
                         if [ "$remove_name" = "tfgrid-compose" ]; then
                             log_error "Cannot remove tfgrid-compose (main command)"
                             exit 1
                         fi
-                        
+
                         SHORTCUT_PATH="$HOME/.local/bin/$remove_name"
-                        
+
                         if [ ! -L "$SHORTCUT_PATH" ]; then
                             log_error "Shortcut '$remove_name' does not exist"
                             exit 1
                         fi
-                        
+
                         if [ "$(readlink "$SHORTCUT_PATH")" != "$HOME/.local/bin/tfgrid-compose" ]; then
                             log_error "'$remove_name' is not a tfgrid-compose shortcut"
                             exit 1
                         fi
-                        
+
                         rm "$SHORTCUT_PATH"
                         echo ""
                         log_success "Removed shortcut: $remove_name"
                         echo ""
                         ;;
-                        
+
                     3)
                         # List shortcuts (detailed)
                         echo ""
                         echo "🔗 Active shortcuts:"
                         echo ""
-                        
+
                         FOUND=false
                         for file in "$HOME/.local/bin"/*; do
                             if [ -L "$file" ] && [ "$(readlink "$file")" = "$HOME/.local/bin/tfgrid-compose" ]; then
@@ -2316,18 +2405,18 @@ EOF
                                 FOUND=true
                             fi
                         done
-                        
+
                         if [ "$FOUND" = "false" ]; then
                             echo "  (no shortcuts configured)"
                         fi
                         echo ""
                         ;;
-                        
+
                     4)
                         # Reset to default
                         echo ""
                         SHORTCUT_PATH="$HOME/.local/bin/tfgrid"
-                        
+
                         if [ -L "$SHORTCUT_PATH" ] && [ "$(readlink "$SHORTCUT_PATH")" = "$HOME/.local/bin/tfgrid-compose" ]; then
                             log_info "Default shortcut 'tfgrid' already exists"
                         else
@@ -2336,7 +2425,7 @@ EOF
                         fi
                         echo ""
                         ;;
-                        
+
                     5)
                         # Exit
                         echo ""
@@ -2344,16 +2433,16 @@ EOF
                         echo ""
                         exit 0
                         ;;
-                        
+
                     *)
                         log_error "Invalid choice"
                         exit 1
                         ;;
                 esac
-                
+
                 exit 0
                 ;;
-                
+
             *)
                 # Create new shortcut
                 if [ -z "$SHORTCUT_NAME" ]; then
@@ -2361,20 +2450,20 @@ EOF
                     log_info "Try: tfgrid-compose shortcut --help"
                     exit 1
                 fi
-                
+
                 # Validate shortcut name
                 if [[ ! "$SHORTCUT_NAME" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]]; then
                     log_error "Invalid shortcut name: $SHORTCUT_NAME"
                     log_info "Name must start with a letter and contain only letters, numbers, hyphens, and underscores"
                     exit 1
                 fi
-                
+
                 # Don't allow overwriting tfgrid-compose itself
                 if [ "$SHORTCUT_NAME" = "tfgrid-compose" ]; then
                     log_error "Cannot use 'tfgrid-compose' as shortcut name"
                     exit 1
                 fi
-                
+
                 # Check if command already exists in PATH
                 if command -v "$SHORTCUT_NAME" &> /dev/null; then
                     EXISTING_CMD=$(command -v "$SHORTCUT_NAME")
@@ -2394,9 +2483,9 @@ EOF
                         fi
                     fi
                 fi
-                
+
                 SHORTCUT_PATH="$HOME/.local/bin/$SHORTCUT_NAME"
-                
+
                 # Warn if shortcut already exists
                 if [ -e "$SHORTCUT_PATH" ]; then
                     if [ -L "$SHORTCUT_PATH" ] && [ "$(readlink "$SHORTCUT_PATH")" = "$HOME/.local/bin/tfgrid-compose" ]; then
@@ -2408,10 +2497,10 @@ EOF
                         exit 1
                     fi
                 fi
-                
+
                 # Create symlink
                 ln -s "$HOME/.local/bin/tfgrid-compose" "$SHORTCUT_PATH"
-                
+
                 echo ""
                 log_success "Created shortcut: $SHORTCUT_NAME"
                 echo ""
@@ -2419,7 +2508,7 @@ EOF
                 echo ""
                 log_info "Example: $SHORTCUT_NAME up"
                 echo ""
-                
+
                 exit 0
                 ;;
         esac
@@ -2510,9 +2599,9 @@ EOF
         # Try to get latest release version, fallback to known version
         LATEST_RELEASE_URL="https://api.github.com/repos/threefoldtech/tfgrid-sdk-go/releases/latest"
         echo "Fetching latest release info..."
-        
+
         LATEST_VERSION=$(curl -s "$LATEST_RELEASE_URL" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' 2>/dev/null)
-        
+
         if [ -z "$LATEST_VERSION" ]; then
             log_warning "Could not fetch latest release, using fallback version"
             LATEST_VERSION="v0.17.0"  # Known working version as fallback
@@ -2523,19 +2612,19 @@ EOF
 
         # Download the correct tarball containing tfcmd
         DOWNLOAD_URL="https://github.com/threefoldtech/tfgrid-sdk-go/releases/download/${LATEST_VERSION}/tfgrid-sdk-go_Linux_x86_64.tar.gz"
-        
+
         echo "Downloading from: tfgrid-sdk-go_Linux_x86_64.tar.gz"
 
         # Download and extract the tarball
         TMP_DIR="$HOME/.local/share/tfgrid-compose/tmp"
         mkdir -p "$TMP_DIR"
         TMP_FILE="$TMP_DIR/tfgrid-sdk-go.tar.gz"
-        
+
         echo "Downloading tarball..."
         if curl -L -o "$TMP_FILE" "$DOWNLOAD_URL" 2>/dev/null && [ -s "$TMP_FILE" ]; then
             echo "Extracting tfcmd binary..."
             cd "$TMP_DIR"
-            
+
             # Extract the tarball
             if tar -xzf "$TMP_FILE" 2>/dev/null; then
                 # Look for tfcmd binary in extracted files
@@ -2560,7 +2649,7 @@ EOF
 
         # Validate and install the binary
         chmod +x "$TMP_FILE"
-        
+
         # Check if the binary is actually executable
         if ! "$TMP_FILE" --version >/dev/null 2>&1 && ! "$TMP_FILE" --help >/dev/null 2>&1; then
             # Try to see what type of file it is
@@ -2574,7 +2663,7 @@ EOF
             echo "  https://github.com/threefoldtech/tfgrid-sdk-go/releases"
             exit 1
         fi
-        
+
         if [ "$EUID" -eq 0 ]; then
             # Running as root, install directly to system location
             mv "$TMP_FILE" /usr/local/bin/tfcmd
@@ -2590,7 +2679,7 @@ EOF
             LOCAL_BIN="$HOME/.local/bin"
             mkdir -p "$LOCAL_BIN"
             mv "$TMP_FILE" "$LOCAL_BIN/tfcmd"
-            
+
             # Check if already in PATH and add to session if needed
             if [[ ":$PATH:" != *":$LOCAL_BIN:"* ]]; then
                 echo ""
@@ -2604,7 +2693,7 @@ EOF
                 echo ""
                 log_info "$LOCAL_BIN already in PATH"
             fi
-            
+
             echo ""
             log_success "✅ tfcmd installed successfully!"
             echo ""
@@ -2613,13 +2702,13 @@ EOF
             echo "Ready to use! Run:"
             echo "  tfgrid-compose tfcmd-login"
         fi
-        
+
         echo ""
         echo "Next steps:"
         echo "  tfgrid-compose tfcmd-login"
         echo "  tfgrid-compose contracts list"
         ;;
-    
+
     get)
         cmd_get "$@"
         exit $?
@@ -2815,42 +2904,42 @@ EOF
                 ;;
         esac
         ;;
-        
+
     whitelist|wl)
         # Whitelist command - manage preferred nodes/farms
         log_info "TFGrid Compose v$VERSION - Whitelist Management"
         echo ""
-        
+
         cmd_whitelist "$@"
         exit $?
         ;;
-        
+
     blacklist|bl)
         # Blacklist command - manage nodes/farms to avoid
         log_info "TFGrid Compose v$VERSION - Blacklist Management"
         echo ""
-        
+
         cmd_blacklist "$@"
         exit $?
         ;;
-        
+
     preferences|pref)
         # Preferences command - manage general preferences
         log_info "TFGrid Compose v$VERSION - Preferences Management"
         echo ""
-        
+
         cmd_preferences "$@"
         exit $?
         ;;
-        
+
     status)
         # Deployment status management
         log_info "TFGrid Compose v$VERSION - Status Management"
         echo ""
-        
+
         SUBCOMMAND="${1:-list}"
         shift || true
-        
+
         case "$SUBCOMMAND" in
             list|ls)
                 # List all deployments with status (uses Docker-style registry)
@@ -2900,15 +2989,15 @@ EOF
             health|check)
                 # Check health of specific deployment
                 DEPLOYMENT_NAME="$1"
-                
+
                 if [ -z "$DEPLOYMENT_NAME" ]; then
                     log_error "Usage: tfgrid-compose status health <deployment-name>"
                     exit 1
                 fi
-                
+
                 echo "Checking health of: $DEPLOYMENT_NAME"
                 echo ""
-                
+
                 if perform_deployment_health_check "$DEPLOYMENT_NAME"; then
                     echo "✅ Health check passed"
                     exit 0
@@ -2923,15 +3012,15 @@ EOF
             retry)
                 # Retry a failed deployment
                 DEPLOYMENT_NAME="$1"
-                
+
                 if [ -z "$DEPLOYMENT_NAME" ]; then
                     log_error "Usage: tfgrid-compose status retry <deployment-name>"
                     exit 1
                 fi
-                
+
                 echo "Retrying deployment: $DEPLOYMENT_NAME"
                 echo ""
-                
+
                 # Reset status to deploying and retry
                 mark_deployment_deploying "$DEPLOYMENT_NAME"
                 tfgrid-compose up "$DEPLOYMENT_NAME"
@@ -2939,35 +3028,35 @@ EOF
             logs)
                 # Show deployment logs
                 DEPLOYMENT_NAME="$1"
-                
+
                 if [ -z "$DEPLOYMENT_NAME" ]; then
                     log_error "Usage: tfgrid-compose status logs <deployment-name>"
                     exit 1
                 fi
-                
+
                 get_deployment_logs "$DEPLOYMENT_NAME"
                 ;;
             reset)
                 # Reset deployment status
                 DEPLOYMENT_NAME="$1"
-                
+
                 if [ -z "$DEPLOYMENT_NAME" ]; then
                     log_error "Usage: tfgrid-compose status reset <deployment-name>"
                     exit 1
                 fi
-                
+
                 reset_deployment_status "$DEPLOYMENT_NAME"
                 echo "Reset status for deployment: $DEPLOYMENT_NAME"
                 ;;
             show|details)
                 # Show detailed status of specific deployment
                 DEPLOYMENT_NAME="$1"
-                
+
                 if [ -z "$DEPLOYMENT_NAME" ]; then
                     log_error "Usage: tfgrid-compose status show <deployment-name>"
                     exit 1
                 fi
-                
+
                 get_deployment_status_details "$DEPLOYMENT_NAME" | jq '.' || cat
                 ;;
             stats|statistics)
@@ -2992,7 +3081,7 @@ EOF
                 ;;
         esac
         ;;
-        
+
     *)
         # Try to execute as app-specific command
         if execute_app_command "$COMMAND" "$@"; then

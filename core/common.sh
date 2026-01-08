@@ -48,24 +48,24 @@ command_exists() {
 # Check required tools
 check_requirements() {
     local missing=()
-    
+
     # Check for Terraform or OpenTofu (prefer OpenTofu)
     if ! command_exists tofu && ! command_exists terraform; then
         missing+=("terraform/tofu")
     fi
-    
+
     if ! command_exists ansible-playbook; then
         missing+=("ansible")
     fi
-    
+
     if ! command_exists yq; then
         log_warning "yq not found, will use basic YAML parsing"
     fi
-    
+
     if ! command_exists jq; then
         missing+=("jq")
     fi
-    
+
     if [ ${#missing[@]} -gt 0 ]; then
         log_error "Missing required tools: ${missing[*]}"
         log_info "Please install: ${missing[*]}"
@@ -75,7 +75,7 @@ check_requirements() {
         echo "Or visit: https://stedolan.github.io/jq/"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -83,35 +83,35 @@ check_requirements() {
 parse_yaml() {
     local file="$1"
     local prefix="$2"
-    
+
     if [ ! -f "$file" ]; then
         log_error "File not found: $file"
         return 1
     fi
-    
+
     # If yq is available, use it
     if command_exists yq; then
         # yq is available, use it for better parsing
         return 0
     fi
-    
+
     # Basic parsing without yq (fallback)
     while IFS= read -r line; do
         # Skip comments and empty lines
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
         [[ -z "$line" ]] && continue
-        
+
         # Simple key-value parsing
         if [[ "$line" =~ ^[[:space:]]*([a-zA-Z_][a-zA-Z0-9_]*)[[:space:]]*:[[:space:]]*(.+)$ ]]; then
             local key="${BASH_REMATCH[1]}"
             local value="${BASH_REMATCH[2]}"
-            
+
             # Remove quotes
             value="${value#\"}"
             value="${value%\"}"
             value="${value#\'}"
             value="${value%\'}"
-            
+
             # Export as variable
             if [ -n "$prefix" ]; then
                 export "${prefix}_${key}=${value}"
@@ -126,13 +126,13 @@ parse_yaml() {
 yaml_get() {
     local file="$1"
     local key="$2"
-    
+
     if ! command_exists yq; then
         # Fallback: grep-based extraction
         grep "^${key}:" "$file" | sed 's/^[^:]*:[[:space:]]*//' | sed 's/["\047]//g'
         return
     fi
-    
+
     # Use yq for better extraction
     yq eval ".${key}" "$file" 2>/dev/null || echo ""
 }
@@ -194,12 +194,12 @@ parse_disk_to_gb() {
 validate_directory() {
     local dir="$1"
     local name="$2"
-    
+
     if [ ! -d "$dir" ]; then
         log_error "$name directory not found: $dir"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -207,12 +207,12 @@ validate_directory() {
 validate_file() {
     local file="$1"
     local name="$2"
-    
+
     if [ ! -f "$file" ]; then
         log_error "$name file not found: $file"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -234,11 +234,11 @@ get_deployer_root() {
         echo "$DEPLOYER_ROOT"
         return
     fi
-    
+
     # Try to find it from current script
     local source="${BASH_SOURCE[1]}"
     local dir="$(cd -P "$(dirname "$source")" && pwd)"
-    
+
     # Go up until we find patterns/ directory
     while [ "$dir" != "/" ]; do
         if [ -d "$dir/patterns" ]; then
@@ -247,7 +247,7 @@ get_deployer_root() {
         fi
         dir="$(dirname "$dir")"
     done
-    
+
     # Fallback
     echo "$(pwd)"
 }
@@ -255,7 +255,7 @@ get_deployer_root() {
 # Get tfgrid-compose Git commit hash (enhanced with dynamic detection)
 get_tfgrid_compose_git_commit() {
     local deployer_root="$(get_deployer_root)"
-    
+
     # Try dynamic Git detection first
     if [ -d "$deployer_root/.git" ]; then
         cd "$deployer_root"
@@ -266,7 +266,7 @@ get_tfgrid_compose_git_commit() {
             return 0
         fi
     fi
-    
+
     # Try reading from .version file (saved during make install)
     local version_cache="$deployer_root/.version"
     if [ -f "$version_cache" ]; then
@@ -276,7 +276,7 @@ get_tfgrid_compose_git_commit() {
             return 0
         fi
     fi
-    
+
     # Execute VERSION script (for backwards compatibility and dynamic detection)
     local version_file="$deployer_root/VERSION"
     if [ -f "$version_file" ] && [ -x "$version_file" ]; then
@@ -286,14 +286,14 @@ get_tfgrid_compose_git_commit() {
             return 0
         fi
     fi
-    
+
     echo "unknown"
 }
 
 # Get latest tfgrid-compose version from GitHub
 get_latest_tfgrid_compose_version() {
     local latest_commit=""
-    
+
     # Try to get latest commit from GitHub API
     if command_exists curl; then
         latest_commit=$(curl -s "https://api.github.com/repos/tfgrid-studio/tfgrid-compose/commits/main" 2>/dev/null | \
@@ -302,12 +302,12 @@ get_latest_tfgrid_compose_version() {
         latest_commit=$(wget -q -O - "https://api.github.com/repos/tfgrid-studio/tfgrid-compose/commits/main" 2>/dev/null | \
             grep '"sha"' | sed 's/.*"sha": *"\([^"]*\)".*/\1/' | head -c 7)
     fi
-    
+
     # Fallback: try raw file
     if [ -z "$latest_commit" ] && command_exists curl; then
         latest_commit=$(curl -s "https://raw.githubusercontent.com/tfgrid-studio/tfgrid-compose/main/VERSION" 2>/dev/null | head -c 7 || echo "")
     fi
-    
+
     if [ -z "$latest_commit" ]; then
         echo "unknown"
     else
@@ -318,16 +318,16 @@ get_latest_tfgrid_compose_version() {
 get_tfgrid_compose_version() {
     local deployer_root="$(get_deployer_root)"
     local version_file="$deployer_root/VERSION"
-    
+
     # Get Git commit (primary method)
     local git_commit=$(get_tfgrid_compose_git_commit)
-    
+
     # Get semantic version from VERSION file (fallback)
     local semantic_version="unknown"
     if [ -f "$version_file" ]; then
         # Try to execute VERSION script to get result, but also check for semantic version
         local script_result=$(bash "$version_file" 2>/dev/null || echo "unknown")
-        
+
         # If script returns a commit hash, we don't have semantic version
         if [[ "$script_result" =~ ^[a-f0-9]{7}$ ]]; then
             semantic_version="unknown"  # It's a commit hash, not semantic version
@@ -335,13 +335,13 @@ get_tfgrid_compose_version() {
             semantic_version="$script_result"
         fi
     fi
-    
+
     # Determine what to display
     local display_version="$git_commit"
     if [ "$git_commit" = "unknown" ]; then
         display_version="$semantic_version"
     fi
-    
+
     if [ "$git_commit" != "unknown" ]; then
         # Return JSON with both versions
         cat << EOF | jq -c '.'
@@ -380,7 +380,7 @@ create_state_dir() {
 state_save() {
     local key="$1"
     local value="$2"
-    
+
     create_state_dir
     echo "${key}: ${value}" >> "$STATE_DIR/state.yaml"
 }
@@ -388,11 +388,11 @@ state_save() {
 # Get from state
 state_get() {
     local key="$1"
-    
+
     if [ ! -f "$STATE_DIR/state.yaml" ]; then
         return 1
     fi
-    
+
     grep "^${key}:" "$STATE_DIR/state.yaml" | awk '{print $2}'
 }
 
@@ -495,6 +495,7 @@ show_help() {
     echo -e "  ${GREEN}logs${NC} [app]            Show application logs"
     echo -e "  ${GREEN}status${NC} [app]          Check application status"
     echo -e "  ${GREEN}ssh${NC} [app]             SSH into the deployment"
+    echo -e "      --direct, -d       Direct SSH (bypass app loading, for failed deployments)"
     echo -e "  ${GREEN}address${NC} [app]         Show deployment addresses"
     echo -e "  ${GREEN}contracts${NC} <subcommand> Contract management via tfcmd"
     echo -e "      ${GREEN}list${NC}              List all contracts"
@@ -515,6 +516,7 @@ show_help() {
     echo -e "      --outside            Show grid contracts not tracked in the local registry (SOURCE=outside)"
     echo -e "  ${GREEN}inspect${NC} <id>          Show deployment details (supports partial IDs)"
     echo -e "  ${GREEN}select${NC} [id/app]       Select deployment (auto-resolves partial IDs)"
+    echo -e "      --force, -f        Force select incomplete/failed deployments"
     echo ""
     echo -e "${CYAN}Partial ID Resolution Examples:${NC}"
     echo -e "  ${GREEN}t ps${NC}                       # Show all deployments with ages"
