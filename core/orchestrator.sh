@@ -1635,9 +1635,10 @@ run_app_hooks() {
         local health_status=${PIPESTATUS[0]}
         if [ "$health_status" -ne 0 ]; then
             log_warning "Health check had issues. Check: $STATE_DIR/hook-healthcheck.log"
-            # Don't fail on healthcheck issues
+            echo "failed" > "$STATE_DIR/healthcheck-result"
         else
             log_success "Health check passed"
+            echo "passed" > "$STATE_DIR/healthcheck-result"
         fi
     else
         # Normal mode: Show milestone lines (emoji prefixed) while logging everything
@@ -1648,9 +1649,10 @@ run_app_hooks() {
         local health_status=${PIPESTATUS[0]}
         if [ "$health_status" -ne 0 ]; then
             log_warning "Health check had issues. Check: $STATE_DIR/hook-healthcheck.log"
-            # Don't fail on healthcheck issues
+            echo "failed" > "$STATE_DIR/healthcheck-result"
         else
             log_success "Health check passed"
+            echo "passed" > "$STATE_DIR/healthcheck-result"
         fi
     fi
 
@@ -1680,13 +1682,54 @@ verify_deployment() {
         return 1
     fi
 
-    # Check if app service exists
-    log_info "Checking application service..."
+    # Layer 1: Trust healthcheck hook if it passed
+    if [ -f "$STATE_DIR/healthcheck-result" ]; then
+        local healthcheck_result=$(cat "$STATE_DIR/healthcheck-result")
+        if [ "$healthcheck_result" = "passed" ]; then
+            log_success "Application healthy (verified by healthcheck hook)"
+            log_success "Deployment verified"
+            return 0
+        fi
+    fi
+
+    # Layer 2: Detect deployment type and check appropriately
+    log_info "Checking application status..."
+    local app_found=false
+
+    # Check for Docker-based deployment
     if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-        root@$ipv4_address "systemctl list-units --type=service | grep -q $APP_NAME" 2>/dev/null; then
-        log_success "Application service found"
-    else
-        log_warning "Application service not found"
+        root@$ipv4_address "command -v docker >/dev/null 2>&1" 2>/dev/null; then
+        # Docker is installed, check for running containers
+        local container_count=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$ipv4_address "docker ps -q 2>/dev/null | wc -l" 2>/dev/null || echo "0")
+        if [ "$container_count" -gt 0 ]; then
+            log_success "Docker deployment detected ($container_count container(s) running)"
+            app_found=true
+            # Check if any container has health status
+            local healthy_count=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+                root@$ipv4_address "docker ps --filter 'health=healthy' -q 2>/dev/null | wc -l" 2>/dev/null || echo "0")
+            if [ "$healthy_count" -gt 0 ]; then
+                log_success "Docker health check: $healthy_count healthy container(s)"
+            fi
+        fi
+    fi
+
+    # Check for systemd service (only if Docker check didn't find anything)
+    if [ "$app_found" = "false" ]; then
+        if ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$ipv4_address "systemctl list-units --type=service --state=running | grep -q $APP_NAME" 2>/dev/null; then
+            log_success "Systemd service found and running: $APP_NAME"
+            app_found=true
+        elif ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+            root@$ipv4_address "systemctl list-units --type=service | grep -q $APP_NAME" 2>/dev/null; then
+            log_success "Systemd service found: $APP_NAME"
+            app_found=true
+        fi
+    fi
+
+    # Final status
+    if [ "$app_found" = "false" ]; then
+        log_info "No Docker containers or systemd service detected (app may use different deployment method)"
     fi
 
     log_success "Deployment verified"
