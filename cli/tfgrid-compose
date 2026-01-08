@@ -1362,11 +1362,16 @@ case "$COMMAND" in
             read -p "Type 'reset' to confirm: " -r
 
             if [ "$REPLY" = "reset" ]; then
-                # Preserve credentials
-                CREDS_BACKUP=""
+                # Preserve credentials (check all possible credential files)
+                CREDS_YAML_BACKUP=""
+                CREDS_ENV_BACKUP=""
                 ENV_BACKUP=""
+
+                if [ -f "$CONFIG_DIR/credentials.yaml" ]; then
+                    CREDS_YAML_BACKUP=$(cat "$CONFIG_DIR/credentials.yaml")
+                fi
                 if [ -f "$CONFIG_DIR/credentials.env" ]; then
-                    CREDS_BACKUP=$(cat "$CONFIG_DIR/credentials.env")
+                    CREDS_ENV_BACKUP=$(cat "$CONFIG_DIR/credentials.env")
                 fi
                 if [ -f "$CONFIG_DIR/.env" ]; then
                     ENV_BACKUP=$(cat "$CONFIG_DIR/.env")
@@ -1377,8 +1382,12 @@ case "$COMMAND" in
 
                 # Restore credentials
                 mkdir -p "$CONFIG_DIR"
-                if [ -n "$CREDS_BACKUP" ]; then
-                    echo "$CREDS_BACKUP" > "$CONFIG_DIR/credentials.env"
+                if [ -n "$CREDS_YAML_BACKUP" ]; then
+                    echo "$CREDS_YAML_BACKUP" > "$CONFIG_DIR/credentials.yaml"
+                    chmod 600 "$CONFIG_DIR/credentials.yaml"
+                fi
+                if [ -n "$CREDS_ENV_BACKUP" ]; then
+                    echo "$CREDS_ENV_BACKUP" > "$CONFIG_DIR/credentials.env"
                     chmod 600 "$CONFIG_DIR/credentials.env"
                 fi
                 if [ -n "$ENV_BACKUP" ]; then
