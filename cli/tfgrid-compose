@@ -994,11 +994,42 @@ case "$COMMAND" in
         # Docker-style deployment inspection
         DEPLOYMENT_ID="${1:-}"
 
+        # Handle --all flag to show entire registry
+        if [ "$DEPLOYMENT_ID" = "--all" ] || [ "$DEPLOYMENT_ID" = "-a" ]; then
+            log_info "TFGrid Compose v$VERSION - Full Registry"
+            echo ""
+
+            REGISTRY_FILE="$HOME/.config/tfgrid-compose/deployments.yaml"
+
+            if [ ! -f "$REGISTRY_FILE" ]; then
+                log_info "No deployments registry found (no deployments yet)"
+                exit 0
+            fi
+
+            echo "Registry Location: $REGISTRY_FILE"
+            echo ""
+            echo "Deployments Registry:"
+            echo "====================="
+            echo ""
+
+            if command_exists yq; then
+                yq eval '.' "$REGISTRY_FILE"
+            else
+                cat "$REGISTRY_FILE"
+            fi
+
+            echo ""
+            exit 0
+        fi
+
         if [ -z "$DEPLOYMENT_ID" ]; then
             echo ""
             echo "Usage: tfgrid-compose inspect <deployment-id>"
+            echo "       tfgrid-compose inspect --all"
             echo ""
-            echo "Example: tfgrid-compose inspect abc123def456"
+            echo "Examples:"
+            echo "  tfgrid-compose inspect abc123def456   # Inspect specific deployment"
+            echo "  tfgrid-compose inspect --all          # Show entire registry"
             echo ""
             echo "Get deployment ID from: tfgrid-compose ps"
             exit 1
