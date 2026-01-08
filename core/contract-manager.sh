@@ -883,7 +883,8 @@ state_clean() {
             # State dir exists - check if it has active contracts in terraform state
             local tf_state="$entry_state_dir/terraform/terraform.tfstate"
             if [ -f "$tf_state" ]; then
-                local state_contracts=$(grep -o '"id": "[0-9]*"' "$tf_state" 2>/dev/null | grep -o '[0-9]*' || echo "")
+                # Match both "id":"123" and "id": "123" formats
+                local state_contracts=$(grep -oE '"id"[[:space:]]*:[[:space:]]*"?[0-9]+"?' "$tf_state" 2>/dev/null | grep -oE '[0-9]+' || echo "")
                 while IFS= read -r cid; do
                     [ -z "$cid" ] && continue
                     if echo "$active_contracts" | grep -q "^${cid}$"; then
