@@ -1224,25 +1224,55 @@ generate_terraform_config() {
     local inter_node_network=$(yaml_get "$APP_MANIFEST" "network.inter_node")
     local network_mode=$(yaml_get "$APP_MANIFEST" "network.mode")
 
-    # If manifest doesn't define a mode, fall back to global network mode preference
-    if [ -z "$network_mode" ] || [ "$network_mode" = "null" ]; then
-        # get_global_network_mode is defined in core/network.sh, which is sourced by the CLI
-        if command -v get_global_network_mode >/dev/null 2>&1; then
-            network_mode=$(get_global_network_mode)
-        fi
+    # Get network provisioning from global preferences
+    local provision_networks=""
+    if command -v get_global_provision >/dev/null 2>&1; then
+        provision_networks=$(get_global_provision)
     fi
 
-    # Export network configuration (use manifest values or defaults)
+    # Default to mycelium,ipv4 if not set
+    if [ -z "$provision_networks" ]; then
+        provision_networks="mycelium,ipv4"
+    fi
+
+    # Parse provision list into individual boolean TF_VARs
+    export TF_VAR_provision_mycelium=false
+    export TF_VAR_provision_wireguard=false
+    export TF_VAR_provision_ipv4=false
+    export TF_VAR_provision_ipv6=false
+
+    IFS=',' read -ra PROVISION_ARRAY <<< "$provision_networks"
+    for net in "${PROVISION_ARRAY[@]}"; do
+        net=$(echo "$net" | tr -d ' ')
+        case "$net" in
+            mycelium)  export TF_VAR_provision_mycelium=true ;;
+            wireguard) export TF_VAR_provision_wireguard=true ;;
+            ipv4)      export TF_VAR_provision_ipv4=true ;;
+            ipv6)      export TF_VAR_provision_ipv6=true ;;
+        esac
+    done
+
+    # Validate at least one network is provisioned
+    if [ "$TF_VAR_provision_mycelium" = "false" ] && \
+       [ "$TF_VAR_provision_wireguard" = "false" ] && \
+       [ "$TF_VAR_provision_ipv4" = "false" ] && \
+       [ "$TF_VAR_provision_ipv6" = "false" ]; then
+        log_error "At least one network must be provisioned"
+        return 1
+    fi
+
+    # Legacy support: if manifest has network.mode, also pass it for backward compatibility
+    if [ -n "$network_mode" ] && [ "$network_mode" != "null" ]; then
+        export TF_VAR_network_mode="$network_mode"
+    fi
+
+    # Export for internal use
     export TF_VAR_tfgrid_network="${TF_VAR_tfgrid_network:-main}"
-    export MAIN_NETWORK="${main_network:-${MAIN_NETWORK:-wireguard}}"
-    export INTER_NODE_NETWORK="${inter_node_network:-${INTER_NODE_NETWORK:-wireguard}}"
-    export NETWORK_MODE="${network_mode:-wireguard-only}"
-    export TF_VAR_network_mode="$NETWORK_MODE"
+    export PROVISION_NETWORKS="$provision_networks"
+    export MAIN_NETWORK="${main_network:-mycelium}"
+    export INTER_NODE_NETWORK="${inter_node_network:-mycelium}"
 
-    # Pass main_network to Terraform
-    export TF_VAR_main_network="$MAIN_NETWORK"
-
-    log_info "Network: Main=$MAIN_NETWORK, InterNode=$INTER_NODE_NETWORK, Mode=$NETWORK_MODE"
+    log_info "Network: Provision=$provision_networks"
 
     # Copy pattern infrastructure to state directory
     cp -r "$PATTERN_INFRASTRUCTURE_DIR" "$STATE_DIR/terraform"

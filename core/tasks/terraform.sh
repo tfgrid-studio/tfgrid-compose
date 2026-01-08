@@ -58,24 +58,62 @@ if [ "$tf_apply_exit_code" -ne 0 ]; then
 fi
 log_info "Extracting infrastructure outputs..."
 
-# Get primary IP and type (REQUIRED by all patterns)
-primary_ip=$($TF_CMD output -raw primary_ip 2>/dev/null || echo "")
-primary_ip_type=$($TF_CMD output -raw primary_ip_type 2>/dev/null || echo "wireguard")
+# ==============================================================================
+# Capture all network IP outputs
+# ==============================================================================
 
-if [ -n "$primary_ip" ]; then
-    # Strip CIDR notation if present (e.g., 185.69.167.152/24 → 185.69.167.152)
-    primary_ip=$(echo "$primary_ip" | cut -d'/' -f1)
-    
-    # STATE_DIR is already absolute path, don't prepend $orig_dir
-    echo "ipv4_address: $primary_ip" >> "$STATE_DIR/state.yaml"
-    echo "primary_ip: $primary_ip" >> "$STATE_DIR/state.yaml"
-    echo "primary_ip_type: $primary_ip_type" >> "$STATE_DIR/state.yaml"
-    log_success "Primary IP ($primary_ip_type): $primary_ip"
-else
-    log_error "No primary_ip output from pattern!"
+# Get all 4 network IPs from Terraform outputs
+mycelium_ip=$($TF_CMD output -raw mycelium_ip 2>/dev/null || echo "")
+wireguard_ip=$($TF_CMD output -raw wireguard_ip 2>/dev/null || echo "")
+ipv4_address=$($TF_CMD output -raw ipv4_address 2>/dev/null || echo "")
+ipv6_address=$($TF_CMD output -raw ipv6_address 2>/dev/null || echo "")
+
+# Get provisioned networks list
+provisioned_networks=$($TF_CMD output -raw provisioned_networks 2>/dev/null || echo "")
+
+# Strip CIDR notation if present (e.g., 185.69.167.152/24 → 185.69.167.152)
+[ -n "$mycelium_ip" ] && mycelium_ip=$(echo "$mycelium_ip" | cut -d'/' -f1)
+[ -n "$wireguard_ip" ] && wireguard_ip=$(echo "$wireguard_ip" | cut -d'/' -f1)
+[ -n "$ipv4_address" ] && ipv4_address=$(echo "$ipv4_address" | cut -d'/' -f1)
+[ -n "$ipv6_address" ] && ipv6_address=$(echo "$ipv6_address" | cut -d'/' -f1)
+
+# Save all available IPs to state.yaml
+[ -n "$mycelium_ip" ] && echo "mycelium_address: $mycelium_ip" >> "$STATE_DIR/state.yaml"
+[ -n "$wireguard_ip" ] && echo "wireguard_address: $wireguard_ip" >> "$STATE_DIR/state.yaml"
+[ -n "$ipv4_address" ] && echo "ipv4_address: $ipv4_address" >> "$STATE_DIR/state.yaml"
+[ -n "$ipv6_address" ] && echo "ipv6_address: $ipv6_address" >> "$STATE_DIR/state.yaml"
+[ -n "$provisioned_networks" ] && echo "provisioned_networks: $provisioned_networks" >> "$STATE_DIR/state.yaml"
+
+# Log captured IPs
+[ -n "$mycelium_ip" ] && log_success "Mycelium IP: $mycelium_ip"
+[ -n "$wireguard_ip" ] && log_success "WireGuard IP: $wireguard_ip"
+[ -n "$ipv4_address" ] && log_success "Public IPv4: $ipv4_address"
+[ -n "$ipv6_address" ] && log_success "Public IPv6: $ipv6_address"
+
+# Validate at least one IP was captured
+if [ -z "$mycelium_ip" ] && [ -z "$wireguard_ip" ] && [ -z "$ipv4_address" ] && [ -z "$ipv6_address" ]; then
+    log_error "No network IPs captured from Terraform outputs!"
     cd "$orig_dir"
     exit 1
 fi
+
+# ==============================================================================
+# Legacy compatibility: primary_ip and primary_ip_type
+# These are deprecated but kept for backward compatibility
+# ==============================================================================
+
+primary_ip=$($TF_CMD output -raw primary_ip 2>/dev/null || echo "")
+primary_ip_type=$($TF_CMD output -raw primary_ip_type 2>/dev/null || echo "")
+
+if [ -n "$primary_ip" ]; then
+    primary_ip=$(echo "$primary_ip" | cut -d'/' -f1)
+    echo "primary_ip: $primary_ip" >> "$STATE_DIR/state.yaml"
+    echo "primary_ip_type: $primary_ip_type" >> "$STATE_DIR/state.yaml"
+fi
+
+# ==============================================================================
+# Other deployment metadata
+# ==============================================================================
 
 # Get deployment name
 deployment_name=$($TF_CMD output -raw deployment_name 2>/dev/null || echo "")
@@ -83,17 +121,11 @@ if [ -n "$deployment_name" ]; then
     echo "deployment_name: $deployment_name" >> "$STATE_DIR/state.yaml"
 fi
 
-# Pattern-specific outputs
-mycelium_address=$($TF_CMD output -raw mycelium_address 2>/dev/null || echo "")
-if [ -n "$mycelium_address" ]; then
-    echo "mycelium_address: $mycelium_address" >> "$STATE_DIR/state.yaml"
-    log_info "Mycelium IP: $mycelium_address"
-fi
-
+# WireGuard config (for local WireGuard interface setup)
 wg_config=$($TF_CMD output -raw wg_config 2>/dev/null || echo "")
 if [ -n "$wg_config" ]; then
     echo "$wg_config" > "$STATE_DIR/wg.conf"
-    log_info "WireGuard config saved to: $STATE_DIR/wg.conf"
+    log_info "WireGuard config saved"
 fi
 
 # Optional: Secondary IPs (for multi-node patterns like gateway, k3s)

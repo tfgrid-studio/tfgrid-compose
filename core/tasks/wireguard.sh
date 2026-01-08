@@ -16,12 +16,21 @@ if [ -z "$APP_NAME" ]; then
     exit 1
 fi
 
-# Check if we need WireGuard
-primary_ip_type=$(grep "^primary_ip_type:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "unknown")
+# Check if WireGuard was provisioned
+provisioned_networks=$(grep "^provisioned_networks:" "$STATE_DIR/state.yaml" 2>/dev/null | sed 's/^provisioned_networks: //' || echo "")
+wireguard_address=$(grep "^wireguard_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
 
-if [ "$primary_ip_type" != "wireguard" ]; then
-    log_info "Connectivity type: $primary_ip_type (WireGuard not needed)"
-    exit 0
+# WireGuard is needed if:
+# 1. It's in the provisioned networks list, OR
+# 2. There's a wireguard_address in state, OR
+# 3. Legacy: primary_ip_type is wireguard
+if [[ "$provisioned_networks" != *"wireguard"* ]] && [ -z "$wireguard_address" ]; then
+    # Check legacy primary_ip_type
+    primary_ip_type=$(grep "^primary_ip_type:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+    if [ "$primary_ip_type" != "wireguard" ]; then
+        log_info "WireGuard not provisioned (networks: ${provisioned_networks:-none})"
+        exit 0
+    fi
 fi
 
 log_step "Setting up WireGuard connection..."
@@ -83,7 +92,7 @@ our_ip_range=$(grep "AllowedIPs" "$wg_conf_file" | head -1 | awk '{print $3}' | 
 if [ -n "$our_ip_range" ]; then
     # Check for active WireGuard interfaces
     active_interfaces=$(sudo wg show interfaces 2>/dev/null || echo "")
-    
+
     if [ -n "$active_interfaces" ]; then
         for iface in $active_interfaces; do
             # Check if this interface uses our IP range
@@ -92,11 +101,11 @@ if [ -n "$our_ip_range" ]; then
                     log_warning "Found conflicting WireGuard interface: $iface (uses same IP range)"
                     log_info "Stopping conflicting interface: $iface"
                     sudo wg-quick down "$iface" 2>/dev/null || true
-                    
+
                     # Clean up any leftover routes from this interface
                     sudo ip route del 100.64.0.0/16 dev "$iface" 2>/dev/null || true
                     sudo ip route del 10.1.0.0/16 dev "$iface" 2>/dev/null || true
-                    
+
                     # Remove the interface completely
                     sudo ip link del "$iface" 2>/dev/null || true
                 fi
@@ -109,13 +118,13 @@ fi
 if [ -f "$STATE_DIR/wg_interface" ]; then
     OLD_INTERFACE=$(cat "$STATE_DIR/wg_interface")
     log_info "Cleaning up previous interface: $OLD_INTERFACE"
-    
+
     # Stop the old interface
     sudo wg-quick down "$OLD_INTERFACE" 2>/dev/null || true
-    
+
     # Remove the interface
     sudo ip link del "$OLD_INTERFACE" 2>/dev/null || true
-    
+
     # Clean up routes from old interface
     sudo ip route del 100.64.0.0/16 dev "$OLD_INTERFACE" 2>/dev/null || true
     sudo ip route del 10.1.0.0/16 dev "$OLD_INTERFACE" 2>/dev/null || true

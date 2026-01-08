@@ -45,10 +45,18 @@ register_deployment() {
         return 1
     fi
 
-    # Best-effort lookup of mycelium_address from state.yaml (for registry convenience)
+    # Best-effort lookup of all network addresses from state.yaml (for registry convenience)
     local mycelium_address=""
+    local wireguard_address=""
+    local ipv6_address=""
     if [ -n "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
         mycelium_address=$(grep "^mycelium_address:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}' || echo "")
+        wireguard_address=$(grep "^wireguard_address:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}' || echo "")
+        ipv6_address=$(grep "^ipv6_address:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}' || echo "")
+        # If ipv4_address wasn't passed but exists in state, use it
+        if [ -z "$ipv4_address" ]; then
+            ipv4_address=$(grep "^ipv4_address:" "$state_dir/state.yaml" 2>/dev/null | head -n1 | awk '{print $2}' || echo "")
+        fi
     fi
 
     local origin="${APP_ORIGIN:-}"
@@ -92,8 +100,8 @@ register_deployment() {
 
     # Use yq if available, otherwise use simple sed/awk
     if command_exists yq; then
-        # Construct the JSON object safely (include mycelium_address when available)
-        local json_obj="{\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"ipv4_address\": \"$ipv4_address\", \"mycelium_address\": \"$mycelium_address\", \"created_at\": \"$timestamp\", \"status\": \"$status\"}"
+        # Construct the JSON object with all network addresses
+        local json_obj="{\"app_name\": \"$app_name\", \"state_dir\": \"$state_dir\", \"ipv4_address\": \"$ipv4_address\", \"ipv6_address\": \"$ipv6_address\", \"mycelium_address\": \"$mycelium_address\", \"wireguard_address\": \"$wireguard_address\", \"created_at\": \"$timestamp\", \"status\": \"$status\"}"
 
         if [ -n "$origin" ]; then
             json_obj=$(echo "$json_obj" | sed 's/}$/, "origin": "'$origin'"}/')

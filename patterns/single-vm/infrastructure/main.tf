@@ -31,11 +31,52 @@ variable "tfgrid_network" {
   description = "ThreeFold Grid network (main, test, dev)"
 }
 
+# ------------------------------------------------------------------------------
+# Network Provisioning Variables
+# At least one must be true
+# ------------------------------------------------------------------------------
+
+variable "provision_mycelium" {
+  type        = bool
+  default     = true
+  description = "Provision Mycelium overlay network (IPv6, encrypted, recommended)"
+}
+
+variable "provision_wireguard" {
+  type        = bool
+  default     = false
+  description = "Provision WireGuard VPN access (private network, encrypted)"
+}
+
+variable "provision_ipv4" {
+  type        = bool
+  default     = false
+  description = "Provision public IPv4 address"
+}
+
+variable "provision_ipv6" {
+  type        = bool
+  default     = false
+  description = "Provision public IPv6 address"
+}
+
+# Legacy variable for backward compatibility
 variable "network_mode" {
   type        = string
-  default     = "wireguard-only"
-  description = "Network exposure mode: wireguard-only, mycelium-only, both"
+  default     = ""
+  description = "DEPRECATED: Use provision_* variables instead. Kept for backward compatibility."
 }
+
+# Legacy variable for backward compatibility
+variable "vm_public_ipv4" {
+  type        = bool
+  default     = false
+  description = "DEPRECATED: Use provision_ipv4 instead. Kept for backward compatibility."
+}
+
+# ------------------------------------------------------------------------------
+# VM Resource Variables
+# ------------------------------------------------------------------------------
 
 variable "vm_node" {
   type        = number
@@ -57,12 +98,6 @@ variable "vm_disk" {
   default = 50 # 50GB storage
 }
 
-variable "vm_public_ipv4" {
-  type        = bool
-  default     = false
-  description = "Whether the VM should get a public IPv4 address"
-}
-
 # ==============================================================================
 # LOCALS
 # ==============================================================================
@@ -74,6 +109,29 @@ locals {
     file(pathexpand("~/.ssh/id_ed25519.pub")) :
     file(pathexpand("~/.ssh/id_rsa.pub"))
   )
+
+  # Handle legacy network_mode variable for backward compatibility
+  # Convert old format to new provision_* format
+  legacy_mycelium = (
+    var.network_mode == "mycelium-only" ||
+    var.network_mode == "both" ||
+    var.network_mode == "mycelium,ipv4" ||
+    var.network_mode == "mycelium,wireguard"
+  )
+  legacy_wireguard = (
+    var.network_mode == "wireguard-only" ||
+    var.network_mode == "both" ||
+    var.network_mode == "mycelium,wireguard"
+  )
+
+  # Final provisioning decisions (new vars take precedence, then legacy, then defaults)
+  # If network_mode is set (legacy), use legacy logic; otherwise use new provision_* vars
+  use_legacy = var.network_mode != ""
+
+  enable_mycelium  = local.use_legacy ? local.legacy_mycelium : var.provision_mycelium
+  enable_wireguard = local.use_legacy ? local.legacy_wireguard : var.provision_wireguard
+  enable_ipv4      = var.vm_public_ipv4 || var.provision_ipv4
+  enable_ipv6      = var.provision_ipv6
 }
 
 # ==============================================================================
@@ -115,10 +173,12 @@ resource "grid_network" "vm_network" {
   name          = "net_${random_string.deployment_id.result}"
   nodes         = [var.vm_node]
   ip_range      = "10.1.0.0/16"
-  add_wg_access = var.network_mode != "mycelium-only"
-  mycelium_keys = {
+  add_wg_access = local.enable_wireguard
+
+  # Only configure mycelium keys if mycelium is enabled
+  mycelium_keys = local.enable_mycelium ? {
     tostring(var.vm_node) = random_bytes.mycelium_key.hex
-  }
+  } : {}
 }
 
 # ==============================================================================
@@ -136,8 +196,9 @@ resource "grid_deployment" "vm" {
     memory           = var.vm_mem
     rootfs_size      = var.vm_disk * 1024  # Convert GB to MB
     entrypoint       = "/sbin/zinit init"
-    publicip         = var.vm_public_ipv4
-    mycelium_ip_seed = random_bytes.vm_ip_seed.hex
+    publicip         = local.enable_ipv4
+    publicip6        = local.enable_ipv6
+    mycelium_ip_seed = local.enable_mycelium ? random_bytes.vm_ip_seed.hex : ""
     env_vars = {
       SSH_KEY = local.ssh_key
     }
@@ -145,26 +206,57 @@ resource "grid_deployment" "vm" {
 }
 
 # ==============================================================================
-# OUTPUTS
+# OUTPUTS - All Available Network Addresses
 # ==============================================================================
 
-# ==============================================================================
-# STANDARD OUTPUTS (Required by tfgrid-compose orchestrator)
-# All patterns MUST provide these outputs with these exact names
-# ==============================================================================
-
-output "primary_ip" {
-  value = var.vm_public_ipv4 ? (
-    try(grid_deployment.vm.vms[0].computedip, "")
-  ) : (
-    try(grid_deployment.vm.vms[0].ip, "")
-  )
-  description = "Primary IP address for SSH connection (public IPv4 when enabled, otherwise WireGuard IP)"
+output "mycelium_ip" {
+  value       = local.enable_mycelium ? try(grid_deployment.vm.vms[0].mycelium_ip, "") : ""
+  description = "Mycelium IPv6 address (if provisioned)"
 }
 
-output "primary_ip_type" {
-  value       = var.vm_public_ipv4 ? "public" : "wireguard"
-  description = "Type of primary IP (wireguard, public, or mycelium)"
+output "wireguard_ip" {
+  value       = local.enable_wireguard ? try(grid_deployment.vm.vms[0].ip, "") : ""
+  description = "WireGuard private IP address (if provisioned)"
+}
+
+output "ipv4_address" {
+  value       = local.enable_ipv4 ? try(grid_deployment.vm.vms[0].computedip, "") : ""
+  description = "Public IPv4 address (if provisioned)"
+}
+
+output "ipv6_address" {
+  value       = local.enable_ipv6 ? try(grid_deployment.vm.vms[0].computedip6, "") : ""
+  description = "Public IPv6 address (if provisioned)"
+}
+
+# WireGuard config (needed to set up local WireGuard interface)
+output "wg_config" {
+  value       = local.enable_wireguard ? grid_network.vm_network.access_wg_config : ""
+  sensitive   = true
+  description = "WireGuard configuration file content (if provisioned)"
+}
+
+# ==============================================================================
+# OUTPUTS - Provisioning Status
+# ==============================================================================
+
+output "provisioned_networks" {
+  value = join(",", compact([
+    local.enable_mycelium ? "mycelium" : "",
+    local.enable_wireguard ? "wireguard" : "",
+    local.enable_ipv4 ? "ipv4" : "",
+    local.enable_ipv6 ? "ipv6" : ""
+  ]))
+  description = "Comma-separated list of provisioned networks"
+}
+
+# ==============================================================================
+# OUTPUTS - Deployment Metadata
+# ==============================================================================
+
+output "deployment_id" {
+  value       = random_string.deployment_id.result
+  description = "Unique deployment identifier (8 char random string)"
 }
 
 output "deployment_name" {
@@ -177,37 +269,39 @@ output "node_ids" {
   description = "List of node IDs used in deployment"
 }
 
+output "network_name" {
+  value       = grid_network.vm_network.name
+  description = "Network name"
+}
+
 # ==============================================================================
-# OPTIONAL OUTPUTS (Pattern-specific)
+# LEGACY OUTPUTS - For backward compatibility
+# These will be removed in a future version
 # ==============================================================================
 
-output "deployment_id" {
-  value       = random_string.deployment_id.result
-  description = "Unique deployment identifier (8 char random string)"
+output "primary_ip" {
+  value = (
+    local.enable_ipv4 ? try(grid_deployment.vm.vms[0].computedip, "") :
+    local.enable_mycelium ? try(grid_deployment.vm.vms[0].mycelium_ip, "") :
+    local.enable_wireguard ? try(grid_deployment.vm.vms[0].ip, "") :
+    local.enable_ipv6 ? try(grid_deployment.vm.vms[0].computedip6, "") :
+    ""
+  )
+  description = "DEPRECATED: Use specific IP outputs and prefer logic instead. Primary IP for legacy compatibility."
+}
+
+output "primary_ip_type" {
+  value = (
+    local.enable_ipv4 ? "ipv4" :
+    local.enable_mycelium ? "mycelium" :
+    local.enable_wireguard ? "wireguard" :
+    local.enable_ipv6 ? "ipv6" :
+    ""
+  )
+  description = "DEPRECATED: Use provisioned_networks instead. Type of primary IP for legacy compatibility."
 }
 
 output "public_ip" {
   value       = try(grid_deployment.vm.vms[0].computedip, "")
-  description = "Public IPv4 address of the VM (if enabled)"
-}
-
-output "wireguard_ip" {
-  value       = try(grid_deployment.vm.vms[0].ip, "")
-  description = "WireGuard IP of the VM"
-}
-
-output "mycelium_ip" {
-  value       = try(grid_deployment.vm.vms[0].mycelium_ip, "")
-  description = "Mycelium IPv6 address"
-}
-
-output "wg_config" {
-  value       = grid_network.vm_network.access_wg_config
-  sensitive   = true
-  description = "WireGuard configuration file content"
-}
-
-output "network_name" {
-  value       = grid_network.vm_network.name
-  description = "Network name"
+  description = "DEPRECATED: Use ipv4_address instead."
 }
