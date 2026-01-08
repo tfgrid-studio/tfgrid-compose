@@ -15,22 +15,22 @@ log_step "Running Ansible configuration..."
 # Check if ansible directory exists, if not copy pattern platform
 if [ ! -d "$STATE_DIR/ansible" ]; then
     log_info "Copying pattern platform files..."
-    
+
     # Get pattern name from state
     PATTERN_NAME=$(grep "^pattern_name:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
-    
+
     if [ -z "$PATTERN_NAME" ]; then
         log_error "No pattern_name found in state file"
         exit 1
     fi
-    
+
     PATTERN_PLATFORM_DIR="$DEPLOYER_ROOT/patterns/$PATTERN_NAME/platform"
-    
+
     if [ ! -d "$PATTERN_PLATFORM_DIR" ]; then
         log_error "Pattern platform not found: $PATTERN_PLATFORM_DIR"
         exit 1
     fi
-    
+
     mkdir -p "$STATE_DIR/ansible"
     cp -r "$PATTERN_PLATFORM_DIR"/* "$STATE_DIR/ansible/"
     log_success "Pattern platform copied"
@@ -41,15 +41,17 @@ ORIG_DIR="$(pwd)"
 
 # Extract variables from state file to pass to Ansible
 APP_NAME=$(grep "^app_name:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
-VM_IP=$(grep "^ipv4_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
-PRIMARY_IP=$(grep "^primary_ip:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
-MYCELIUM_IP=$(grep "^mycelium_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+IPV4_ADDRESS=$(grep "^ipv4_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+IPV6_ADDRESS=$(grep "^ipv6_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+WIREGUARD_ADDRESS=$(grep "^wireguard_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
+MYCELIUM_ADDRESS=$(grep "^mycelium_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
 
-# Build extra vars
+# Build extra vars with all network addresses
 EXTRA_VARS="app_name=${APP_NAME}"
-[ -n "$VM_IP" ] && EXTRA_VARS="$EXTRA_VARS ipv4_address=${VM_IP}"
-[ -n "$PRIMARY_IP" ] && EXTRA_VARS="$EXTRA_VARS primary_ip=${PRIMARY_IP}"
-[ -n "$MYCELIUM_IP" ] && EXTRA_VARS="$EXTRA_VARS mycelium_address=${MYCELIUM_IP}"
+[ -n "$IPV4_ADDRESS" ] && EXTRA_VARS="$EXTRA_VARS ipv4_address=${IPV4_ADDRESS}"
+[ -n "$IPV6_ADDRESS" ] && EXTRA_VARS="$EXTRA_VARS ipv6_address=${IPV6_ADDRESS}"
+[ -n "$WIREGUARD_ADDRESS" ] && EXTRA_VARS="$EXTRA_VARS wireguard_address=${WIREGUARD_ADDRESS}"
+[ -n "$MYCELIUM_ADDRESS" ] && EXTRA_VARS="$EXTRA_VARS mycelium_address=${MYCELIUM_ADDRESS}"
 
 # Run the playbook
 cd "$STATE_DIR/ansible" || exit 1

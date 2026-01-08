@@ -1,7 +1,7 @@
 ---
 # Global variables for all hosts
 ansible_user: root
-ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+ansible_ssh_common_args: "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
 # AI Agent setup variables
 nodejs_version: "20"
@@ -12,6 +12,10 @@ ai_agent_path: /opt/ai-agent
 # TFGrid deployment information (passed to VMs)
 # Note: These variables are populated from the state file via extra vars during deployment
 tfgrid_app_name: "{{ app_name | default('unknown') }}"
-tfgrid_ipv4_address: "{{ ipv4_address | default(ansible_host) | default('') }}"
-tfgrid_wireguard_ip: "{{ primary_ip | default(ipv4_address) | default('') }}"
+tfgrid_ipv4_address: "{{ ipv4_address | default('') }}"
+tfgrid_wireguard_ip: "{{ wireguard_address | default('') }}"
 tfgrid_mycelium_address: "{{ mycelium_address | default('') }}"
+
+# Aliases used by templates (backward compatibility)
+tfgrid_vm_ip: "{{ ipv4_address | default(wireguard_address) | default(mycelium_address) | default(ansible_host) | default('') }}"
+tfgrid_mycelium_ip: "{{ mycelium_address | default('') }}"

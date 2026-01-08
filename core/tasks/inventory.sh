@@ -16,17 +16,69 @@ log_step "Generating Ansible inventory..."
 # Get app name from state file
 APP_NAME=$(grep "^app_name:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}')
 
-# Use network-aware IP selection that respects global preferences (prefer order)
-# get_preferred_ip returns "ip|network_type" format
-preferred_result=$(get_preferred_ip "$DEPLOYMENT_ID" 2>/dev/null || echo "")
+# Read all available IPs from state.yaml (source of truth during deployment)
+mycelium_ip=$(grep "^mycelium_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+wireguard_ip=$(grep "^wireguard_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+ipv4_addr=$(grep "^ipv4_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
+ipv6_addr=$(grep "^ipv6_address:" "$STATE_DIR/state.yaml" 2>/dev/null | awk '{print $2}' || echo "")
 
-if [ -n "$preferred_result" ]; then
-    ansible_ip=$(echo "$preferred_result" | cut -d'|' -f1)
-    network_type=$(echo "$preferred_result" | cut -d'|' -f2)
-else
-    # Fallback to legacy get_deployment_ip
-    ansible_ip=$(get_deployment_ip "$DEPLOYMENT_ID" 2>/dev/null || echo "")
-    network_type="unknown"
+# Get prefer order from global settings
+prefer_list=$(get_global_prefer 2>/dev/null || echo "mycelium,ipv4")
+
+# Select IP based on prefer order
+ansible_ip=""
+network_type=""
+
+IFS=',' read -ra PREFER_ARRAY <<< "$prefer_list"
+for net in "${PREFER_ARRAY[@]}"; do
+    net=$(echo "$net" | tr -d ' ')
+    case "$net" in
+        mycelium)
+            if [ -n "$mycelium_ip" ]; then
+                ansible_ip="$mycelium_ip"
+                network_type="mycelium"
+                break
+            fi
+            ;;
+        wireguard)
+            if [ -n "$wireguard_ip" ]; then
+                ansible_ip="$wireguard_ip"
+                network_type="wireguard"
+                break
+            fi
+            ;;
+        ipv4)
+            if [ -n "$ipv4_addr" ]; then
+                ansible_ip="$ipv4_addr"
+                network_type="ipv4"
+                break
+            fi
+            ;;
+        ipv6)
+            if [ -n "$ipv6_addr" ]; then
+                ansible_ip="$ipv6_addr"
+                network_type="ipv6"
+                break
+            fi
+            ;;
+    esac
+done
+
+# Fallback: try any available IP if prefer order didn't match
+if [ -z "$ansible_ip" ]; then
+    if [ -n "$mycelium_ip" ]; then
+        ansible_ip="$mycelium_ip"
+        network_type="mycelium"
+    elif [ -n "$wireguard_ip" ]; then
+        ansible_ip="$wireguard_ip"
+        network_type="wireguard"
+    elif [ -n "$ipv4_addr" ]; then
+        ansible_ip="$ipv4_addr"
+        network_type="ipv4"
+    elif [ -n "$ipv6_addr" ]; then
+        ansible_ip="$ipv6_addr"
+        network_type="ipv6"
+    fi
 fi
 
 if [ -z "$ansible_ip" ]; then
