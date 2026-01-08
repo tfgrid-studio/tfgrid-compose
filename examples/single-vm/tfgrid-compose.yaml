@@ -13,17 +13,12 @@ patterns:
 # Network Configuration
 # Defines connectivity and access methods for the deployment
 network:
-  # Primary network for Ansible management connections
-  # Options: wireguard, mycelium, public
-  main: wireguard
-  
-  # Inter-node communication network (not applicable for single VM)
-  # Options: wireguard, mycelium
-  inter_node: wireguard
-  
-  # Application network mode - defines how services are exposed
-  # Options: wireguard-only, mycelium-only, both
-  mode: both
+  # Which networks to provision on the VM
+  # Options: mycelium, wireguard, ipv4, ipv6 (comma-separated for multiple)
+  provision: mycelium,wireguard
+
+  # Connection preference order for SSH/Ansible (tried in order)
+  prefer: wireguard,mycelium
 
 # ThreeFold Grid Node Selection
 # Specify the node ID from https://dashboard.grid.tf/
