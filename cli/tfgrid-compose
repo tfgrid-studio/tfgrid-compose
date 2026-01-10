@@ -366,6 +366,12 @@ resolve_app_path() {
 		return 1
 	fi
 
+	# If it's a YAML file, treat as local path
+	if [[ "$app_input" == *.yaml ]] || [[ "$app_input" == *.yml ]]; then
+		echo "$app_input"
+		return 0
+	fi
+
 	# If it's a path (contains / or starts with .), return as-is
 	if [[ "$app_input" == */* ]] || [[ "$app_input" == .* ]]; then
 		echo "$app_input"

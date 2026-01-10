@@ -13,7 +13,7 @@ load_mnemonic() {
     if [ -n "$TF_VAR_mnemonic" ]; then
         return 0
     fi
-    
+
     # Priority 2: Standard ThreeFold location
     local standard_path="$HOME/.config/threefold/mnemonic"
     if [ -f "$standard_path" ]; then
@@ -23,11 +23,11 @@ load_mnemonic() {
             log_warning "Mnemonic file has insecure permissions: $perms"
             log_info "Recommended: chmod 600 $standard_path"
         fi
-        
+
         export TF_VAR_mnemonic=$(cat "$standard_path")
         return 0
     fi
-    
+
     # Priority 3: Project-specific mnemonic (git ignored)
     local project_path="./.tfgrid-mnemonic"
     if [ -f "$project_path" ]; then
@@ -35,7 +35,7 @@ load_mnemonic() {
         export TF_VAR_mnemonic=$(cat "$project_path")
         return 0
     fi
-    
+
     # Not found - provide helpful error
     echo ""
     log_error "ThreeFold mnemonic not configured"
@@ -46,7 +46,7 @@ load_mnemonic() {
     echo "Need help? See the setup guide:"
     echo "  → tfgrid-compose docs"
     echo "  → https://docs.tfgrid.studio/getting-started/threefold-setup"
-    log_info ""    
+    log_info ""
     echo ""
     echo "  Option 1 (Recommended): Use standard ThreeFold location"
     echo "    mkdir -p ~/.config/threefold"
@@ -73,9 +73,9 @@ command_exists() {
 validate_prerequisites() {
     local missing=0
     local warnings=0
-    
+
     log_step "Validating system prerequisites..."
-    
+
     # Check Terraform/OpenTofu (prefer OpenTofu as it's open source)
     if command_exists tofu; then
         export TF_CMD="tofu"
@@ -93,7 +93,7 @@ validate_prerequisites() {
         echo ""
         missing=1
     fi
-    
+
     # Check Ansible
     if command_exists ansible-playbook; then
         log_success "Ansible found: $(ansible --version | head -1)"
@@ -108,7 +108,7 @@ validate_prerequisites() {
         echo ""
         missing=1
     fi
-    
+
     # Check SSH
     if command_exists ssh; then
         log_success "SSH client found"
@@ -122,7 +122,7 @@ validate_prerequisites() {
         echo ""
         missing=1
     fi
-    
+
     # Check WireGuard (warning only, not all patterns need it)
     if command_exists wg; then
         log_success "WireGuard found"
@@ -132,13 +132,13 @@ validate_prerequisites() {
         log_info "Install on macOS: brew install wireguard-tools"
         warnings=1
     fi
-    
+
     # Auto-detect and load mnemonic (priority order)
     if ! load_mnemonic; then
         return 1
     fi
     log_success "ThreeFold mnemonic configured"
-    
+
     # Summary
     echo ""
     if [ $missing -gt 0 ]; then
@@ -146,39 +146,59 @@ validate_prerequisites() {
         log_info "See docs/QUICKSTART.md for setup instructions"
         return 1
     fi
-    
+
     if [ $warnings -gt 0 ]; then
         log_warning "Some optional tools missing, but proceeding..."
     fi
-    
+
     log_success "All prerequisites validated"
     return 0
 }
 
-# Validate app path
+# Validate app path (directory or YAML file)
 validate_app_path() {
     local app_path="$1"
-    
+
     if [ -z "$app_path" ]; then
         echo ""
         log_error "App name or path is required"
         echo ""
         echo "Usage:"
         echo "  tfgrid-compose up <app-name>                 # From registry"
-        echo "  tfgrid-compose up <app-path>                 # Local app"
+        echo "  tfgrid-compose up <app-path>                 # Local app directory"
+        echo "  tfgrid-compose up ./manifest.yaml            # Local manifest file"
         echo "  tfgrid-compose up <app> --name=<suffix>      # Custom name"
         echo ""
         echo "Examples:"
         echo "  tfgrid-compose up tfgrid-ai-agent            # First deployment"
-        echo "  tfgrid-compose up tfgrid-ai-agent            # Auto: tfgrid-ai-agent-2"
-        echo "  tfgrid-compose up tfgrid-ai-agent --name=prod # Custom: tfgrid-ai-agent-prod"
+        echo "  tfgrid-compose up ./myapp                    # Local directory"
+        echo "  tfgrid-compose up ./bot1.yaml                # Direct manifest file"
         echo ""
         echo "Browse available apps:"
         echo "  tfgrid-compose search"
         echo ""
         return 1
     fi
-    
+
+    # Check if path is a YAML file
+    if [[ "$app_path" == *.yaml ]] || [[ "$app_path" == *.yml ]]; then
+        if [ ! -f "$app_path" ]; then
+            echo ""
+            log_error "Manifest file not found: $app_path"
+            echo ""
+            echo "Check:"
+            echo "  1. File path is correct"
+            echo "  2. File exists"
+            echo "  3. You're in the right location"
+            echo ""
+            return 1
+        fi
+        # YAML file exists - validation passed
+        # APP_DIR and APP_MANIFEST will be set by load_app()
+        return 0
+    fi
+
+    # Path is a directory
     if [ ! -d "$app_path" ]; then
         echo ""
         log_error "App directory not found: $app_path"
@@ -193,7 +213,7 @@ validate_app_path() {
         echo ""
         return 1
     fi
-    
+
     if [ ! -f "$app_path/tfgrid-compose.yaml" ]; then
         echo ""
         log_error "App manifest not found"
@@ -207,7 +227,7 @@ validate_app_path() {
         echo ""
         return 1
     fi
-    
+
     return 0
 }
 
@@ -215,12 +235,12 @@ validate_app_path() {
 validate_pattern_name() {
     local pattern_name="$1"
     local patterns_dir="$2"
-    
+
     if [ -z "$pattern_name" ]; then
         log_error "Pattern name not specified"
         return 1
     fi
-    
+
     if [ ! -d "$patterns_dir/$pattern_name" ]; then
         log_error "Pattern not found: $pattern_name"
         log_info "Available patterns:"
@@ -231,7 +251,7 @@ validate_pattern_name() {
         done
         return 1
     fi
-    
+
     return 0
 }
 
@@ -242,48 +262,48 @@ validate_deployment_exists() {
     if [ -z "$app_name" ] && [ -n "$APP_PATH" ]; then
         app_name=$(basename "$APP_PATH")
     fi
-    
+
     if [ -z "$app_name" ]; then
         log_error "Cannot determine app name"
         return 1
     fi
-    
+
     # Construct state directory path (with fallback for STATE_BASE_DIR)
     local base_dir="${STATE_BASE_DIR:-$HOME/.config/tfgrid-compose/state}"
     local state_dir="${STATE_DIR:-$base_dir/$app_name}"
-    
+
     if [ ! -d "$state_dir" ]; then
         log_error "No deployment found for: $app_name"
         log_info "State directory not found: $state_dir"
         log_info "Deploy first with: tfgrid-compose up $app_name"
         return 1
     fi
-    
+
     if [ ! -f "$state_dir/state.yaml" ]; then
         log_error "Deployment state corrupted for: $app_name"
         log_info "State file not found: $state_dir/state.yaml"
         log_info "Try cleaning and redeploying: tfgrid-compose down $app_name && tfgrid-compose up $app_name"
         return 1
     fi
-    
+
     return 0
 }
 
 # Validate no existing deployment (for fresh deployments)
 validate_no_deployment() {
     local state_dir="${STATE_DIR:-.tfgrid-compose}"
-    
+
     if [ -d "$state_dir" ] && [ -f "$state_dir/state.yaml" ]; then
         log_warning "Existing deployment detected"
-        
+
         # Show current deployment info
         local app_name=$(grep "^app_name:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
         local deployment_id=$(grep "^deployment_id:" "$state_dir/state.yaml" 2>/dev/null | awk '{print $2}')
-        
+
         if [ -n "$app_name" ]; then
             log_info "Current deployment: $app_name (ID: $deployment_id)"
         fi
-        
+
         log_error "Cannot deploy while another deployment exists"
         log_info "Options:"
         log_info "  1. Destroy existing: tfgrid-compose down <app-dir>"
@@ -291,7 +311,7 @@ validate_no_deployment() {
         log_info "  3. Force clean (dangerous): tfgrid-compose clean <app-dir>"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -308,7 +328,7 @@ validate_sudo_access() {
 needs_wireguard() {
     local main_network="$1"
     local inter_node="$2"
-    
+
     [[ "$main_network" == "wireguard" ]] || [[ "$inter_node" == "wireguard" ]]
 }
 
@@ -317,9 +337,9 @@ needs_mycelium() {
     local main_network="$1"
     local inter_node="$2"
     local mode="$3"
-    
-    [[ "$main_network" == "mycelium" ]] || 
-    [[ "$inter_node" == "mycelium" ]] || 
+
+    [[ "$main_network" == "mycelium" ]] ||
+    [[ "$inter_node" == "mycelium" ]] ||
     [[ "$mode" == "mycelium-only" ]] ||
     [[ "$mode" == "both" ]]
 }
@@ -327,7 +347,7 @@ needs_mycelium() {
 # Test Mycelium connectivity by pinging public nodes
 check_mycelium_connectivity() {
     log_info "Testing Mycelium connectivity..."
-    
+
     # Public nodes from https://github.com/threefoldtech/mycelium README
     local test_nodes=(
         "54b:83ab:6cb5:7b38:44ae:cd14:53f3:a907"  # DE Node 01
@@ -336,7 +356,7 @@ check_mycelium_connectivity() {
         "549:8bce:fa45:e001:cbf8:f2e2:2da6:a67c"  # BE Node 04
         "410:2778:53bf:6f41:af28:1b60:d7c0:707a"  # FI Node 05
     )
-    
+
     # Test sequentially, stop at first success
     for node in "${test_nodes[@]}"; do
         if ping6 -c 1 -W 2 "$node" >/dev/null 2>&1; then
@@ -344,7 +364,7 @@ check_mycelium_connectivity() {
             return 0
         fi
     done
-    
+
     # All nodes failed
     log_warning "Could not reach any Mycelium public nodes"
     log_info "This may indicate:"
@@ -359,13 +379,13 @@ validate_network_prerequisites() {
     local main_network="$1"
     local inter_node="$2"
     local mode="$3"
-    
+
     log_step "Checking network requirements..."
     log_info "Network config: main=$main_network, inter_node=$inter_node, mode=$mode"
     echo ""
-    
+
     local has_errors=0
-    
+
     # Check WireGuard if needed
     if needs_wireguard "$main_network" "$inter_node"; then
         if ! command -v wg >/dev/null 2>&1; then
@@ -378,7 +398,7 @@ validate_network_prerequisites() {
             log_success "WireGuard found: $wg_version"
         fi
     fi
-    
+
     # Check Mycelium if needed
     if needs_mycelium "$main_network" "$inter_node" "$mode"; then
         if ! command -v mycelium >/dev/null 2>&1; then
@@ -388,20 +408,20 @@ validate_network_prerequisites() {
         else
             mycelium_version=$(mycelium --version 2>&1 | head -1)
             log_success "Mycelium found: $mycelium_version"
-            
+
             # Test connectivity (warn only, don't fail)
             if ! check_mycelium_connectivity; then
                 log_warning "Mycelium connectivity test failed - deployment may have issues"
             fi
         fi
     fi
-    
+
     echo ""
     if [ $has_errors -gt 0 ]; then
         log_error "Network requirements not met"
         return 1
     fi
-    
+
     log_success "All network requirements satisfied"
     return 0
 }
