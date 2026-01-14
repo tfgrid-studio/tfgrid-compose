@@ -7,14 +7,32 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 # Auto-detect and load ThreeFold mnemonic
-# Priority: env var > standard location > project-specific > error
+# Priority: env var > tfgrid-compose credentials > standard location > project-specific > error
 load_mnemonic() {
     # Priority 1: Already set via environment variable
     if [ -n "$TF_VAR_mnemonic" ]; then
         return 0
     fi
 
-    # Priority 2: Standard ThreeFold location
+    # Priority 2: tfgrid-compose credentials (from 'tfgrid-compose signin')
+    local tfgc_creds="$HOME/.config/tfgrid-compose/credentials.yaml"
+    if [ -f "$tfgc_creds" ]; then
+        local mnemonic=""
+        # Try yq first (preferred)
+        if command_exists yq; then
+            mnemonic=$(yq eval '.threefold.mnemonic' "$tfgc_creds" 2>/dev/null)
+        fi
+        # Fallback to grep/sed if yq not available or returned null
+        if [ -z "$mnemonic" ] || [ "$mnemonic" = "null" ]; then
+            mnemonic=$(grep 'mnemonic:' "$tfgc_creds" 2>/dev/null | head -1 | sed 's/.*mnemonic:[[:space:]]*//' | sed 's/^"//' | sed 's/"$//')
+        fi
+        if [ -n "$mnemonic" ] && [ "$mnemonic" != "null" ]; then
+            export TF_VAR_mnemonic="$mnemonic"
+            return 0
+        fi
+    fi
+
+    # Priority 3: Standard ThreeFold location (legacy/manual setup)
     local standard_path="$HOME/.config/threefold/mnemonic"
     if [ -f "$standard_path" ]; then
         # Check file permissions for security
@@ -28,7 +46,7 @@ load_mnemonic() {
         return 0
     fi
 
-    # Priority 3: Project-specific mnemonic (git ignored)
+    # Priority 4: Project-specific mnemonic (git ignored)
     local project_path="./.tfgrid-mnemonic"
     if [ -f "$project_path" ]; then
         log_info "Using project-specific mnemonic: $project_path"
@@ -41,23 +59,26 @@ load_mnemonic() {
     log_error "ThreeFold mnemonic not configured"
     echo ""
     echo "You need to login with your ThreeFold wallet:"
-    echo "  tfgrid-compose login"
+    echo "  tfgrid-compose signin"
     echo ""
     echo "Need help? See the setup guide:"
     echo "  → tfgrid-compose docs"
     echo "  → https://docs.tfgrid.studio/getting-started/threefold-setup"
     log_info ""
     echo ""
-    echo "  Option 1 (Recommended): Use standard ThreeFold location"
+    echo "  Option 1 (Recommended): Use tfgrid-compose signin"
+    echo "    tfgrid-compose signin"
+    echo ""
+    echo "  Option 2: Manual setup"
     echo "    mkdir -p ~/.config/threefold"
     echo "    echo 'your-mnemonic-here' > ~/.config/threefold/mnemonic"
     echo "    chmod 600 ~/.config/threefold/mnemonic"
     echo ""
-    echo "  Option 2: Set environment variable (one session)"
-    echo "    export TF_VAR_mnemonic=\$(cat ~/.config/threefold/mnemonic)  # Bash/Zsh"
-    echo "    set -x TF_VAR_mnemonic (cat ~/.config/threefold/mnemonic)    # Fish"
+    echo "  Option 3: Set environment variable (one session)"
+    echo "    export TF_VAR_mnemonic='your-mnemonic-here'  # Bash/Zsh"
+    echo "    set -x TF_VAR_mnemonic 'your-mnemonic-here'  # Fish"
     echo ""
-    echo "  Option 3: Project-specific (git ignored)"
+    echo "  Option 4: Project-specific (git ignored)"
     echo "    echo 'your-mnemonic-here' > .tfgrid-mnemonic"
     echo "    chmod 600 .tfgrid-mnemonic"
     echo ""

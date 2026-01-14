@@ -150,9 +150,136 @@ Kubernetes cluster (K3s) with control plane, workers, and management node.
 
 **Documentation:** [patterns/k3s/README.md](patterns/k3s/README.md)
 
+## Fresh Machine Setup (Complete Prerequisites)
+
+If you're starting on a **new machine without any prerequisites**, follow this complete setup guide.
+
+### Prerequisites Checklist
+
+| Tool | Required | Purpose |
+|------|----------|---------|
+| OpenTofu (or Terraform) | ✅ Yes | Infrastructure provisioning |
+| Ansible | ✅ Yes | Configuration management |
+| WireGuard | ✅ Yes | Private networking |
+| Mycelium | ✅ Yes | ThreeFold overlay network |
+| yq (Mike Farah's Go version) | ✅ Yes | YAML parsing |
+| ThreeFold mnemonic | ✅ Yes | Grid authentication |
+
+### Ubuntu/Debian Complete Setup
+
+```bash
+# 1. OpenTofu (recommended over Terraform - open source)
+curl -fsSL https://get.opentofu.org/install-opentofu.sh | sudo bash -s -- --install-method deb
+
+# 2. Ansible
+sudo apt update && sudo apt install -y ansible
+
+# 3. WireGuard
+sudo apt install -y wireguard
+
+# 4. yq (Mike Farah's Go version - NOT the Python jq-wrapper!)
+sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
+sudo chmod +x /usr/bin/yq
+
+# 5. Mycelium (ThreeFold overlay network)
+wget https://github.com/threefoldtech/mycelium/releases/latest/download/mycelium-x86_64-unknown-linux-musl.tar.gz
+tar -xzf mycelium-x86_64-unknown-linux-musl.tar.gz
+sudo mv mycelium /usr/local/bin/
+sudo chmod +x /usr/local/bin/mycelium
+rm mycelium-x86_64-unknown-linux-musl.tar.gz
+
+# 6. Setup Mycelium as a service (with all public peers)
+sudo tee /etc/systemd/system/mycelium.service > /dev/null << 'EOF'
+[Unit]
+Description=Mycelium Network
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/mycelium \
+  --peers tcp://188.40.132.242:9651 \
+  --peers tcp://136.243.47.186:9651 \
+  --peers tcp://185.69.166.7:9651 \
+  --peers tcp://185.69.166.8:9651 \
+  --peers tcp://65.21.231.58:9651 \
+  --peers tcp://65.109.18.113:9651 \
+  --peers tcp://209.159.146.190:9651 \
+  --peers tcp://5.78.122.16:9651 \
+  --peers tcp://5.223.43.251:9651 \
+  --peers tcp://142.93.217.194:9651
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable mycelium
+sudo systemctl start mycelium
+
+# 7. Verify all installations
+echo "=== Verifying installations ==="
+tofu --version || terraform --version
+ansible --version | head -1
+wg --version
+mycelium --version
+yq --version  # Should show: yq (https://github.com/mikefarah/yq/) version v4.x.x
+```
+
+### macOS Complete Setup
+
+```bash
+# 1. OpenTofu
+brew install opentofu
+
+# 2. Ansible
+brew install ansible
+
+# 3. WireGuard
+brew install wireguard-tools
+
+# 4. yq (Mike Farah's version)
+brew install yq
+
+# 5. Mycelium
+brew install threefoldtech/tap/mycelium
+# Start with: mycelium --peers tcp://188.40.132.242:9651 (see peers list above)
+```
+
+### Configure ThreeFold Credentials
+
+```bash
+# Interactive signin (recommended)
+tfgrid-compose signin
+
+# Verify credentials
+tfgrid-compose signin --check
+```
+
+That's it! The mnemonic is stored in `~/.config/tfgrid-compose/credentials.yaml` and tfgrid-compose reads it automatically.
+
+### Verify Prerequisites
+
+```bash
+# Run tfgrid-compose - it will check all prerequisites
+tfgrid-compose up --help
+```
+
+### Common Issues
+
+| Issue | Symptom | Fix |
+|-------|---------|-----|
+| Wrong yq installed | `yq --version` shows `0.0.0` or mentions Python | Uninstall Python yq, install Mike Farah's version |
+| Mnemonic not found | "ThreeFold mnemonic not configured" | Run `tfgrid-compose signin` |
+| Pattern not detected | "No pattern specified" error | Install correct yq, or use `--pattern single-vm` |
+| Mycelium not connected | Mycelium connectivity test fails | Check `sudo systemctl status mycelium` |
+| Node out of space | "not enough space left in pools" | Try different node or reduce `--disk` size |
+
+---
+
 ## Quick Start
 
-### 1. Install
+### 1. Install tfgrid-compose
 
 ```bash
 # Setup standard workspace
@@ -173,12 +300,6 @@ This automatically adds `tfgrid-compose` to your PATH and creates a default `tfg
 **Shortcuts:** Use `tfgrid` instead of `tfgrid-compose` for shorter commands, or create your own with `tfgrid-compose shortcut <name>`.
 
 **Note:** We use `~/code/github.com/{org}/{repo}` as the standard workspace structure. See [WORKSPACE_STANDARD.md](../WORKSPACE_STANDARD.md) for details.
-
-**Prerequisites:**
-- Terraform or OpenTofu
-- Ansible
-- WireGuard (for private networking)
-- ThreeFold Grid account with mnemonic
 
 See [Quick Start Guide](docs/QUICKSTART.md) for detailed setup.
 

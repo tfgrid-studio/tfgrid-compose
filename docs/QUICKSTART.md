@@ -13,10 +13,11 @@ Before you begin, ensure you have:
 - ✅ **Mnemonic:** Your ThreeFold Grid mnemonic phrase
 - ✅ **Tools Installed:**
   - Git
-  - Terraform (or OpenTofu)
+  - OpenTofu (or Terraform)
   - Ansible
   - SSH client
   - WireGuard (for private networking)
+  - yq (optional, for nested YAML parsing - enables auto-detection of recommended patterns)
 
 ---
 
@@ -26,10 +27,37 @@ Before you begin, ensure you have:
 
 **Ubuntu/Debian:**
 ```bash
-# Terraform
-wget https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip
-unzip terraform_1.5.7_linux_amd64.zip
-sudo mv terraform /usr/local/bin/
+# OpenTofu (recommended - open source)
+curl -fsSL https://get.opentofu.org/install-opentofu.sh | sudo bash -s -- --install-method deb
+
+# Ansible
+sudo apt update && sudo apt install -y ansible
+
+# WireGuard
+sudo apt install -y wireguard
+
+# yq (optional but recommended - enables pattern auto-detection)
+sudo snap install yq
+# or: sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+```
+
+**macOS:**
+```bash
+# OpenTofu
+brew install opentofu
+
+# Ansible
+brew install ansible
+
+# WireGuard
+brew install wireguard-tools
+
+# yq (optional but recommended)
+brew install yq
+```
+
+### 2. Clone tfgrid-compose
+
 ```bash
 git clone https://github.com/tfgrid-studio/tfgrid-compose
 cd tfgrid-compose
@@ -38,15 +66,14 @@ cd tfgrid-compose
 ### 3. Configure Your Credentials
 
 ```bash
-# Create config directory
-mkdir -p ~/.config/threefold
+# Interactive signin (recommended)
+tfgrid-compose signin
 
-# Add your mnemonic (replace with your actual mnemonic)
-echo "word1 word2 word3 ... word12" > ~/.config/threefold/mnemonic
-
-# Secure the file
-chmod 600 ~/.config/threefold/mnemonic
+# Verify credentials
+tfgrid-compose signin --check
 ```
+
+That's it! The mnemonic is stored in `~/.config/tfgrid-compose/credentials.yaml` and tfgrid-compose reads it automatically.
 
 **⚠️ Security Note:** Keep your mnemonic secure. Never commit it to git or share it.
 

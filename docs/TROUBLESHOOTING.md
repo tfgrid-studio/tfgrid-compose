@@ -80,18 +80,32 @@ ansible --version
 
 **Solution:**
 ```bash
-# Option 1: Standard location (recommended)
+# Option 1: Use tfgrid-compose signin (recommended)
+tfgrid-compose signin
+
+# Verify it worked
+tfgrid-compose signin --check
+
+# Option 2: Manual setup
 mkdir -p ~/.config/threefold
+chmod 700 ~/.config/threefold
 echo 'your twelve word mnemonic phrase here' > ~/.config/threefold/mnemonic
 chmod 600 ~/.config/threefold/mnemonic
 
-# Option 2: Environment variable
-export TF_VAR_mnemonic="your twelve word mnemonic phrase here"
+# Option 3: Environment variable (one session)
+export TF_VAR_mnemonic="your twelve word mnemonic phrase here"  # Bash/Zsh
+set -x TF_VAR_mnemonic "your twelve word mnemonic phrase here"  # Fish
 
-# Option 3: Project-specific (git-ignored)
+# Option 4: Project-specific (git-ignored)
 echo 'your mnemonic' > .tfgrid-mnemonic
 chmod 600 .tfgrid-mnemonic
 ```
+
+**Mnemonic lookup priority:**
+1. `TF_VAR_mnemonic` environment variable
+2. `~/.config/tfgrid-compose/credentials.yaml` (from `tfgrid-compose signin`)
+3. `~/.config/threefold/mnemonic` (manual setup)
+4. `./.tfgrid-mnemonic` (project-specific)
 
 **Security Warning:**
 - Never commit mnemonic to version control
@@ -101,6 +115,40 @@ chmod 600 .tfgrid-mnemonic
 ---
 
 ### Deployment Errors
+
+#### Error: "No pattern specified and no recommended pattern in manifest"
+
+**Cause:** The manifest has `patterns.recommended: single-vm` but tfgrid-compose can't read nested YAML keys without `yq` installed.
+
+**Why this happens:** The `yaml_get` function falls back to simple grep-based parsing when `yq` is not installed. This fallback only works for top-level keys like `name:` but fails for nested keys like `patterns.recommended`.
+
+**Solution:**
+
+**Option 1: Specify the pattern explicitly (quick fix)**
+```bash
+tfgrid-compose up . --pattern single-vm
+```
+
+**Option 2: Install yq (permanent fix)**
+```bash
+# Ubuntu/Debian
+sudo snap install yq
+# or
+sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+
+# macOS
+brew install yq
+
+# Verify
+yq --version
+```
+
+After installing `yq`, pattern auto-detection will work:
+```bash
+tfgrid-compose up .  # Will automatically use recommended pattern
+```
+
+---
 
 #### Error: "Existing deployment detected"
 
@@ -752,6 +800,26 @@ cd .tfgrid-compose/terraform
 tofu validate
 tofu plan  # Should show "No changes"
 ```
+
+---
+
+## Known Issues
+
+### 1. Pattern auto-detection fails without yq
+
+**Issue:** When `yq` is not installed, tfgrid-compose cannot read nested YAML keys like `patterns.recommended`. This causes "No pattern specified and no recommended pattern in manifest" errors even when the manifest has `patterns.recommended: single-vm`.
+
+**Workaround:**
+```bash
+# Option 1: Specify pattern explicitly
+tfgrid-compose up . --pattern single-vm
+
+# Option 2: Install yq
+sudo snap install yq  # Ubuntu/Debian
+brew install yq       # macOS
+```
+
+**Status:** Known limitation - yq should be a required dependency, or the fallback grep parser should handle nested keys.
 
 ---
 
