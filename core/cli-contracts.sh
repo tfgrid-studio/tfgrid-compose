@@ -3,6 +3,20 @@
 
 set -e
 
+# Aliases for functions defined in contract-manager.sh
+ensure_tfcmd_login() {
+    load_tfgrid_credentials
+}
+
+contracts_list_tfcmd() {
+    contracts_list
+}
+
+contracts_get_details_tfcmd() {
+    # tfcmd doesn't have a get details command, return empty
+    echo "{}"
+}
+
 cmd_get() {
   # Direct tfcmd wrapper - get resources
   local RESOURCE="${1:-}"
@@ -169,7 +183,7 @@ cmd_delete() {
           echo ""
           echo -n "Are you sure you want to cancel ALL contracts? (yes/no): "
           read -r confirm
-          
+
           if [ "$confirm" != "yes" ]; then
             echo "Cancelled"
             exit 1
@@ -185,7 +199,7 @@ cmd_delete() {
           echo ""
           echo -n "Are you sure? (yes/no): "
           read -r confirm
-          
+
           if [ "$confirm" != "yes" ]; then
             echo "Cancelled"
             exit 1
@@ -207,7 +221,7 @@ cmd_delete() {
             exit 1
           fi
         done
-        
+
         local ids_string
         ids_string=$(printf '%s\n' "${CONTRACT_IDS[@]}" | tr '\n' ' ')
         if contracts_cancel_batch_tfcmd "$ids_string"; then
@@ -261,7 +275,7 @@ cmd_delete() {
         echo ""
         echo -n "Are you sure? (yes/no): "
         read -r confirm
-        
+
         if [ "$confirm" != "yes" ]; then
           echo "Cancelled"
           exit 1
@@ -313,7 +327,7 @@ cmd_contracts() {
       #   tfgrid-compose contracts delete --all
       #   tfgrid-compose contracts delete --all --yes
       #   tfgrid-compose contracts delete --container <container-id>
-      
+
       if [ "${1:-}" = "--all" ]; then
         shift || true
         if [ "${1:-}" = "--yes" ]; then
@@ -323,7 +337,7 @@ cmd_contracts() {
         fi
         exit 0
       fi
-      
+
       # Handle --container flag for deleting by container/deployment ID
       if [ "${1:-}" = "--container" ] || [ "${1:-}" = "-c" ]; then
         shift || true
@@ -331,21 +345,21 @@ cmd_contracts() {
         shift || true
         local SKIP_CONFIRM=false
         [ "${1:-}" = "--yes" ] && SKIP_CONFIRM=true
-        
+
         if [ -z "$CONTAINER_ID" ]; then
           log_error "Container ID required"
           echo ""
           echo "Usage: tfgrid-compose contracts delete --container <container-id> [--yes]"
           exit 1
         fi
-        
+
         contracts_delete_by_container "$CONTAINER_ID" "$SKIP_CONFIRM"
         exit $?
       fi
-      
+
       local CONTRACT_IDS=()
       local SKIP_CONFIRM=false
-      
+
       while [ $# -gt 0 ]; do
         case "$1" in
           --yes)
@@ -366,7 +380,7 @@ cmd_contracts() {
             ;;
         esac
       done
-      
+
       if [ ${#CONTRACT_IDS[@]} -eq 0 ]; then
         echo ""
         echo "Usage: tfgrid-compose contracts delete <contract-id> [<contract-id>...] [--yes]"
@@ -379,17 +393,17 @@ cmd_contracts() {
         echo "  tfgrid-compose contracts delete --all --yes"
         exit 1
       fi
-      
+
       # Deduplicate contract IDs
       local UNIQUE_IDS
       UNIQUE_IDS=($(printf '%s\n' "${CONTRACT_IDS[@]}" | sort -u))
-      
+
       # Single contract - use existing function
       if [ ${#UNIQUE_IDS[@]} -eq 1 ]; then
         contracts_delete "${UNIQUE_IDS[0]}"
         exit 0
       fi
-      
+
       # Multi-contract delete via loop
       if [ "$SKIP_CONFIRM" != true ]; then
         echo ""
@@ -407,7 +421,7 @@ cmd_contracts() {
           exit 1
         fi
       fi
-      
+
       local failed=0
       for id in "${UNIQUE_IDS[@]}"; do
         if ! contracts_delete "$id"; then
@@ -415,7 +429,7 @@ cmd_contracts() {
           failed=1
         fi
       done
-      
+
       exit $failed
       ;;
     orphans)
@@ -423,7 +437,7 @@ cmd_contracts() {
       # Usage: t contracts orphans [--delete] [--yes]
       local DO_DELETE=false
       local SKIP_CONFIRM=false
-      
+
       while [ $# -gt 0 ]; do
         case "$1" in
           --delete) DO_DELETE=true; shift ;;
@@ -431,21 +445,21 @@ cmd_contracts() {
           *) log_error "Unknown option: $1"; exit 1 ;;
         esac
       done
-      
+
       contracts_orphans "$DO_DELETE" "$SKIP_CONFIRM"
       ;;
     clean)
       # Interactive contract cleanup
       # Usage: t contracts clean [--interactive]
       local INTERACTIVE=false
-      
+
       while [ $# -gt 0 ]; do
         case "$1" in
           --interactive|-i) INTERACTIVE=true; shift ;;
           *) log_error "Unknown option: $1"; exit 1 ;;
         esac
       done
-      
+
       if [ "$INTERACTIVE" = "true" ]; then
         contracts_clean_interactive
       else

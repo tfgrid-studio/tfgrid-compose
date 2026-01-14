@@ -16,8 +16,8 @@ check_tfcmd_installed() {
 # Load tfgrid-compose credentials
 load_tfgrid_credentials() {
     # Load tfgrid-compose credentials
-    if ! source "$SCRIPT_DIR/login.sh" 2>/dev/null; then
-        log_error "Could not load login.sh"
+    if ! source "$SCRIPT_DIR/signin.sh" 2>/dev/null; then
+        log_error "Could not load signin.sh"
         return 1
     fi
 
@@ -28,7 +28,7 @@ load_tfgrid_credentials() {
 
     if [ -z "$TFGRID_MNEMONIC" ]; then
         log_error "ThreeFold mnemonic not configured"
-        log_info "Run 'tfgrid-compose login' to configure credentials"
+        log_info "Run 'tfgrid-compose signin' to configure credentials"
         return 1
     fi
 
