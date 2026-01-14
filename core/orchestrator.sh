@@ -366,12 +366,13 @@ deploy_app() {
         echo ""
     fi
 
-    # Source .env from app directory if it exists
-    if [ -f "$APP_DIR/.env" ]; then
-        log_info "Loading configuration from $APP_DIR/.env"
-        source "$APP_DIR/.env"
+    # Source .env file (custom path from manifest or default in app directory)
+    local env_file="${APP_ENV_FILE:-$APP_DIR/.env}"
+    if [ -f "$env_file" ]; then
+        log_info "Loading configuration from $env_file"
+        source "$env_file"
     else
-        log_warning "No .env found in app directory"
+        log_warning "No .env found at $env_file"
         log_info "Run: tfgrid-compose init <app> to create one"
     fi
 
@@ -1355,16 +1356,17 @@ deploy_app_source() {
     fi
 
     # Copy app .env to VM so hooks can load the same configuration
-    if [ -f "$APP_DIR/.env" ]; then
-        log_info "Copying app .env to VM..."
+    local env_file="${APP_ENV_FILE:-$APP_DIR/.env}"
+    if [ -f "$env_file" ]; then
+        log_info "Copying .env to VM from $env_file..."
         if ! scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-            "$APP_DIR/.env" "root@$scp_host:/tmp/app-source/.env" 2>/dev/null; then
+            "$env_file" "root@$scp_host:/tmp/app-source/.env" 2>/dev/null; then
             log_warning "Failed to copy .env to VM ($scp_host)"
         else
             log_success ".env copied to VM"
         fi
     else
-        log_info "No .env found in app directory; skipping .env copy"
+        log_info "No .env found at $env_file; skipping .env copy"
     fi
 
     # Copy prebuilt artifacts tarball to VM if present (optional, app-specific)

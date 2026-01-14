@@ -14,6 +14,7 @@ APP_MANIFEST=""
 APP_RECOMMENDED_PATTERN=""
 APP_DEPLOYMENT_DIR=""
 APP_SRC_DIR=""
+APP_ENV_FILE=""  # Custom .env file path (relative to APP_DIR)
 
 # Load app manifest
 load_app() {
@@ -83,6 +84,21 @@ load_app() {
     APP_VERSION=$(yaml_get "$APP_MANIFEST" "version")
     APP_DESCRIPTION=$(yaml_get "$APP_MANIFEST" "description")
     APP_RECOMMENDED_PATTERN=$(yaml_get "$APP_MANIFEST" "patterns.recommended")
+
+    # Load custom env_file path (relative to APP_DIR)
+    local env_file_raw=$(yaml_get "$APP_MANIFEST" "env_file")
+    if [ -n "$env_file_raw" ] && [ "$env_file_raw" != "null" ]; then
+        # Resolve relative path from APP_DIR
+        if [[ "$env_file_raw" = /* ]]; then
+            APP_ENV_FILE="$env_file_raw"
+        else
+            # Use realpath to resolve .. and get clean absolute path
+            APP_ENV_FILE=$(realpath -m "$APP_DIR/$env_file_raw" 2>/dev/null || echo "$APP_DIR/$env_file_raw")
+        fi
+    else
+        # Default to .env in APP_DIR
+        APP_ENV_FILE="$APP_DIR/.env"
+    fi
 
     if [ -z "$APP_NAME" ]; then
         log_error "Invalid manifest: missing 'name' field"
@@ -311,6 +327,7 @@ export APP_MANIFEST
 export APP_RECOMMENDED_PATTERN
 export APP_DEPLOYMENT_DIR
 export APP_SRC_DIR
+export APP_ENV_FILE
 
 # Export functions
 export -f load_app
