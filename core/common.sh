@@ -3,6 +3,11 @@
 
 set -e
 
+# Ensure ~/.local/bin is in PATH (where tfcmd and other tools may be installed)
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'

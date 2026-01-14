@@ -35,6 +35,51 @@ load_tfgrid_credentials() {
     return 0
 }
 
+# Ensure tfcmd is configured with tfgrid-compose credentials
+# tfcmd expects a config file at ~/.config/.tfgridconfig
+ensure_tfcmd_config() {
+    local tfcmd_config="$HOME/.config/.tfgridconfig"
+    local network="${TFGRID_NETWORK:-main}"
+
+    # Load credentials if not already loaded
+    if [ -z "$TFGRID_MNEMONIC" ]; then
+        if ! load_tfgrid_credentials; then
+            return 1
+        fi
+    fi
+
+    # Check if config exists and has correct mnemonic
+    if [ -f "$tfcmd_config" ]; then
+        local existing_mnemonic=$(grep -o '"mnemonics":"[^"]*"' "$tfcmd_config" 2>/dev/null | sed 's/"mnemonics":"//;s/"$//')
+        local existing_network=$(grep -o '"network":"[^"]*"' "$tfcmd_config" 2>/dev/null | sed 's/"network":"//;s/"$//')
+
+        if [ "$existing_mnemonic" = "$TFGRID_MNEMONIC" ] && [ "$existing_network" = "$network" ]; then
+            # Config is already up to date
+            return 0
+        fi
+    fi
+
+    # Create/update tfcmd config with credentials from tfgrid-compose
+    log_info "Syncing tfcmd config with tfgrid-compose credentials..."
+
+    # Ensure config directory exists
+    mkdir -p "$(dirname "$tfcmd_config")"
+
+    # Write JSON config file
+    cat > "$tfcmd_config" << EOF
+{"mnemonics":"$TFGRID_MNEMONIC","network":"$network"}
+EOF
+
+    if [ $? -eq 0 ]; then
+        chmod 600 "$tfcmd_config"
+        log_success "tfcmd config synced"
+        return 0
+    else
+        log_error "Failed to write tfcmd config"
+        return 1
+    fi
+}
+
 # Simple wrapper for tfcmd get contracts
 contracts_list() {
     log_info "Fetching contracts via tfcmd..."
@@ -45,13 +90,13 @@ contracts_list() {
         return 1
     fi
 
-    # Load credentials and use mnemonic directly
-    if ! load_tfgrid_credentials; then
+    # Ensure tfcmd config is synced with tfgrid-compose credentials
+    if ! ensure_tfcmd_config; then
         return 1
     fi
 
-    # Call tfcmd to get contracts using mnemonic
-    if ! echo "$TFGRID_MNEMONIC" | tfcmd get contracts; then
+    # Call tfcmd to get contracts
+    if ! tfcmd get contracts; then
         log_error "Failed to fetch contracts via tfcmd"
         return 1
     fi
@@ -78,14 +123,14 @@ contracts_delete() {
         return 1
     fi
 
-    # Load credentials and use mnemonic directly
-    if ! load_tfgrid_credentials; then
+    # Ensure tfcmd config is synced with tfgrid-compose credentials
+    if ! ensure_tfcmd_config; then
         return 1
     fi
 
-    # Call tfcmd to delete contract using mnemonic
+    # Call tfcmd to delete contract
     local output
-    output=$(echo "$TFGRID_MNEMONIC" | tfcmd cancel contracts "$contract_id" 2>&1)
+    output=$(tfcmd cancel contracts "$contract_id" 2>&1)
     local exit_code=$?
 
     # Check if contract already doesn't exist (treat as success)
@@ -149,8 +194,8 @@ contracts_cancel_all() {
         return 1
     fi
 
-    # Load credentials and use mnemonic directly
-    if ! load_tfgrid_credentials; then
+    # Ensure tfcmd config is synced with tfgrid-compose credentials
+    if ! ensure_tfcmd_config; then
         return 1
     fi
 
@@ -159,8 +204,8 @@ contracts_cancel_all() {
     echo "⚠️  This action cannot be undone!"
     echo ""
 
-    # Call tfcmd to cancel all contracts using mnemonic
-    if ! echo "$TFGRID_MNEMONIC" | tfcmd cancel contracts -a; then
+    # Call tfcmd to cancel all contracts
+    if ! tfcmd cancel contracts -a; then
         log_error "Failed to cancel contracts via tfcmd"
         return 1
     fi
@@ -347,13 +392,14 @@ contracts_orphans() {
         return 1
     fi
 
-    if ! load_tfgrid_credentials; then
+    # Ensure tfcmd config is synced with tfgrid-compose credentials
+    if ! ensure_tfcmd_config; then
         return 1
     fi
 
     # Get all contracts from grid
     local all_contracts
-    all_contracts=$(echo "$TFGRID_MNEMONIC" | tfcmd get contracts 2>/dev/null | grep -E '^\s*[0-9]+' | awk '{print $1}')
+    all_contracts=$(tfcmd get contracts 2>/dev/null | grep -E '^\s*[0-9]+' | awk '{print $1}')
 
     if [ -z "$all_contracts" ]; then
         log_info "No contracts found on grid"
@@ -457,14 +503,15 @@ contracts_clean_interactive() {
         return 1
     fi
 
-    if ! load_tfgrid_credentials; then
+    # Ensure tfcmd config is synced with tfgrid-compose credentials
+    if ! ensure_tfcmd_config; then
         return 1
     fi
 
     # Get all contracts that actually exist on the grid
     log_info "Fetching contracts from grid..."
     local grid_contracts_raw
-    grid_contracts_raw=$(echo "$TFGRID_MNEMONIC" | tfcmd get contracts 2>/dev/null | grep -E '^\s*[0-9]+' | awk '{print $1}')
+    grid_contracts_raw=$(tfcmd get contracts 2>/dev/null | grep -E '^\s*[0-9]+' | awk '{print $1}')
 
     # Build a lookup set of existing contracts
     declare -A grid_contracts_set
@@ -756,12 +803,13 @@ state_clean() {
         return 1
     fi
 
-    if ! load_tfgrid_credentials; then
+    # Ensure tfcmd config is synced with tfgrid-compose credentials
+    if ! ensure_tfcmd_config; then
         return 1
     fi
 
     local active_contracts
-    active_contracts=$(echo "$TFGRID_MNEMONIC" | tfcmd get contracts 2>/dev/null | grep -E '^\s*[0-9]+' | awk '{print $1}')
+    active_contracts=$(tfcmd get contracts 2>/dev/null | grep -E '^\s*[0-9]+' | awk '{print $1}')
 
     # Find orphaned state directories
     local orphaned=()
