@@ -362,6 +362,48 @@ ssh root@<primary-ip>
 - WireGuard interface down
 - Firewall blocking port 22
 - Wrong IP address in state
+- Mycelium overlay network still converging (can take 5-10 minutes)
+
+**Resume After Timeout:**
+
+If SSH timed out during deployment but the VM is actually running:
+```bash
+# Resume deployment (skips Terraform, retries SSH + Ansible)
+tfgrid-compose up <app> --resume
+```
+
+**Configurable Timeouts:**
+
+SSH wait timeouts can be extended via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MYCELIUM_SSH_MAX_ATTEMPTS` | 25 | Max SSH attempts for Mycelium network |
+| `MYCELIUM_SSH_SLEEP` | 20 | Seconds between Mycelium SSH attempts |
+| `MYCELIUM_SSH_RETRY_ATTEMPTS` | 15 | Additional attempts after Mycelium restart |
+| `MYCELIUM_SSH_RETRY_SLEEP` | 15 | Seconds between retry attempts |
+| `SSH_MAX_ATTEMPTS` | 30 | Max SSH attempts for WireGuard/IPv4 |
+| `SSH_SLEEP` | 10 | Seconds between WireGuard/IPv4 attempts |
+| `IPV4_FALLBACK_MAX_ATTEMPTS` | 10 | Attempts when falling back to IPv4 |
+| `IPV4_FALLBACK_SLEEP` | 5 | Seconds between IPv4 fallback attempts |
+
+Example for slow Mycelium convergence:
+```bash
+# Extend Mycelium timeout to ~15 minutes
+MYCELIUM_SSH_MAX_ATTEMPTS=45 tfgrid-compose up <app>
+```
+
+**Mycelium Auto-Restart:**
+
+If SSH fails over Mycelium and you have passwordless sudo configured, tfgrid-compose
+will automatically restart the local Mycelium daemon and retry. This helps resolve
+connectivity issues caused by local network state.
+
+If passwordless sudo is not available, you can manually restart and resume:
+```bash
+sudo systemctl restart mycelium
+tfgrid-compose up <app> --resume
+```
 
 ---
 

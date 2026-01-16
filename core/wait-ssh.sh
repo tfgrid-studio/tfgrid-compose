@@ -62,15 +62,21 @@ log_step "Waiting for SSH to be ready..."
 log_info "Network: $NETWORK_TYPE"
 log_info "IP: $VM_IP"
 
+# Configurable timeouts via environment variables
 # Mycelium takes longer to converge, give it more time between attempts
 if [ "$NETWORK_TYPE" = "Mycelium" ]; then
-    MAX_ATTEMPTS=15  # 15 tries total
-    SLEEP_TIME=20   # 20 seconds between attempts = ~5 minutes total
-    log_info "Timeout: ~300 seconds (15 attempts × 20 seconds) - Mycelium allows longer convergence time"
+    # Configurable via MYCELIUM_SSH_MAX_ATTEMPTS and MYCELIUM_SSH_SLEEP
+    # Default: 25 attempts × 20 seconds = ~8-9 minutes total (increased from 15 × 20 = 5 min)
+    MAX_ATTEMPTS=${MYCELIUM_SSH_MAX_ATTEMPTS:-25}
+    SLEEP_TIME=${MYCELIUM_SSH_SLEEP:-20}
+    TOTAL_TIMEOUT=$((MAX_ATTEMPTS * SLEEP_TIME))
+    log_info "Timeout: ~${TOTAL_TIMEOUT} seconds ($MAX_ATTEMPTS attempts × $SLEEP_TIME seconds) - Mycelium allows longer convergence time"
 else
-    MAX_ATTEMPTS=30  # 30 tries total
-    SLEEP_TIME=10   # 10 seconds between attempts = 5 minutes total
-    log_info "Timeout: 300 seconds (30 attempts × 10 seconds)"
+    # Configurable via SSH_MAX_ATTEMPTS and SSH_SLEEP
+    MAX_ATTEMPTS=${SSH_MAX_ATTEMPTS:-30}
+    SLEEP_TIME=${SSH_SLEEP:-10}
+    TOTAL_TIMEOUT=$((MAX_ATTEMPTS * SLEEP_TIME))
+    log_info "Timeout: ${TOTAL_TIMEOUT} seconds ($MAX_ATTEMPTS attempts × $SLEEP_TIME seconds)"
 fi
 echo ""
 
@@ -78,7 +84,7 @@ ATTEMPT=0
 
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
     ATTEMPT=$((ATTEMPT + 1))
-    
+
     # Try SSH connection
     if ssh -o ConnectTimeout=5 \
            -o StrictHostKeyChecking=no \
@@ -90,10 +96,10 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
         log_success "SSH is ready! (attempt $ATTEMPT/$MAX_ATTEMPTS)"
         exit 0
     fi
-    
+
     # Show progress
     echo -n "."
-    
+
     # Wait before retry
     if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
         sleep $SLEEP_TIME
@@ -102,6 +108,70 @@ done
 
 echo ""
 
+# === Mycelium Restart Fallback ===
+# If Mycelium was preferred but SSH never became ready, try restarting local Mycelium
+# daemon to re-establish connectivity, then retry with additional attempts.
+if [ "$NETWORK_TYPE" = "Mycelium" ]; then
+    # Check if local mycelium daemon is running and can be restarted
+    MYCELIUM_RESTARTED=false
+    if command -v systemctl &>/dev/null; then
+        if systemctl is-active --quiet mycelium 2>/dev/null; then
+            # Only attempt restart if we have passwordless sudo (won't prompt)
+            if sudo -n true 2>/dev/null; then
+                log_warning "SSH not ready after initial attempts. Restarting local Mycelium..."
+
+                if sudo -n systemctl restart mycelium 2>/dev/null; then
+                    MYCELIUM_RESTARTED=true
+                    log_info "Mycelium daemon restarted. Waiting for reconnection..."
+                    sleep 15  # Give mycelium time to reconnect to the mesh
+                else
+                    log_warning "Could not restart Mycelium daemon"
+                fi
+            else
+                log_info "Passwordless sudo not available, skipping Mycelium restart"
+                log_info "You can manually run: sudo systemctl restart mycelium"
+            fi
+        else
+            log_info "Mycelium daemon not running via systemd, skipping restart attempt"
+        fi
+    fi
+
+    # If we restarted mycelium, do additional retry attempts
+    if [ "$MYCELIUM_RESTARTED" = "true" ]; then
+        # Second wave: fewer attempts after restart
+        RETRY_ATTEMPTS=${MYCELIUM_SSH_RETRY_ATTEMPTS:-15}
+        RETRY_SLEEP=${MYCELIUM_SSH_RETRY_SLEEP:-15}
+        ATTEMPT=0
+
+        log_info "Retrying SSH after Mycelium restart ($RETRY_ATTEMPTS attempts × $RETRY_SLEEP seconds)..."
+        echo ""
+
+        while [ $ATTEMPT -lt $RETRY_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+
+            if ssh -o ConnectTimeout=5 \
+                   -o StrictHostKeyChecking=no \
+                   -o UserKnownHostsFile=/dev/null \
+                   -o BatchMode=yes \
+                   -o LogLevel=ERROR \
+                   root@"$VM_IP" "echo 'SSH Ready'" >/dev/null 2>&1; then
+                echo ""
+                log_success "SSH is ready after Mycelium restart! (retry attempt $ATTEMPT/$RETRY_ATTEMPTS)"
+                exit 0
+            fi
+
+            echo -n "."
+
+            if [ $ATTEMPT -lt $RETRY_ATTEMPTS ]; then
+                sleep $RETRY_SLEEP
+            fi
+        done
+
+        echo ""
+    fi
+fi
+
+# === Public IPv4 Fallback ===
 # If Mycelium was preferred but SSH never became ready, and we have a public
 # primary IP, fall back to public IPv4 before giving up.
 if [ "$NETWORK_TYPE" = "Mycelium" ] && [ "$PRIMARY_TYPE" = "public" ] && [ -n "$PRIMARY_IP" ] && [ "$PRIMARY_IP" != "$VM_IP" ]; then
@@ -109,8 +179,8 @@ if [ "$NETWORK_TYPE" = "Mycelium" ] && [ "$PRIMARY_TYPE" = "public" ] && [ -n "$
 
     VM_IP="$PRIMARY_IP"
     NETWORK_TYPE="Public IPv4"
-    MAX_ATTEMPTS=10
-    SLEEP_TIME=5
+    MAX_ATTEMPTS=${IPV4_FALLBACK_MAX_ATTEMPTS:-10}
+    SLEEP_TIME=${IPV4_FALLBACK_SLEEP:-5}
     ATTEMPT=0
 
     log_info "Network: $NETWORK_TYPE"
@@ -141,11 +211,12 @@ if [ "$NETWORK_TYPE" = "Mycelium" ] && [ "$PRIMARY_TYPE" = "public" ] && [ -n "$
     echo ""
 fi
 
-log_error "SSH did not become ready after $MAX_ATTEMPTS attempts"
+log_error "SSH did not become ready after all attempts"
 echo ""
 log_info "Troubleshooting:"
 echo "  1. Check VM status: tfgrid-compose status <app>"
 echo "  2. Check VM address: tfgrid-compose address <app>"
 echo "  3. Try manual SSH: ssh root@$VM_IP"
-echo "  4. Wait longer and run this again: ./core/wait-ssh.sh"
+echo "  4. Wait and resume: tfgrid-compose up <app> --resume"
+echo "  5. Check local Mycelium: systemctl status mycelium"
 exit 1

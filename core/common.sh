@@ -466,6 +466,7 @@ show_help() {
     echo -e "      ${GREEN}--force${NC}, -f       Force redeploy (destroy + refresh + deploy)"
     echo -e "      ${GREEN}--refresh${NC}         Refresh app cache before deploy"
     echo -e "      ${GREEN}--no-refresh${NC}      Skip cache refresh (use with --force for testing)"
+    echo -e "      ${GREEN}--resume${NC}          Resume failed deployment (skip Terraform, retry SSH/Ansible)"
     echo -e "      ${GREEN}--interactive${NC}, -i Interactive node/resource selection"
     echo -e "      ${GREEN}--node${NC} <id>       Deploy to specific node ID"
     echo -e "      ${GREEN}--name${NC} <suffix>   Custom deployment name suffix"
