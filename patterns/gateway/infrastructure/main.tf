@@ -354,7 +354,7 @@ output "primary_ip" {
 
 output "primary_ip_type" {
   value = (
-    local.enable_ipv4 ? "ipv4" :
+    local.enable_ipv4 ? "public" :
     local.enable_mycelium ? "mycelium" :
     local.enable_wireguard ? "wireguard" :
     ""
